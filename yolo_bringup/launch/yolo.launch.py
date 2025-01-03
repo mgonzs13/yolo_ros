@@ -120,7 +120,7 @@ def generate_launch_description():
         input_image_topic = LaunchConfiguration("input_image_topic")
         input_image_topic_cmd = DeclareLaunchArgument(
             "input_image_topic",
-            default_value="/camera/rgb/image_raw",
+            default_value="/rgb8/rgb/image_raw",
             description="Name of the input image topic",
         )
 
@@ -135,7 +135,7 @@ def generate_launch_description():
         input_depth_topic = LaunchConfiguration("input_depth_topic")
         input_depth_topic_cmd = DeclareLaunchArgument(
             "input_depth_topic",
-            default_value="/camera/depth/image_raw",
+            default_value="/depth_to_rgb/image_raw",
             description="Name of the input depth topic",
         )
 
@@ -150,7 +150,7 @@ def generate_launch_description():
         input_depth_info_topic = LaunchConfiguration("input_depth_info_topic")
         input_depth_info_topic_cmd = DeclareLaunchArgument(
             "input_depth_info_topic",
-            default_value="/camera/depth/camera_info",
+            default_value="/depth_to_rgb/camera_info",
             description="Name of the input depth info topic",
         )
 

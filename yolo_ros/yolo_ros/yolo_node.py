@@ -360,7 +360,7 @@ class YoloNode(LifecycleNode):
                 aux_msg = Detection()
 
                 if results.boxes or results.obb and hypothesis and boxes:
-                    aux_msg.class_id = hypothesis[i]["class_id"]
+                    aux_msg.class_id = i + 1 # hypothesis[i]["class_id"]
                     aux_msg.class_name = hypothesis[i]["class_name"]
                     aux_msg.score = hypothesis[i]["score"]
 
