@@ -199,8 +199,11 @@ class YoloNode(LifecycleNode):
     def enable_cb(
         self, request: SetBool.Request, response: SetBool.Response
     ) -> SetBool.Response:
-        self.enable = request.data
-        response.success = True
+        if self.enable != request.data:  # Only change state if it's different
+            self.enable = request.data
+            response.success = True
+        else:
+            response.success = False  # Indicate no change was made
         return response
 
     def parse_hypothesis(self, results: Results) -> List[Dict]:
