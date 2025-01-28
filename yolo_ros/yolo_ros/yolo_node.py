@@ -199,8 +199,11 @@ class YoloNode(LifecycleNode):
     def enable_cb(
         self, request: SetBool.Request, response: SetBool.Response
     ) -> SetBool.Response:
-        self.enable = request.data
-        response.success = True
+        if self.enable != request.data:  # Only change state if it's different
+            self.enable = request.data
+            response.success = True
+        else:
+            response.success = False  # Indicate no change was made
         return response
 
     def parse_hypothesis(self, results: Results) -> List[Dict]:
@@ -360,7 +363,7 @@ class YoloNode(LifecycleNode):
                 aux_msg = Detection()
 
                 if results.boxes or results.obb and hypothesis and boxes:
-                    aux_msg.class_id = hypothesis[i]["class_id"]
+                    aux_msg.class_id = i + 1 # hypothesis[i]["class_id"]
                     aux_msg.class_name = hypothesis[i]["class_name"]
                     aux_msg.score = hypothesis[i]["score"]
 
