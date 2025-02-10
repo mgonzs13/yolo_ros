@@ -325,8 +325,7 @@ class DebugNode(LifecycleNode):
         return marker
 
     def detections_cb(self, img_msg: Image, detection_msg: DetectionArray) -> None:
-
-        cv_image = self.cv_bridge.imgmsg_to_cv2(img_msg)
+        cv_image = self.cv_bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
         bb_marker_array = MarkerArray()
         kp_marker_array = MarkerArray()
 
@@ -364,7 +363,7 @@ class DebugNode(LifecycleNode):
 
         # publish dbg image
         self._dbg_pub.publish(
-            self.cv_bridge.cv2_to_imgmsg(cv_image, encoding=img_msg.encoding)
+            self.cv_bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
         )
         self._bb_markers_pub.publish(bb_marker_array)
         self._kp_markers_pub.publish(kp_marker_array)
