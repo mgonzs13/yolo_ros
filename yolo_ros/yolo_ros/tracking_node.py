@@ -146,7 +146,7 @@ class TrackingNode(LifecycleNode):
         tracked_detections_msg.header = img_msg.header
 
         # convert image
-        cv_image = self.cv_bridge.imgmsg_to_cv2(img_msg)
+        cv_image = self.cv_bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
         cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
 
         # parse detections
