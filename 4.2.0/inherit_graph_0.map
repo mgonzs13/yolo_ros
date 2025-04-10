@@ -1,0 +1,11 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="Node000000" title=" " alt="" coords="5,92,110,118"/>
+<area shape="rect" id="Node000001" href="$classyolo__ros_1_1debug__node_1_1DebugNode.html" title=" " alt="" coords="170,5,383,31"/>
+<area shape="poly" id="edge1_Node000000_Node000001" title=" " alt="" coords="87,81,119,60,157,41,194,29,196,34,159,46,122,64,89,85"/>
+<area shape="rect" id="Node000002" href="$classyolo__ros_1_1detect__3d__node_1_1Detect3DNode.html" title=" " alt="" coords="204,55,348,96"/>
+<area shape="poly" id="edge2_Node000000_Node000002" title=" " alt="" coords="125,93,203,83,204,88,125,98"/>
+<area shape="rect" id="Node000003" href="$classyolo__ros_1_1tracking__node_1_1TrackingNode.html" title=" " alt="" coords="158,120,395,146"/>
+<area shape="poly" id="edge3_Node000000_Node000003" title=" " alt="" coords="126,111,171,117,171,122,125,116"/>
+<area shape="rect" id="Node000004" href="$classyolo__ros_1_1yolo__node_1_1YoloNode.html" title=" " alt="" coords="181,169,372,195"/>
+<area shape="poly" id="edge4_Node000000_Node000004" title=" " alt="" coords="93,124,159,156,194,166,193,171,157,161,91,128"/>
+</map>
