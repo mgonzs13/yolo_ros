@@ -203,6 +203,8 @@ def main():
     node = TrackingNode()
     node.trigger_configure()
     node.trigger_activate()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
