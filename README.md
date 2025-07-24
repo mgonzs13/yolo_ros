@@ -66,6 +66,7 @@ The compatible models for yolo_ros are the following:
 - [YOLOv11](https://docs.ultralytics.com/models/yolo11/)
 - [YOLOv12](https://docs.ultralytics.com/models/yolo12/)
 - [YOLO-World](https://docs.ultralytics.com/models/yolo-world/)
+- [YOLOE](https://docs.ultralytics.com/models/yoloe/)
 
 ## Usage
 
@@ -112,6 +113,12 @@ ros2 launch yolo_bringup yolov12.launch.py
 
 ```shell
 ros2 launch yolo_bringup yolo-world.launch.py
+```
+
+### YOLOE
+
+```shell
+ros2 launch yolo_bringup yoloe.launch.py
 ```
 
 </details>

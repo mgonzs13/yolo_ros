@@ -32,8 +32,8 @@ def generate_launch_description():
         model_type_cmd = DeclareLaunchArgument(
             "model_type",
             default_value="YOLO",
-            choices=["YOLO", "World"],
-            description="Model type form Ultralytics (YOLO, World)",
+            choices=["YOLO", "World", "YOLOE"],
+            description="Model type form Ultralytics (YOLO, World, YOLOE)",
         )
 
         model = LaunchConfiguration("model")
