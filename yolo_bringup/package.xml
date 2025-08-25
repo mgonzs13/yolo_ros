@@ -6,11 +6,8 @@
   <description>YOLO for ROS 2</description>
   <maintainer email="mgons@unileon.es">Miguel Ángel González Santamarta</maintainer>
   <license>GPL-3</license>
-
   <buildtool_depend>ament_cmake</buildtool_depend>
-
   <depend>yolo_ros</depend>
-
   <export>
     <build_type>ament_cmake</build_type>
   </export>

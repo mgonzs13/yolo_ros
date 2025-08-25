@@ -6,17 +6,15 @@
   <description>YOLO for ROS 2</description>
   <maintainer email="mgons@unileon.es">Miguel Ángel González Santamarta</maintainer>
   <license>GPL-3</license>
-
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
-
+  <depend>rclpy</depend>
   <depend>cv_bridge</depend>
   <depend>std_srvs</depend>
   <depend>sensor_msgs</depend>
   <depend>yolo_msgs</depend>
-
   <export>
     <build_type>ament_python</build_type>
   </export>
