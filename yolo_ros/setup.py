@@ -15,7 +15,7 @@ setup(
     maintainer="Miguel Ángel González Santamarta",
     maintainer_email="mgons@unileon.es",
     description="YOLO for ROS 2",
-    license="GPL-3",
+    license="GPL-3.0",
     extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [

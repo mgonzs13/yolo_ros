@@ -5,7 +5,7 @@
   <version>4.3.1</version>
   <description>Msgs for YOLO</description>
   <maintainer email="mgons@unileon.es">Miguel Ángel González Santamarta</maintainer>
-  <license>GPL-3</license>
+  <license>GPL-3.0</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <member_of_group>rosidl_interface_packages</member_of_group>
   <depend>std_msgs</depend>

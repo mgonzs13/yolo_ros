@@ -5,7 +5,7 @@
   <version>4.3.1</version>
   <description>YOLO for ROS 2</description>
   <maintainer email="mgons@unileon.es">Miguel Ángel González Santamarta</maintainer>
-  <license>GPL-3</license>
+  <license>GPL-3.0</license>
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
