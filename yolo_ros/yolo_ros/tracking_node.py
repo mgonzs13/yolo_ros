@@ -121,7 +121,7 @@ class TrackingNode(LifecycleNode):
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"[{self.get_name()}] Shutting down...")
-        super().on_cleanup(state)
+        super().on_shutdown(state)
         self.get_logger().info(f"[{self.get_name()}] Shutted down")
         return TransitionCallbackReturn.SUCCESS
 
