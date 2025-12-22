@@ -54,6 +54,7 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("model_type", "YOLO")
         self.declare_parameter("model", "yolov8m.pt")
         self.declare_parameter("device", "cuda:0")
+        self.declare_parameter("fuse_model", False)
         self.declare_parameter("yolo_encoding", "bgr8")
         self.declare_parameter("enable", True)
         self.declare_parameter("image_reliability", QoSReliabilityPolicy.BEST_EFFORT)
@@ -79,6 +80,9 @@ class YoloNode(LifecycleNode):
         )
         self.model = self.get_parameter("model").get_parameter_value().string_value
         self.device = self.get_parameter("device").get_parameter_value().string_value
+        self.fuse_model = (
+            self.get_parameter("fuse_model").get_parameter_value().bool_value
+        )
         self.yolo_encoding = (
             self.get_parameter("yolo_encoding").get_parameter_value().string_value
         )
@@ -136,7 +140,9 @@ class YoloNode(LifecycleNode):
             return TransitionCallbackReturn.ERROR
 
         # YOLOE does not support fusing
-        if isinstance(self.yolo, YOLO) or isinstance(self.yolo, YOLOWorld):
+        if self.fuse_model and (
+            isinstance(self.yolo, YOLO) or isinstance(self.yolo, YOLOWorld)
+        ):
             try:
                 self.get_logger().info("Trying to fuse model...")
                 self.yolo.fuse()
@@ -186,7 +192,6 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"[{self.get_name()}] Cleaning up...")
 
         self.destroy_publisher(self._pub)
-
         del self.image_qos_profile
 
         super().on_cleanup(state)
@@ -196,7 +201,7 @@ class YoloNode(LifecycleNode):
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"[{self.get_name()}] Shutting down...")
-        super().on_cleanup(state)
+        super().on_shutdown(state)
         self.get_logger().info(f"[{self.get_name()}] Shutted down")
         return TransitionCallbackReturn.SUCCESS
 

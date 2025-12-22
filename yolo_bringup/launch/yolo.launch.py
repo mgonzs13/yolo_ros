@@ -57,6 +57,13 @@ def generate_launch_description():
             description="Device to use (GPU/CPU)",
         )
 
+        fuse_model = LaunchConfiguration("fuse_model")
+        fuse_model_cmd = DeclareLaunchArgument(
+            "fuse_model",
+            default_value="False",
+            description="Whether to fuse the model for inference optimization",
+        )
+
         yolo_encoding = LaunchConfiguration("yolo_encoding")
         yolo_encoding_cmd = DeclareLaunchArgument(
             "yolo_encoding",
@@ -236,6 +243,7 @@ def generate_launch_description():
                     "model_type": model_type,
                     "model": model,
                     "device": device,
+                    "fuse_model": fuse_model,
                     "yolo_encoding": yolo_encoding,
                     "enable": enable,
                     "threshold": threshold,
@@ -303,6 +311,7 @@ def generate_launch_description():
             model_cmd,
             tracker_cmd,
             device_cmd,
+            fuse_model_cmd,
             yolo_encoding_cmd,
             enable_cmd,
             threshold_cmd,
