@@ -12,8 +12,12 @@
   <test_depend>python3-pytest</test_depend>
   <depend>rclpy</depend>
   <depend>cv_bridge</depend>
+  <depend>message_filters</depend>
+  <depend>tf2_ros</depend>
   <depend>std_srvs</depend>
+  <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>visualization_msgs</depend>
   <depend>yolo_msgs</depend>
   <export>
     <build_type>ament_python</build_type>
