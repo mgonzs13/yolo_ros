@@ -43,8 +43,20 @@ from yolo_msgs.msg import BoundingBox3D
 
 
 class Detect3DNode(LifecycleNode):
+    """
+    ROS 2 Lifecycle Node for 3D object detection.
+
+    This node converts 2D detections to 3D by using depth information from a depth camera.
+    It subscribes to detections, depth images, and camera info, then publishes 3D bounding
+    boxes and keypoints in a target reference frame.
+    """
 
     def __init__(self) -> None:
+        """
+        Initialize the 3D detection node.
+
+        Declares ROS parameters and initializes TF buffer and CV bridge.
+        """
         super().__init__("bbox3d_node")
 
         # Parameters
@@ -55,11 +67,19 @@ class Detect3DNode(LifecycleNode):
         )
         self.declare_parameter("depth_info_reliability", QoSReliabilityPolicy.BEST_EFFORT)
 
-        # Aux variables
+        # Auxiliary variables
         self.tf_buffer = Buffer()
         self.cv_bridge = CvBridge()
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Configure lifecycle callback.
+
+        Retrieves parameters, sets up QoS profiles, creates publishers, and initializes TF listener.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Configuring...")
 
         self.target_frame = (
@@ -106,6 +126,14 @@ class Detect3DNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Activate lifecycle callback.
+
+        Creates subscriptions to depth image, camera info, and detections with time synchronization.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Activating...")
 
         # Subs
@@ -130,6 +158,14 @@ class Detect3DNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Deactivate lifecycle callback.
+
+        Destroys subscriptions and cleans up the synchronizer.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Deactivating...")
 
         self.destroy_subscription(self.depth_sub.sub)
@@ -144,6 +180,14 @@ class Detect3DNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Cleanup lifecycle callback.
+
+        Destroys the TF listener and publisher, cleaning up resources.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Cleaning up...")
 
         del self.tf_listener
@@ -153,6 +197,14 @@ class Detect3DNode(LifecycleNode):
         self.get_logger().info(f"[{self.get_name()}] Cleaned up")
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Shutdown lifecycle callback.
+
+        Performs final cleanup before node shutdown.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Shutting down...")
         super().on_shutdown(state)
         self.get_logger().info(f"[{self.get_name()}] Shutted down")
@@ -164,6 +216,15 @@ class Detect3DNode(LifecycleNode):
         depth_info_msg: CameraInfo,
         detections_msg: DetectionArray,
     ) -> None:
+        """
+        Synchronized callback for depth image, camera info, and detections.
+
+        Processes detections to add 3D information and publishes the results.
+
+        @param depth_msg Depth image message
+        @param depth_info_msg Camera info message
+        @param detections_msg Detections message
+        """
 
         new_detections_msg = DetectionArray()
         new_detections_msg.header = detections_msg.header
@@ -178,6 +239,17 @@ class Detect3DNode(LifecycleNode):
         depth_info_msg: CameraInfo,
         detections_msg: DetectionArray,
     ) -> List[Detection]:
+        """
+        Process 2D detections to add 3D bounding boxes and keypoints.
+
+        Converts depth image to OpenCV format, looks up TF transform, and converts
+        each detection to 3D coordinates in the target frame.
+
+        @param depth_msg Depth image message
+        @param depth_info_msg Camera info message
+        @param detections_msg Array of 2D detections
+        @return List of detections with 3D information added
+        """
 
         # Check if there are detections
         if not detections_msg.detections:
@@ -419,6 +491,17 @@ class Detect3DNode(LifecycleNode):
         depth_info: CameraInfo,
         detection: Detection,
     ) -> BoundingBox3D:
+        """
+        Convert 2D bounding box to 3D using depth information.
+
+        Uses depth image to estimate 3D position and size of detected objects.
+        Supports both mask-based and bbox-based depth sampling with spatial weighting.
+
+        @param depth_image Depth image as numpy array
+        @param depth_info Camera intrinsic parameters
+        @param detection 2D detection to convert
+        @return 3D bounding box or None if conversion fails
+        """
 
         center_x = int(detection.bbox.center.position.x)
         center_y = int(detection.bbox.center.position.y)
@@ -439,7 +522,7 @@ class Detect3DNode(LifecycleNode):
             pixel_coords = np.column_stack([x_coords, y_coords])
 
         else:
-            # Crop depth image by the 2d BB
+            # Crop depth image by the 2D BB
             u_min = max(center_x - size_x // 2, 0)
             u_max = min(center_x + size_x // 2, depth_image.shape[1] - 1)
             v_min = max(center_y - size_y // 2, 0)
@@ -454,7 +537,7 @@ class Detect3DNode(LifecycleNode):
             )
             pixel_coords = np.column_stack([x_grid.flatten(), y_grid.flatten()])
 
-        roi = roi / self.depth_image_units_divisor  # convert to meters
+        roi = roi / self.depth_image_units_divisor  # Convert to meters
         if not np.any(roi):
             return None
 
@@ -630,8 +713,18 @@ class Detect3DNode(LifecycleNode):
         depth_info: CameraInfo,
         detection: Detection,
     ) -> KeyPoint3DArray:
+        """
+        Convert 2D keypoints to 3D using depth information.
 
-        # Build an array of 2d keypoints
+        Samples depth at keypoint locations and projects to 3D coordinates.
+
+        @param depth_image Depth image as numpy array
+        @param depth_info Camera intrinsic parameters
+        @param detection Detection containing 2D keypoints
+        @return Array of 3D keypoints
+        """
+
+        # Build an array of 2D keypoints
         keypoints_2d = np.array(
             [[p.point.x, p.point.y] for p in detection.keypoints.data], dtype=np.int16
         )
@@ -646,7 +739,7 @@ class Detect3DNode(LifecycleNode):
         y = z * (u - py) / fy
         points_3d = (
             np.dstack([x, y, z]).reshape(-1, 3) / self.depth_image_units_divisor
-        )  # convert to meters
+        )  # Convert to meters
 
         # Generate message
         msg_array = KeyPoint3DArray()
@@ -663,6 +756,14 @@ class Detect3DNode(LifecycleNode):
         return msg_array
 
     def get_transform(self, frame_id: str) -> Tuple[np.ndarray]:
+        """
+        Get TF transform from source frame to target frame.
+
+        Looks up the transform from the camera frame to the configured target frame.
+
+        @param frame_id Source frame ID (usually camera frame)
+        @return Tuple of (translation, rotation) as numpy arrays, or None if transform fails
+        """
         # Transform position from image frame to target_frame
         rotation = None
         translation = None
@@ -701,6 +802,16 @@ class Detect3DNode(LifecycleNode):
         translation: np.ndarray,
         rotation: np.ndarray,
     ) -> BoundingBox3D:
+        """
+        Transform a 3D bounding box to a different reference frame.
+
+        Applies rotation and translation to both position and size of the bbox.
+
+        @param bbox Bounding box to transform
+        @param translation Translation vector
+        @param rotation Rotation quaternion [w, x, y, z]
+        @return Transformed bounding box
+        """
 
         # Position
         position = (
@@ -738,6 +849,16 @@ class Detect3DNode(LifecycleNode):
         translation: np.ndarray,
         rotation: np.ndarray,
     ) -> KeyPoint3DArray:
+        """
+        Transform 3D keypoints to a different reference frame.
+
+        Applies rotation and translation to each keypoint position.
+
+        @param keypoints Array of keypoints to transform
+        @param translation Translation vector
+        @param rotation Rotation quaternion [w, x, y, z]
+        @return Transformed keypoint array
+        """
 
         for point in keypoints.data:
             position = (
@@ -755,6 +876,15 @@ class Detect3DNode(LifecycleNode):
 
     @staticmethod
     def qv_mult(q: np.ndarray, v: np.ndarray) -> np.ndarray:
+        """
+        Multiply a quaternion with a vector (rotate vector by quaternion).
+
+        Performs quaternion-vector multiplication to rotate a 3D vector.
+
+        @param q Quaternion [w, x, y, z]
+        @param v 3D vector [x, y, z]
+        @return Rotated vector
+        """
         q = np.array(q, dtype=np.float64)
         v = np.array(v, dtype=np.float64)
         qvec = q[1:]

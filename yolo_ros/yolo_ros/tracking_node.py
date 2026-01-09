@@ -40,17 +40,36 @@ from yolo_msgs.msg import DetectionArray
 
 
 class TrackingNode(LifecycleNode):
+    """
+    ROS 2 Lifecycle Node for object tracking.
+
+    This node tracks detected objects across frames using BYTE or BOT-SORT algorithms.
+    It subscribes to detections and image topics and publishes tracked detections with IDs.
+    """
 
     def __init__(self) -> None:
+        """
+        Initialize the tracking node.
+
+        Declares ROS parameters for tracker configuration.
+        """
         super().__init__("tracking_node")
 
-        # params
+        # Params
         self.declare_parameter("tracker", "bytetrack.yaml")
         self.declare_parameter("image_reliability", QoSReliabilityPolicy.BEST_EFFORT)
 
         self.cv_bridge = CvBridge()
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Configure lifecycle callback.
+
+        Retrieves parameters, creates the tracker instance, and sets up publishers.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Configuring...")
 
         tracker_name = self.get_parameter("tracker").get_parameter_value().string_value
@@ -68,6 +87,14 @@ class TrackingNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Activate lifecycle callback.
+
+        Creates subscriptions to image and detection topics with time synchronization.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Activating...")
 
         image_qos_profile = QoSProfile(
@@ -77,7 +104,7 @@ class TrackingNode(LifecycleNode):
             depth=1,
         )
 
-        # subs
+        # Subs
         image_sub = message_filters.Subscriber(
             self, Image, "image_raw", qos_profile=image_qos_profile
         )
@@ -96,6 +123,14 @@ class TrackingNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Deactivate lifecycle callback.
+
+        Destroys subscriptions and cleans up the synchronizer.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Deactivating...")
 
         self.destroy_subscription(self.image_sub.sub)
@@ -110,6 +145,14 @@ class TrackingNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Cleanup lifecycle callback.
+
+        Destroys the tracker instance and cleans up resources.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Cleaning up...")
 
         del self.tracker
@@ -120,15 +163,31 @@ class TrackingNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Shutdown lifecycle callback.
+
+        Performs final cleanup before node shutdown.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Shutting down...")
         super().on_shutdown(state)
         self.get_logger().info(f"[{self.get_name()}] Shutted down")
         return TransitionCallbackReturn.SUCCESS
 
     def create_tracker(self, tracker_yaml: str) -> BaseTrack:
+        """
+        Create a tracker instance from configuration.
+
+        Loads tracker configuration from YAML file and instantiates the appropriate tracker.
+
+        @param tracker_yaml Path to tracker configuration YAML file
+        @return Initialized tracker instance
+        """
 
         TRACKER_MAP = {"bytetrack": BYTETracker, "botsort": BOTSORT}
-        check_requirements("lap")  # for linear_assignment
+        check_requirements("lap")  # For linear_assignment
 
         tracker = check_yaml(tracker_yaml)
         cfg = IterableSimpleNamespace(**YAML.load(tracker))
@@ -141,15 +200,23 @@ class TrackingNode(LifecycleNode):
         return tracker
 
     def detections_cb(self, img_msg: Image, detections_msg: DetectionArray) -> None:
+        """
+        Synchronized callback for image and detections.
+
+        Performs tracking on detections and publishes tracked results with IDs.
+
+        @param img_msg Image message
+        @param detections_msg Detections message
+        """
 
         tracked_detections_msg = DetectionArray()
         tracked_detections_msg.header = img_msg.header
 
-        # convert image
+        # Convert image
         cv_image = self.cv_bridge.imgmsg_to_cv2(img_msg, desired_encoding="bgr8")
         cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
 
-        # parse detections
+        # Parse detections
         detection_list = []
         detection: Detection
         for detection in detections_msg.detections:
@@ -165,7 +232,7 @@ class TrackingNode(LifecycleNode):
                 ]
             )
 
-        # tracking
+        # Tracking
         if len(detection_list) > 0:
 
             det = Boxes(np.array(detection_list), (img_msg.height, img_msg.width))
@@ -178,23 +245,23 @@ class TrackingNode(LifecycleNode):
                     tracked_box = Boxes(t[:-1], (img_msg.height, img_msg.width))
                     tracked_detection: Detection = detections_msg.detections[int(t[-1])]
 
-                    # get boxes values
+                    # Get boxes values
                     box = tracked_box.xywh[0]
                     tracked_detection.bbox.center.position.x = float(box[0])
                     tracked_detection.bbox.center.position.y = float(box[1])
                     tracked_detection.bbox.size.x = float(box[2])
                     tracked_detection.bbox.size.y = float(box[3])
 
-                    # get track id
+                    # Get track ID
                     track_id = ""
                     if tracked_box.is_track:
                         track_id = str(int(tracked_box.id))
                     tracked_detection.id = track_id
 
-                    # append msg
+                    # Append msg
                     tracked_detections_msg.detections.append(tracked_detection)
 
-        # publish detections
+        # Publish detections
         self._pub.publish(tracked_detections_msg)
 
 

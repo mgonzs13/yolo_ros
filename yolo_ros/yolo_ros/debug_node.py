@@ -44,17 +44,36 @@ from yolo_msgs.msg import DetectionArray
 
 
 class DebugNode(LifecycleNode):
+    """
+    ROS 2 Lifecycle Node for visualizing YOLO detections.
+
+    This node subscribes to images and detections, rendering bounding boxes,
+    masks, keypoints, and 3D markers for debugging and visualization purposes.
+    """
 
     def __init__(self) -> None:
+        """
+        Initialize the debug node.
+
+        Sets up color mapping and declares ROS parameters.
+        """
         super().__init__("debug_node")
 
         self._class_to_color = {}
         self.cv_bridge = CvBridge()
 
-        # params
+        # Params
         self.declare_parameter("image_reliability", QoSReliabilityPolicy.BEST_EFFORT)
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Configure lifecycle callback.
+
+        Retrieves parameters and creates publishers for debug visualizations.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Configuring...")
 
         self.image_qos_profile = QoSProfile(
@@ -66,7 +85,7 @@ class DebugNode(LifecycleNode):
             depth=1,
         )
 
-        # pubs
+        # Pubs
         self._dbg_pub = self.create_publisher(Image, "dbg_image", 10)
         self._bb_markers_pub = self.create_publisher(MarkerArray, "dgb_bb_markers", 10)
         self._kp_markers_pub = self.create_publisher(MarkerArray, "dgb_kp_markers", 10)
@@ -77,9 +96,17 @@ class DebugNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Activate lifecycle callback.
+
+        Creates subscriptions to image and detection topics with time synchronization.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Activating...")
 
-        # subs
+        # Subs
         self.image_sub = message_filters.Subscriber(
             self, Image, "image_raw", qos_profile=self.image_qos_profile
         )
@@ -98,6 +125,14 @@ class DebugNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Deactivate lifecycle callback.
+
+        Destroys subscriptions and cleans up the synchronizer.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Deactivating...")
 
         self.destroy_subscription(self.image_sub.sub)
@@ -111,6 +146,14 @@ class DebugNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Cleanup lifecycle callback.
+
+        Destroys publishers and cleans up resources.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Cleaning up...")
 
         self.destroy_publisher(self._dbg_pub)
@@ -123,6 +166,14 @@ class DebugNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
+        """
+        Shutdown lifecycle callback.
+
+        Performs final cleanup before node shutdown.
+
+        @param state Current lifecycle state
+        @return Transition callback return status
+        """
         self.get_logger().info(f"[{self.get_name()}] Shutting down...")
         super().on_shutdown(state)
         self.get_logger().info(f"[{self.get_name()}] Shutted down")
@@ -134,8 +185,18 @@ class DebugNode(LifecycleNode):
         detection: Detection,
         color: Tuple[int],
     ) -> np.ndarray:
+        """
+        Draw a bounding box on the image.
 
-        # get detection info
+        Renders a rotated rectangle with class name, track ID, and confidence score.
+
+        @param cv_image OpenCV image to draw on
+        @param detection Detection message containing box information
+        @param color RGB color tuple for the box
+        @return Modified image with drawn bounding box
+        """
+
+        # Get detection info
         class_name = detection.class_name
         score = detection.score
         box_msg: BoundingBox2D = detection.bbox
@@ -150,7 +211,7 @@ class DebugNode(LifecycleNode):
             round(box_msg.center.position.y + box_msg.size.y / 2.0),
         )
 
-        # define the four corners of the rectangle
+        # Define the four corners of the rectangle
         rect_pts = np.array(
             [
                 [min_pt[0], min_pt[1]],
@@ -160,14 +221,14 @@ class DebugNode(LifecycleNode):
             ]
         )
 
-        # calculate the rotation matrix
+        # Calculate the rotation matrix
         rotation_matrix = cv2.getRotationMatrix2D(
             (box_msg.center.position.x, box_msg.center.position.y),
             -np.rad2deg(box_msg.center.theta),
             1.0,
         )
 
-        # rotate the corners of the rectangle
+        # Rotate the corners of the rectangle
         rect_pts = np.int0(cv2.transform(np.array([rect_pts]), rotation_matrix)[0])
 
         # Draw the rotated rectangle
@@ -176,7 +237,7 @@ class DebugNode(LifecycleNode):
             pt2 = tuple(rect_pts[(i + 1) % 4])
             cv2.line(cv_image, pt1, pt2, color, 2)
 
-        # write text
+        # Write text
         label = f"{class_name}"
         label += f" ({track_id})" if track_id else ""
         label += " ({:.3f})".format(score)
@@ -192,6 +253,16 @@ class DebugNode(LifecycleNode):
         detection: Detection,
         color: Tuple[int],
     ) -> np.ndarray:
+        """
+        Draw a segmentation mask on the image.
+
+        Renders the mask as a semi-transparent filled polygon.
+
+        @param cv_image OpenCV image to draw on
+        @param detection Detection message containing mask information
+        @param color RGB color tuple for the mask
+        @return Modified image with drawn mask
+        """
 
         mask_msg = detection.mask
         mask_array = np.array([[int(ele.x), int(ele.y)] for ele in mask_msg.data])
@@ -211,6 +282,15 @@ class DebugNode(LifecycleNode):
         return cv_image
 
     def draw_keypoints(self, cv_image: np.ndarray, detection: Detection) -> np.ndarray:
+        """
+        Draw keypoints and skeleton on the image.
+
+        Renders individual keypoints as circles and connects them with skeleton lines.
+
+        @param cv_image OpenCV image to draw on
+        @param detection Detection message containing keypoint information
+        @return Modified image with drawn keypoints and skeleton
+        """
 
         keypoints_msg = detection.keypoints
 
@@ -266,6 +346,13 @@ class DebugNode(LifecycleNode):
         return cv_image
 
     def create_bb_marker(self, detection: Detection, color: Tuple[int]) -> Marker:
+        """
+        Create a 3D bounding box marker for RViz visualization.
+
+        @param detection Detection message containing 3D bbox information
+        @param color RGB color tuple for the marker
+        @return Marker message for visualization
+        """
 
         bbox3d = detection.bbox3d
 
@@ -300,6 +387,12 @@ class DebugNode(LifecycleNode):
         return marker
 
     def create_kp_marker(self, keypoint: KeyPoint3D) -> Marker:
+        """
+        Create a 3D keypoint marker for RViz visualization.
+
+        @param keypoint 3D keypoint to visualize
+        @return Marker message for visualization
+        """
 
         marker = Marker()
 
@@ -331,6 +424,15 @@ class DebugNode(LifecycleNode):
         return marker
 
     def detections_cb(self, img_msg: Image, detection_msg: DetectionArray) -> None:
+        """
+        Synchronized callback for image and detections.
+
+        Processes detections and creates debug visualizations including annotated
+        images and 3D markers for bounding boxes and keypoints.
+
+        @param img_msg Image message
+        @param detection_msg Detections message
+        """
         cv_image = self.cv_bridge.imgmsg_to_cv2(img_msg, desired_encoding="bgr8")
         bb_marker_array = MarkerArray()
         kp_marker_array = MarkerArray()
@@ -338,7 +440,7 @@ class DebugNode(LifecycleNode):
         detection: Detection
         for detection in detection_msg.detections:
 
-            # random color
+            # Random color
             class_name = detection.class_name
 
             if class_name not in self._class_to_color:
@@ -367,7 +469,7 @@ class DebugNode(LifecycleNode):
                     marker.id = len(kp_marker_array.markers)
                     kp_marker_array.markers.append(marker)
 
-        # publish dbg image
+        # Publish dbg image
         self._dbg_pub.publish(
             self.cv_bridge.cv2_to_imgmsg(cv_image, encoding="bgr8", header=img_msg.header)
         )
