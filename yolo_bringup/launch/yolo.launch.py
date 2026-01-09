@@ -200,13 +200,6 @@ def generate_launch_description():
             description="Divisor used to convert the raw depth image values into metres",
         )
 
-        maximum_detection_threshold = LaunchConfiguration("maximum_detection_threshold")
-        maximum_detection_threshold_cmd = DeclareLaunchArgument(
-            "maximum_detection_threshold",
-            default_value="0.3",
-            description="Maximum detection threshold in the z axis",
-        )
-
         namespace = LaunchConfiguration("namespace")
         namespace_cmd = DeclareLaunchArgument(
             "namespace",
@@ -279,7 +272,6 @@ def generate_launch_description():
             parameters=[
                 {
                     "target_frame": target_frame,
-                    "maximum_detection_threshold": maximum_detection_threshold,
                     "depth_image_units_divisor": depth_image_units_divisor,
                     "depth_image_reliability": depth_image_reliability,
                     "depth_info_reliability": depth_info_reliability,
@@ -331,7 +323,6 @@ def generate_launch_description():
             depth_info_reliability_cmd,
             target_frame_cmd,
             depth_image_units_divisor_cmd,
-            maximum_detection_threshold_cmd,
             namespace_cmd,
             use_debug_cmd,
             yolo_node_cmd,

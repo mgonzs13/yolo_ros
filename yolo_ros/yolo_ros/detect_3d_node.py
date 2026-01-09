@@ -47,16 +47,15 @@ class Detect3DNode(LifecycleNode):
     def __init__(self) -> None:
         super().__init__("bbox3d_node")
 
-        # parameters
+        # Parameters
         self.declare_parameter("target_frame", "base_link")
-        self.declare_parameter("maximum_detection_threshold", 0.3)
         self.declare_parameter("depth_image_units_divisor", 1000)
         self.declare_parameter(
             "depth_image_reliability", QoSReliabilityPolicy.BEST_EFFORT
         )
         self.declare_parameter("depth_info_reliability", QoSReliabilityPolicy.BEST_EFFORT)
 
-        # aux
+        # Aux variables
         self.tf_buffer = Buffer()
         self.cv_bridge = CvBridge()
 
@@ -65,11 +64,6 @@ class Detect3DNode(LifecycleNode):
 
         self.target_frame = (
             self.get_parameter("target_frame").get_parameter_value().string_value
-        )
-        self.maximum_detection_threshold = (
-            self.get_parameter("maximum_detection_threshold")
-            .get_parameter_value()
-            .double_value
         )
         self.depth_image_units_divisor = (
             self.get_parameter("depth_image_units_divisor")
@@ -103,7 +97,7 @@ class Detect3DNode(LifecycleNode):
         )
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # pubs
+        # Pubs
         self._pub = self.create_publisher(DetectionArray, "detections_3d", 10)
 
         super().on_configure(state)
@@ -114,7 +108,7 @@ class Detect3DNode(LifecycleNode):
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"[{self.get_name()}] Activating...")
 
-        # subs
+        # Subs
         self.depth_sub = message_filters.Subscriber(
             self, Image, "depth_image", qos_profile=self.depth_image_qos_profile
         )
@@ -185,7 +179,7 @@ class Detect3DNode(LifecycleNode):
         detections_msg: DetectionArray,
     ) -> List[Detection]:
 
-        # check if there are detections
+        # Check if there are detections
         if not detections_msg.detections:
             return []
 
@@ -221,6 +215,204 @@ class Detect3DNode(LifecycleNode):
 
         return new_detections
 
+    @staticmethod
+    def compute_depth_bounds(depth_values: np.ndarray) -> Tuple[float, float, float]:
+        """
+        Compute robust depth statistics for the foreground object using
+        advanced density-based analysis and multimodal distribution handling.
+
+        Args:
+            depth_values: 1D array of valid depth values (> 0)
+
+        Returns:
+            Tuple of (z_center, z_min, z_max) representing the object's depth
+        """
+        if len(depth_values) < 4:
+            z_center = np.median(depth_values)
+            return z_center, np.min(depth_values), np.max(depth_values)
+
+        sorted_depths = np.sort(depth_values)
+        n = len(sorted_depths)
+
+        # Step 1: Identify foreground cluster using multi-criteria analysis
+        # 1a. Gap-based detection
+        depth_diffs = np.diff(sorted_depths)
+        median_diff = np.median(depth_diffs)
+        mad_diff = np.median(np.abs(depth_diffs - median_diff))
+        gap_threshold = max(median_diff + 3.0 * mad_diff, 0.05)
+
+        large_gaps = np.where(depth_diffs > gap_threshold)[0]
+
+        # 1b. Histogram-based density analysis for mode detection
+        depth_range = sorted_depths[-1] - sorted_depths[0]
+        # Adaptive bin size: ~1-2cm resolution
+        n_bins = max(15, min(50, int(depth_range / 0.015)))
+        hist, bin_edges = np.histogram(depth_values, bins=n_bins)
+
+        # Find peak (mode) - highest density region
+        peak_bin_idx = np.argmax(hist)
+        mode_depth = (bin_edges[peak_bin_idx] + bin_edges[peak_bin_idx + 1]) / 2
+
+        # 1c. Combine gap detection and density analysis
+        if len(large_gaps) > 0:
+            # Use gap to separate foreground, but validate with density
+            cutoff_idx = large_gaps[0] + 1
+            candidate_cluster = sorted_depths[:cutoff_idx]
+
+            # Verify the mode is in this cluster (ensures we got the right cluster)
+            if mode_depth <= sorted_depths[cutoff_idx]:
+                object_depths = candidate_cluster
+            else:
+                # Mode is beyond the gap - use density-based selection
+                object_depths = Detect3DNode._density_based_cluster(
+                    depth_values, mode_depth, sorted_depths
+                )
+        else:
+            # No clear gap - use density-based clustering around mode
+            object_depths = Detect3DNode._density_based_cluster(
+                depth_values, mode_depth, sorted_depths
+            )
+
+        # Safety check
+        if len(object_depths) < max(4, n * 0.03):
+            # Fallback: use percentile-based selection biased toward foreground
+            p5 = np.percentile(sorted_depths, 5)
+            p70 = np.percentile(sorted_depths, 70)
+            object_depths = depth_values[(depth_values >= p5) & (depth_values <= p70)]
+
+        if len(object_depths) == 0:
+            object_depths = depth_values
+
+        # Step 2: Compute precise center using density-weighted approach
+        z_center = Detect3DNode._compute_weighted_center(object_depths)
+
+        # Step 3: Compute extent using robust percentiles
+        z_min = np.percentile(object_depths, 1)
+        z_max = np.percentile(object_depths, 99)
+
+        # Ensure minimum depth size
+        min_depth_size = 0.01  # 1cm
+        if (z_max - z_min) < min_depth_size:
+            half_min = min_depth_size / 2
+            z_min = z_center - half_min
+            z_max = z_center + half_min
+
+        return z_center, z_min, z_max
+
+    @staticmethod
+    def _density_based_cluster(
+        depth_values: np.ndarray, mode_depth: float, sorted_depths: np.ndarray
+    ) -> np.ndarray:
+        """
+        Extract foreground cluster based on local density around the mode.
+
+        Args:
+            depth_values: Original depth values
+            mode_depth: The detected mode (peak density)
+            sorted_depths: Sorted depth values
+
+        Returns:
+            Filtered depth values representing the foreground object
+        """
+        # Use adaptive threshold based on data spread around mode
+        deviations = np.abs(depth_values - mode_depth)
+        mad = np.median(deviations)
+
+        # Adaptive threshold: 2-3 * MAD, bounded by [5cm, 25cm]
+        # Tighter for uniform objects, looser for complex shapes
+        q25_dev = np.percentile(deviations, 25)
+        q75_dev = np.percentile(deviations, 75)
+        iqr_dev = q75_dev - q25_dev
+
+        if iqr_dev < 0.02:  # Very uniform depth (< 2cm variation)
+            threshold = np.clip(2.0 * mad, 0.05, 0.15)
+        else:  # More depth variation
+            threshold = np.clip(3.0 * mad, 0.08, 0.25)
+
+        # Keep depths within threshold from mode
+        cluster_mask = deviations <= threshold
+        cluster = depth_values[cluster_mask]
+
+        # Additional check: ensure we capture reasonable portion
+        if len(cluster) < len(depth_values) * 0.1:
+            # Fall back to percentile-based approach
+            p70 = np.percentile(sorted_depths, 70)
+            cluster = depth_values[depth_values <= p70]
+
+        return cluster if len(cluster) > 0 else depth_values
+
+    @staticmethod
+    def _compute_weighted_center(object_depths: np.ndarray) -> float:
+        """
+        Compute the center depth using density-weighted mean for accuracy.
+        This gives more weight to depths with more neighboring points,
+        resulting in a center that better represents the object's mass.
+
+        Args:
+            object_depths: Filtered depth values of the object
+
+        Returns:
+            Weighted center depth value
+        """
+        if len(object_depths) < 10:
+            # For small samples, use trimmed mean (remove extreme 5%)
+            return Detect3DNode._trimmed_mean(object_depths, 0.05)
+
+        # Use histogram to estimate local density
+        depth_range = np.ptp(object_depths)
+        n_bins = max(10, min(30, int(depth_range / 0.01)))  # ~1cm bins
+
+        hist, bin_edges = np.histogram(object_depths, bins=n_bins)
+
+        # Assign density weight to each depth value
+        # Find which bin each depth belongs to
+        bin_indices = np.digitize(object_depths, bin_edges) - 1
+        bin_indices = np.clip(bin_indices, 0, len(hist) - 1)
+
+        # Weight each depth by its bin's density
+        weights = hist[bin_indices]
+        weights = weights.astype(float)
+
+        # Avoid division by zero
+        if np.sum(weights) == 0:
+            return np.median(object_depths)
+
+        # Compute weighted mean
+        weighted_center = np.average(object_depths, weights=weights)
+
+        # Sanity check: should be within the data range
+        if weighted_center < np.min(object_depths) or weighted_center > np.max(
+            object_depths
+        ):
+            return np.median(object_depths)
+
+        return weighted_center
+
+    @staticmethod
+    def _trimmed_mean(values: np.ndarray, trim_fraction: float) -> float:
+        """
+        Compute trimmed mean by removing extreme values.
+
+        Args:
+            values: Input values
+            trim_fraction: Fraction to trim from each end (e.g., 0.05 = 5%)
+
+        Returns:
+            Trimmed mean value
+        """
+        if len(values) < 4:
+            return np.mean(values)
+
+        lower_percentile = trim_fraction * 100
+        upper_percentile = (1 - trim_fraction) * 100
+
+        lower_bound = np.percentile(values, lower_percentile)
+        upper_bound = np.percentile(values, upper_percentile)
+
+        trimmed = values[(values >= lower_bound) & (values <= upper_bound)]
+
+        return np.mean(trimmed) if len(trimmed) > 0 else np.mean(values)
+
     def convert_bb_to_3d(
         self,
         depth_image: np.ndarray,
@@ -234,7 +426,7 @@ class Detect3DNode(LifecycleNode):
         size_y = int(detection.bbox.size.y)
 
         if detection.mask.data:
-            # crop depth image by mask
+            # Crop depth image by mask
             mask_array = np.array(
                 [[int(ele.x), int(ele.y)] for ele in detection.mask.data]
             )
@@ -242,8 +434,12 @@ class Detect3DNode(LifecycleNode):
             cv2.fillPoly(mask, [np.array(mask_array, dtype=np.int32)], 255)
             roi = cv2.bitwise_and(depth_image, depth_image, mask=mask)
 
+            # Get pixel coordinates for spatial weighting
+            y_coords, x_coords = np.where(mask > 0)
+            pixel_coords = np.column_stack([x_coords, y_coords])
+
         else:
-            # crop depth image by the 2d BB
+            # Crop depth image by the 2d BB
             u_min = max(center_x - size_x // 2, 0)
             u_max = min(center_x + size_x // 2, depth_image.shape[1] - 1)
             v_min = max(center_y - size_y // 2, 0)
@@ -251,33 +447,41 @@ class Detect3DNode(LifecycleNode):
 
             roi = depth_image[v_min:v_max, u_min:u_max]
 
+            # Generate pixel coordinates for spatial weighting
+            roi_h, roi_w = roi.shape
+            y_grid, x_grid = np.meshgrid(
+                np.arange(roi_h) + v_min, np.arange(roi_w) + u_min, indexing="ij"
+            )
+            pixel_coords = np.column_stack([x_grid.flatten(), y_grid.flatten()])
+
         roi = roi / self.depth_image_units_divisor  # convert to meters
         if not np.any(roi):
             return None
 
-        # find the z coordinate on the 3D BB
-        if detection.mask.data:
-            roi = roi[roi > 0]
-            bb_center_z_coord = np.median(roi)
+        # Extract valid depth values with their spatial positions
+        valid_depths = roi.flatten()
+        valid_mask = valid_depths > 0
+        valid_depths = valid_depths[valid_mask]
+        valid_coords = pixel_coords[valid_mask]
 
-        else:
-            bb_center_z_coord = (
-                depth_image[int(center_y)][int(center_x)] / self.depth_image_units_divisor
-            )
-
-        z_diff = np.abs(roi - bb_center_z_coord)
-        mask_z = z_diff <= self.maximum_detection_threshold
-        if not np.any(mask_z):
+        if len(valid_depths) == 0:
             return None
 
-        roi = roi[mask_z]
-        z_min, z_max = np.min(roi), np.max(roi)
-        z = (z_max + z_min) / 2
+        # Compute spatial weights based on distance from 2D bbox center
+        # Pixels closer to center are more likely to be the actual object
+        spatial_weights = self._compute_spatial_weights(
+            valid_coords, center_x, center_y, size_x, size_y
+        )
+
+        # Compute robust depth statistics with spatial weighting
+        z, z_min, z_max = Detect3DNode.compute_depth_bounds_weighted(
+            valid_depths, spatial_weights
+        )
 
         if z == 0:
             return None
 
-        # project from image to world space
+        # Project from image to world space
         k = depth_info.k
         px, py, fx, fy = k[2], k[5], k[0], k[4]
         x = z * (center_x - px) / fx
@@ -285,7 +489,7 @@ class Detect3DNode(LifecycleNode):
         w = z * (size_x / fx)
         h = z * (size_y / fy)
 
-        # create 3D BB
+        # Create 3D BB
         msg = BoundingBox3D()
         msg.center.position.x = x
         msg.center.position.y = y
@@ -296,6 +500,130 @@ class Detect3DNode(LifecycleNode):
 
         return msg
 
+    @staticmethod
+    def _compute_spatial_weights(
+        coords: np.ndarray, center_x: int, center_y: int, size_x: int, size_y: int
+    ) -> np.ndarray:
+        """
+        Compute spatial weights for depth values based on distance from 2D bbox center.
+        Pixels near the center get higher weight to handle occlusions better.
+
+        Args:
+            coords: Nx2 array of pixel coordinates [x, y]
+            center_x: X coordinate of bbox center
+            center_y: Y coordinate of bbox center
+            size_x: Width of bbox
+            size_y: Height of bbox
+
+        Returns:
+            Array of weights (0-1) for each coordinate
+        """
+        # Compute normalized distance from center
+        dx = (coords[:, 0] - center_x) / (size_x / 2 + 1e-6)
+        dy = (coords[:, 1] - center_y) / (size_y / 2 + 1e-6)
+        normalized_dist = np.sqrt(dx**2 + dy**2)
+
+        # Use Gaussian-like weighting: higher weight at center, lower at edges
+        # sigma = 0.6 means ~60% of bbox radius has high weight
+        weights = np.exp(-0.5 * (normalized_dist / 0.6) ** 2)
+
+        # Ensure minimum weight of 0.1 to not completely ignore edge pixels
+        weights = np.maximum(weights, 0.1)
+
+        return weights
+
+    @staticmethod
+    def compute_depth_bounds_weighted(
+        depth_values: np.ndarray, spatial_weights: np.ndarray
+    ) -> Tuple[float, float, float]:
+        """
+        Compute robust depth statistics with spatial weighting to handle occlusions.
+
+        Args:
+            depth_values: 1D array of valid depth values (> 0)
+            spatial_weights: 1D array of spatial weights (0-1) for each depth
+
+        Returns:
+            Tuple of (z_center, z_min, z_max) representing the object's depth
+        """
+        if len(depth_values) < 4:
+            z_center = np.median(depth_values)
+            return z_center, np.min(depth_values), np.max(depth_values)
+
+        # Step 1: Use weighted histogram to find mode (handles occlusions)
+        depth_range = np.ptp(depth_values)
+        n_bins = max(15, min(50, int(depth_range / 0.015)))
+
+        # Create weighted histogram
+        hist, bin_edges = np.histogram(depth_values, bins=n_bins, weights=spatial_weights)
+
+        # Find peak (mode) - highest weighted density region
+        peak_bin_idx = np.argmax(hist)
+        mode_depth = (bin_edges[peak_bin_idx] + bin_edges[peak_bin_idx + 1]) / 2
+
+        # Step 2: Filter outliers using MAD around the weighted mode
+        deviations = np.abs(depth_values - mode_depth)
+        # Weight deviations by spatial weights - center deviations matter more
+        weighted_deviations = deviations / (spatial_weights + 0.1)
+        mad = np.median(weighted_deviations)
+
+        # Adaptive threshold based on data uniformity
+        threshold = np.clip(3.0 * mad, 0.05, 0.25)
+
+        # Keep depths within threshold
+        object_mask = deviations <= threshold
+        object_depths = depth_values[object_mask]
+        object_weights = spatial_weights[object_mask]
+
+        # Fallback if too aggressive
+        if len(object_depths) < max(4, len(depth_values) * 0.05):
+            # Use weighted percentiles
+            sorted_idx = np.argsort(depth_values)
+            cumsum_weights = np.cumsum(spatial_weights[sorted_idx])
+            cumsum_weights /= cumsum_weights[-1]
+
+            # Find 5th and 70th weighted percentiles
+            p5_idx = np.searchsorted(cumsum_weights, 0.05)
+            p70_idx = np.searchsorted(cumsum_weights, 0.70)
+
+            p5_val = depth_values[sorted_idx[p5_idx]]
+            p70_val = depth_values[sorted_idx[p70_idx]]
+
+            object_mask = (depth_values >= p5_val) & (depth_values <= p70_val)
+            object_depths = depth_values[object_mask]
+            object_weights = spatial_weights[object_mask]
+
+        if len(object_depths) == 0:
+            object_depths = depth_values
+            object_weights = spatial_weights
+
+        # Step 3: Compute weighted center
+        if np.sum(object_weights) > 0:
+            z_center = np.average(object_depths, weights=object_weights)
+        else:
+            z_center = np.median(object_depths)
+
+        # Step 4: Compute extent using weighted percentiles
+        sorted_idx = np.argsort(object_depths)
+        cumsum_weights = np.cumsum(object_weights[sorted_idx])
+        cumsum_weights /= cumsum_weights[-1] if cumsum_weights[-1] > 0 else 1.0
+
+        # Find 1st and 99th weighted percentiles
+        p1_idx = np.searchsorted(cumsum_weights, 0.01)
+        p99_idx = np.searchsorted(cumsum_weights, 0.99)
+
+        z_min = object_depths[sorted_idx[p1_idx]]
+        z_max = object_depths[sorted_idx[p99_idx]]
+
+        # Ensure minimum depth size
+        min_depth_size = 0.01
+        if (z_max - z_min) < min_depth_size:
+            half_min = min_depth_size / 2
+            z_min = z_center - half_min
+            z_max = z_center + half_min
+
+        return z_center, z_min, z_max
+
     def convert_keypoints_to_3d(
         self,
         depth_image: np.ndarray,
@@ -303,14 +631,14 @@ class Detect3DNode(LifecycleNode):
         detection: Detection,
     ) -> KeyPoint3DArray:
 
-        # build an array of 2d keypoints
+        # Build an array of 2d keypoints
         keypoints_2d = np.array(
             [[p.point.x, p.point.y] for p in detection.keypoints.data], dtype=np.int16
         )
         u = np.array(keypoints_2d[:, 1]).clip(0, depth_info.height - 1)
         v = np.array(keypoints_2d[:, 0]).clip(0, depth_info.width - 1)
 
-        # sample depth image and project to 3D
+        # Sample depth image and project to 3D
         z = depth_image[u, v]
         k = depth_info.k
         px, py, fx, fy = k[2], k[5], k[0], k[4]
@@ -320,7 +648,7 @@ class Detect3DNode(LifecycleNode):
             np.dstack([x, y, z]).reshape(-1, 3) / self.depth_image_units_divisor
         )  # convert to meters
 
-        # generate message
+        # Generate message
         msg_array = KeyPoint3DArray()
         for p, d in zip(points_3d, detection.keypoints.data):
             if not np.isnan(p).any():
@@ -335,7 +663,7 @@ class Detect3DNode(LifecycleNode):
         return msg_array
 
     def get_transform(self, frame_id: str) -> Tuple[np.ndarray]:
-        # transform position from image frame to target_frame
+        # Transform position from image frame to target_frame
         rotation = None
         translation = None
 
@@ -374,7 +702,7 @@ class Detect3DNode(LifecycleNode):
         rotation: np.ndarray,
     ) -> BoundingBox3D:
 
-        # position
+        # Position
         position = (
             Detect3DNode.qv_mult(
                 rotation,
@@ -393,7 +721,7 @@ class Detect3DNode(LifecycleNode):
         bbox.center.position.y = position[1]
         bbox.center.position.z = position[2]
 
-        # size
+        # Size (only rotation, no translation)
         size = Detect3DNode.qv_mult(
             rotation, np.array([bbox.size.x, bbox.size.y, bbox.size.z])
         )

@@ -160,7 +160,6 @@ These are the parameters from the [yolo.launch.py](./yolo_bringup/launch/yolo.la
 - **depth_info_reliability**: Reliability for the depth info topic: 0=system default, 1=Reliable, 2=Best Effort (default: 1)
 - **target_frame**: frame to transform the 3D boxes (default: base_link)
 - **depth_image_units_divisor**: Divisor to convert the depth image into meters (default: 1000)
-- **maximum_detection_threshold**: Maximum detection threshold in the z-axis (default: 0.3)
 - **use_tracking**: Whether to activate tracking after detection (default: True)
 - **use_3d**: Whether to activate 3D detections (default: False)
 - **use_debug**: Whether to activate debug node (default: True)
