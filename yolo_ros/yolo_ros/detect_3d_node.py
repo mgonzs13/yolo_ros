@@ -560,20 +560,28 @@ class Detect3DNode(LifecycleNode):
         )
 
         # Compute robust depth statistics with spatial weighting
-        z, z_min, z_max = Detect3DNode.compute_depth_bounds_weighted(
+        z, z_min, z_max = Detect3DNode._compute_depth_bounds_weighted(
             valid_depths, spatial_weights
         )
 
         if z == 0:
             return None
 
-        # Project from image to world space
-        k = depth_info.k
-        px, py, fx, fy = k[2], k[5], k[0], k[4]
-        x = z * (center_x - px) / fx
-        y = z * (center_y - py) / fy
-        w = z * (size_x / fx)
-        h = z * (size_y / fy)
+        # Compute height (y-axis) statistics from actual 3D points
+        y_center, y_min, y_max = Detect3DNode._compute_height_bounds(
+            valid_coords, valid_depths, spatial_weights, depth_info
+        )
+
+        # Compute width (x-axis) statistics from actual 3D points
+        x_center, x_min, x_max = Detect3DNode._compute_width_bounds(
+            valid_coords, valid_depths, spatial_weights, depth_info
+        )
+
+        # All dimensions come from actual 3D point analysis
+        x = x_center
+        y = y_center
+        w = float(x_max - x_min)
+        h = float(y_max - y_min)
 
         # Create 3D BB
         msg = BoundingBox3D()
@@ -610,16 +618,231 @@ class Detect3DNode(LifecycleNode):
         normalized_dist = np.sqrt(dx**2 + dy**2)
 
         # Use Gaussian-like weighting: higher weight at center, lower at edges
-        # sigma = 0.6 means ~60% of bbox radius has high weight
-        weights = np.exp(-0.5 * (normalized_dist / 0.6) ** 2)
+        # sigma = 0.8 means ~80% of bbox radius has high weight
+        weights = np.exp(-0.5 * (normalized_dist / 0.8) ** 2)
 
-        # Ensure minimum weight of 0.1 to not completely ignore edge pixels
-        weights = np.maximum(weights, 0.1)
+        # Ensure minimum weight of 0.3 to not completely ignore edge pixels
+        weights = np.maximum(weights, 0.3)
 
         return weights
 
     @staticmethod
-    def compute_depth_bounds_weighted(
+    def _compute_height_bounds(
+        valid_coords: np.ndarray,
+        valid_depths: np.ndarray,
+        spatial_weights: np.ndarray,
+        depth_info: CameraInfo,
+    ) -> Tuple[float, float, float]:
+        """
+        Compute 3D height (y-axis) statistics from valid depth points.
+        Uses actual 3D point positions instead of just projecting 2D bbox.
+
+        Args:
+            valid_coords: Nx2 array of pixel coordinates [x, y]
+            valid_depths: N array of depth values in meters
+            spatial_weights: N array of spatial weights
+            depth_info: Camera intrinsic parameters
+
+        Returns:
+            Tuple of (y_center, y_min, y_max) in meters
+        """
+        if len(valid_coords) < 4:
+            # Fallback: just use simple projection
+            k = depth_info.k
+            py, fy = k[5], k[4]
+            y_coords_pixel = valid_coords[:, 1]
+            y_3d = valid_depths * (y_coords_pixel - py) / fy
+            return np.median(y_3d), np.min(y_3d), np.max(y_3d)
+
+        # Convert pixel coordinates to 3D y-coordinates
+        k = depth_info.k
+        py, fy = k[5], k[4]
+        y_coords_pixel = valid_coords[:, 1]
+        y_3d = valid_depths * (y_coords_pixel - py) / fy
+
+        # Filter outliers using robust statistics
+        # Compute weighted median as reference
+        sorted_idx = np.argsort(y_3d)
+        sorted_y = y_3d[sorted_idx]
+        sorted_weights = spatial_weights[sorted_idx]
+        cumsum_weights = np.cumsum(sorted_weights)
+        cumsum_weights /= cumsum_weights[-1] if cumsum_weights[-1] > 0 else 1.0
+        median_idx = np.searchsorted(cumsum_weights, 0.5)
+        y_median = sorted_y[median_idx]
+
+        # Compute MAD (Median Absolute Deviation)
+        deviations = np.abs(y_3d - y_median)
+        mad = np.median(deviations)
+
+        # Filter outliers: keep points within 4.5*MAD from median
+        # Balanced threshold to handle tall objects while avoiding background
+        threshold = np.clip(4.5 * mad, 0.06, 0.50)
+        valid_mask = deviations <= threshold
+        filtered_y = y_3d[valid_mask]
+        filtered_weights = spatial_weights[valid_mask]
+
+        # Ensure we have enough points (at least 12% of data)
+        if len(filtered_y) < max(4, len(y_3d) * 0.12):
+            filtered_y = y_3d
+            filtered_weights = spatial_weights
+
+        # Compute weighted center using trimmed mean
+        sorted_idx = np.argsort(filtered_y)
+        sorted_y = filtered_y[sorted_idx]
+        sorted_weights = filtered_weights[sorted_idx]
+        cumsum_weights = np.cumsum(sorted_weights)
+        cumsum_weights /= cumsum_weights[-1] if cumsum_weights[-1] > 0 else 1.0
+
+        # Trim 5% from each end for robust center estimation
+        trim_low_idx = np.searchsorted(cumsum_weights, 0.05)
+        trim_high_idx = np.searchsorted(cumsum_weights, 0.95)
+
+        if trim_high_idx > trim_low_idx:
+            trimmed_y = sorted_y[trim_low_idx:trim_high_idx]
+            trimmed_weights = sorted_weights[trim_low_idx:trim_high_idx]
+            if np.sum(trimmed_weights) > 0:
+                y_center = np.average(trimmed_y, weights=trimmed_weights)
+            else:
+                y_center = np.median(filtered_y)
+        else:
+            y_center = np.median(filtered_y)
+
+        # Compute extent using balanced percentiles (3rd and 97th)
+        # Good balance between capturing object extent and avoiding outliers
+        sorted_idx = np.argsort(filtered_y)
+        sorted_y = filtered_y[sorted_idx]
+        sorted_weights = filtered_weights[sorted_idx]
+        cumsum_weights = np.cumsum(sorted_weights)
+        cumsum_weights /= cumsum_weights[-1] if cumsum_weights[-1] > 0 else 1.0
+
+        p3_idx = np.searchsorted(cumsum_weights, 0.03)
+        p97_idx = np.searchsorted(cumsum_weights, 0.97)
+
+        y_min = sorted_y[p3_idx]
+        y_max = sorted_y[p97_idx]
+
+        # Ensure minimum height of 2cm
+        min_height = 0.02
+        if (y_max - y_min) < min_height:
+            half_min = min_height / 2
+            y_min = y_center - half_min
+            y_max = y_center + half_min
+
+        return y_center, y_min, y_max
+
+    @staticmethod
+    def _compute_width_bounds(
+        valid_coords: np.ndarray,
+        valid_depths: np.ndarray,
+        spatial_weights: np.ndarray,
+        depth_info: CameraInfo,
+    ) -> Tuple[float, float, float]:
+        """
+        Compute 3D width (x-axis) statistics from valid depth points.
+        Uses actual 3D point positions instead of just projecting 2D bbox.
+
+        Args:
+            valid_coords: Nx2 array of pixel coordinates [x, y]
+            valid_depths: N array of depth values in meters
+            spatial_weights: N array of spatial weights
+            depth_info: Camera intrinsic parameters
+
+        Returns:
+            Tuple of (x_center, x_min, x_max) in meters
+        """
+        if len(valid_coords) < 4:
+            # Fallback: just use simple projection
+            k = depth_info.k
+            px, fx = k[2], k[0]
+            x_coords_pixel = valid_coords[:, 0]
+            x_3d = valid_depths * (x_coords_pixel - px) / fx
+            return np.median(x_3d), np.min(x_3d), np.max(x_3d)
+
+        # Convert pixel coordinates to 3D x-coordinates
+        k = depth_info.k
+        px, fx = k[2], k[0]
+        x_coords_pixel = valid_coords[:, 0]
+        x_3d = valid_depths * (x_coords_pixel - px) / fx
+
+        # Filter outliers using robust statistics
+        # Compute weighted median as reference
+        sorted_idx = np.argsort(x_3d)
+        sorted_x = x_3d[sorted_idx]
+        sorted_weights = spatial_weights[sorted_idx]
+        cumsum_weights = np.cumsum(sorted_weights)
+        cumsum_weights /= cumsum_weights[-1] if cumsum_weights[-1] > 0 else 1.0
+        median_idx = np.searchsorted(cumsum_weights, 0.5)
+        x_median = sorted_x[median_idx]
+
+        # Compute MAD (Median Absolute Deviation)
+        deviations = np.abs(x_3d - x_median)
+        mad = np.median(deviations)
+
+        # Adaptive threshold based on depth variance (helps with occlusions)
+        # Check if object has varying depth (might indicate occlusion)
+        depth_std = np.std(valid_depths)
+        if depth_std > 0.15:  # High depth variation - likely occlusion or 3D object
+            # Use tighter threshold to avoid including background
+            threshold = np.clip(4.0 * mad, 0.06, 0.40)
+        else:  # Uniform depth - flat object
+            # Can be more permissive
+            threshold = np.clip(4.5 * mad, 0.08, 0.50)
+
+        valid_mask = deviations <= threshold
+        filtered_x = x_3d[valid_mask]
+        filtered_weights = spatial_weights[valid_mask]
+
+        # Ensure we have enough points (at least 12% of data)
+        if len(filtered_x) < max(4, len(x_3d) * 0.12):
+            filtered_x = x_3d
+            filtered_weights = spatial_weights
+
+        # Compute weighted center using trimmed mean
+        sorted_idx = np.argsort(filtered_x)
+        sorted_x = filtered_x[sorted_idx]
+        sorted_weights = filtered_weights[sorted_idx]
+        cumsum_weights = np.cumsum(sorted_weights)
+        cumsum_weights /= cumsum_weights[-1] if cumsum_weights[-1] > 0 else 1.0
+
+        # Trim 5% from each end for robust center estimation
+        trim_low_idx = np.searchsorted(cumsum_weights, 0.05)
+        trim_high_idx = np.searchsorted(cumsum_weights, 0.95)
+
+        if trim_high_idx > trim_low_idx:
+            trimmed_x = sorted_x[trim_low_idx:trim_high_idx]
+            trimmed_weights = sorted_weights[trim_low_idx:trim_high_idx]
+            if np.sum(trimmed_weights) > 0:
+                x_center = np.average(trimmed_x, weights=trimmed_weights)
+            else:
+                x_center = np.median(filtered_x)
+        else:
+            x_center = np.median(filtered_x)
+
+        # Compute extent using balanced percentiles (3rd and 97th)
+        # Good balance between capturing object extent and avoiding outliers
+        sorted_idx = np.argsort(filtered_x)
+        sorted_x = filtered_x[sorted_idx]
+        sorted_weights = filtered_weights[sorted_idx]
+        cumsum_weights = np.cumsum(sorted_weights)
+        cumsum_weights /= cumsum_weights[-1] if cumsum_weights[-1] > 0 else 1.0
+
+        p3_idx = np.searchsorted(cumsum_weights, 0.03)
+        p97_idx = np.searchsorted(cumsum_weights, 0.97)
+
+        x_min = sorted_x[p3_idx]
+        x_max = sorted_x[p97_idx]
+
+        # Ensure minimum width of 2cm
+        min_width = 0.02
+        if (x_max - x_min) < min_width:
+            half_min = min_width / 2
+            x_min = x_center - half_min
+            x_max = x_center + half_min
+
+        return x_center, x_min, x_max
+
+    @staticmethod
+    def _compute_depth_bounds_weighted(
         depth_values: np.ndarray, spatial_weights: np.ndarray
     ) -> Tuple[float, float, float]:
         """
@@ -636,49 +859,73 @@ class Detect3DNode(LifecycleNode):
             z_center = np.median(depth_values)
             return z_center, np.min(depth_values), np.max(depth_values)
 
-        # Step 1: Use weighted histogram to find mode (handles occlusions)
+        # Step 1: Multi-scale histogram analysis for robust mode detection
         depth_range = np.ptp(depth_values)
         if not np.isfinite(depth_range) or depth_range <= 0:
             n_bins = 30
         else:
-            n_bins = max(15, min(50, int(depth_range / 0.015)))
+            n_bins = max(20, min(60, int(depth_range / 0.01)))
 
         # Create weighted histogram
         hist, bin_edges = np.histogram(depth_values, bins=n_bins, weights=spatial_weights)
 
+        # Smooth histogram to reduce noise while preserving peaks
+        if len(hist) >= 5:
+            # Simple moving average smoothing
+            kernel_size = min(5, len(hist) // 4)
+            kernel = np.ones(kernel_size) / kernel_size
+            hist_smooth = np.convolve(hist, kernel, mode="same")
+        else:
+            hist_smooth = hist
+
         # Find peak (mode) - highest weighted density region
-        peak_bin_idx = np.argmax(hist)
+        peak_bin_idx = np.argmax(hist_smooth)
         mode_depth = (bin_edges[peak_bin_idx] + bin_edges[peak_bin_idx + 1]) / 2
 
-        # Step 2: Filter outliers using MAD around the weighted mode
+        # Step 2: Adaptive outlier filtering with less aggressive thresholds
         deviations = np.abs(depth_values - mode_depth)
-        # Weight deviations by spatial weights - center deviations matter more
-        weighted_deviations = deviations / (spatial_weights + 0.1)
-        mad = np.median(weighted_deviations)
 
-        # Adaptive threshold based on data uniformity
-        threshold = np.clip(3.0 * mad, 0.05, 0.25)
+        # Compute robust MAD without inverse weighting to avoid over-filtering
+        mad = np.median(deviations)
+
+        # More permissive threshold - adjust based on object size and uniformity
+        # Check depth distribution uniformity
+        q25 = np.percentile(depth_values, 25)
+        q75 = np.percentile(depth_values, 75)
+        iqr = q75 - q25
+
+        # Adaptive threshold: looser for varied depth, tighter for uniform
+        if iqr < 0.03:  # Very uniform depth (<3cm IQR)
+            # For flat objects, use tighter bounds
+            threshold = np.clip(3.5 * mad, 0.08, 0.30)
+        elif iqr < 0.10:  # Moderate variation (<10cm IQR)
+            # Standard threshold
+            threshold = np.clip(4.0 * mad, 0.12, 0.40)
+        else:  # High variation (>10cm IQR)
+            # For complex 3D objects, use very permissive bounds
+            threshold = np.clip(5.0 * mad, 0.15, 0.60)
 
         # Keep depths within threshold
         object_mask = deviations <= threshold
         object_depths = depth_values[object_mask]
         object_weights = spatial_weights[object_mask]
 
-        # Fallback if too aggressive
-        if len(object_depths) < max(4, len(depth_values) * 0.05):
-            # Use weighted percentiles
+        # Fallback if filtering was too aggressive
+        min_points = max(6, int(len(depth_values) * 0.15))  # Keep at least 15% of points
+        if len(object_depths) < min_points:
+            # Use weighted percentiles with wider range
             sorted_idx = np.argsort(depth_values)
             cumsum_weights = np.cumsum(spatial_weights[sorted_idx])
             cumsum_weights /= cumsum_weights[-1]
 
-            # Find 5th and 70th weighted percentiles
-            p5_idx = np.searchsorted(cumsum_weights, 0.05)
-            p70_idx = np.searchsorted(cumsum_weights, 0.70)
+            # Find 2nd and 85th weighted percentiles (wider range)
+            p2_idx = np.searchsorted(cumsum_weights, 0.02)
+            p85_idx = np.searchsorted(cumsum_weights, 0.85)
 
-            p5_val = depth_values[sorted_idx[p5_idx]]
-            p70_val = depth_values[sorted_idx[p70_idx]]
+            p2_val = depth_values[sorted_idx[p2_idx]]
+            p85_val = depth_values[sorted_idx[p85_idx]]
 
-            object_mask = (depth_values >= p5_val) & (depth_values <= p70_val)
+            object_mask = (depth_values >= p2_val) & (depth_values <= p85_val)
             object_depths = depth_values[object_mask]
             object_weights = spatial_weights[object_mask]
 
@@ -686,27 +933,57 @@ class Detect3DNode(LifecycleNode):
             object_depths = depth_values
             object_weights = spatial_weights
 
-        # Step 3: Compute weighted center
+        # Step 3: Compute robust weighted center using trimmed mean
         if np.sum(object_weights) > 0:
-            z_center = np.average(object_depths, weights=object_weights)
+            # Use weighted average, but trim extreme 2% on each side first
+            sorted_idx = np.argsort(object_depths)
+            sorted_depths = object_depths[sorted_idx]
+            sorted_weights = object_weights[sorted_idx]
+
+            cumsum_weights = np.cumsum(sorted_weights)
+            cumsum_weights /= cumsum_weights[-1] if cumsum_weights[-1] > 0 else 1.0
+
+            # Trim 2% from each end
+            trim_low_idx = np.searchsorted(cumsum_weights, 0.02)
+            trim_high_idx = np.searchsorted(cumsum_weights, 0.98)
+
+            if trim_high_idx > trim_low_idx:
+                trimmed_depths = sorted_depths[trim_low_idx:trim_high_idx]
+                trimmed_weights = sorted_weights[trim_low_idx:trim_high_idx]
+
+                if np.sum(trimmed_weights) > 0:
+                    z_center = np.average(trimmed_depths, weights=trimmed_weights)
+                else:
+                    z_center = np.median(object_depths)
+            else:
+                z_center = np.average(object_depths, weights=object_weights)
         else:
             z_center = np.median(object_depths)
 
-        # Step 4: Compute extent using weighted percentiles
+        # Step 4: Compute extent using balanced weighted percentiles
         sorted_idx = np.argsort(object_depths)
         cumsum_weights = np.cumsum(object_weights[sorted_idx])
         cumsum_weights /= cumsum_weights[-1] if cumsum_weights[-1] > 0 else 1.0
 
-        # Find 1st and 99th weighted percentiles
+        # Use 1st and 99th percentiles for depth (slightly more coverage than width/height)
         p1_idx = np.searchsorted(cumsum_weights, 0.01)
         p99_idx = np.searchsorted(cumsum_weights, 0.99)
 
         z_min = object_depths[sorted_idx[p1_idx]]
         z_max = object_depths[sorted_idx[p99_idx]]
 
-        # Ensure minimum depth size
-        min_depth_size = 0.01
+        # Validate and adjust bounds relative to center
+        # Ensure center is within bounds (sanity check)
+        if z_center < z_min or z_center > z_max:
+            # Recompute bounds symmetrically around center
+            depth_extent = max(z_max - z_min, 0.02)  # At least 2cm
+            z_min = z_center - depth_extent / 2
+            z_max = z_center + depth_extent / 2
+
+        # Ensure minimum depth size of 2cm (more realistic for real objects)
+        min_depth_size = 0.02
         if (z_max - z_min) < min_depth_size:
+            # Expand around center
             half_min = min_depth_size / 2
             z_min = z_center - half_min
             z_max = z_center + half_min
