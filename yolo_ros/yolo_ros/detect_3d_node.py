@@ -318,7 +318,10 @@ class Detect3DNode(LifecycleNode):
         # 1b. Histogram-based density analysis for mode detection
         depth_range = sorted_depths[-1] - sorted_depths[0]
         # Adaptive bin size: ~1-2cm resolution
-        n_bins = max(15, min(50, int(depth_range / 0.015)))
+        if not np.isfinite(depth_range) or depth_range <= 0:
+            n_bins = 30
+        else:
+            n_bins = max(15, min(50, int(depth_range / 0.015)))
         hist, bin_edges = np.histogram(depth_values, bins=n_bins)
 
         # Find peak (mode) - highest density region
@@ -543,7 +546,7 @@ class Detect3DNode(LifecycleNode):
 
         # Extract valid depth values with their spatial positions
         valid_depths = roi.flatten()
-        valid_mask = valid_depths > 0
+        valid_mask = (valid_depths > 0) & np.isfinite(valid_depths)
         valid_depths = valid_depths[valid_mask]
         valid_coords = pixel_coords[valid_mask]
 
@@ -635,7 +638,10 @@ class Detect3DNode(LifecycleNode):
 
         # Step 1: Use weighted histogram to find mode (handles occlusions)
         depth_range = np.ptp(depth_values)
-        n_bins = max(15, min(50, int(depth_range / 0.015)))
+        if not np.isfinite(depth_range) or depth_range <= 0:
+            n_bins = 30
+        else:
+            n_bins = max(15, min(50, int(depth_range / 0.015)))
 
         # Create weighted histogram
         hist, bin_edges = np.histogram(depth_values, bins=n_bins, weights=spatial_weights)
