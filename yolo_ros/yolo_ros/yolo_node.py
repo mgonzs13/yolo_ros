@@ -163,6 +163,7 @@ class YoloNode(LifecycleNode):
 
         try:
             self.yolo = self.type_to_model[self.model_type](self.model)
+            self.yolo.to(self.device)
         except FileNotFoundError:
             self.get_logger().error(f"Model file '{self.model}' does not exists")
             return TransitionCallbackReturn.ERROR
