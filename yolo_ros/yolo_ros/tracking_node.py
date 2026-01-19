@@ -105,15 +105,15 @@ class TrackingNode(LifecycleNode):
         )
 
         # Subs
-        image_sub = message_filters.Subscriber(
+        self.image_sub = message_filters.Subscriber(
             self, Image, "image_raw", qos_profile=image_qos_profile
         )
-        detections_sub = message_filters.Subscriber(
+        self.detections_sub = message_filters.Subscriber(
             self, DetectionArray, "detections", qos_profile=10
         )
 
         self._synchronizer = message_filters.ApproximateTimeSynchronizer(
-            (image_sub, detections_sub), 10, 0.5
+            (self.image_sub, self.detections_sub), 10, 0.5
         )
         self._synchronizer.registerCallback(self.detections_cb)
 
