@@ -302,10 +302,10 @@ class Detect3DNode(LifecycleNode):
         # Basic input validation
         if not isinstance(depth_values, np.ndarray):
             return 0.0, 0.0, 0.0
-        
+
         if len(depth_values) == 0:
             return 0.0, 0.0, 0.0
-        
+
         # Ensure all values are numeric and finite
         try:
             depth_values = np.asarray(depth_values, dtype=np.float64)
@@ -313,10 +313,10 @@ class Detect3DNode(LifecycleNode):
             depth_values = depth_values[valid_mask]
         except (ValueError, TypeError):
             return 0.0, 0.0, 0.0
-        
+
         if len(depth_values) == 0:
             return 0.0, 0.0, 0.0
-        
+
         if len(depth_values) < 4:
             z_center = float(np.median(depth_values))
             return z_center, float(np.min(depth_values)), float(np.max(depth_values))
@@ -526,7 +526,7 @@ class Detect3DNode(LifecycleNode):
         # Basic input validations
         if depth_image is None or not isinstance(depth_image, np.ndarray):
             return None
-        
+
         if depth_image.size == 0:
             return None
 
@@ -565,23 +565,23 @@ class Detect3DNode(LifecycleNode):
             pixel_coords = np.column_stack([x_grid.flatten(), y_grid.flatten()])
 
         roi = roi / self.depth_image_units_divisor  # Convert to meters
-        
+
         # Validate that division did not produce NaN or inf
         if not np.any(np.isfinite(roi)):
             return None
-        
+
         if not np.any(roi):
             return None
 
         # Extract valid depth values with their spatial positions
         valid_depths = roi.flatten()
-        
+
         # Ensure correct numeric type
         try:
             valid_depths = np.asarray(valid_depths, dtype=np.float64)
         except (ValueError, TypeError):
             return None
-        
+
         valid_mask = (valid_depths > 0) & np.isfinite(valid_depths)
         valid_depths = valid_depths[valid_mask]
         valid_coords = pixel_coords[valid_mask]
@@ -607,7 +607,7 @@ class Detect3DNode(LifecycleNode):
         y_center, y_min, y_max = Detect3DNode._compute_height_bounds(
             valid_coords, valid_depths, spatial_weights, depth_info
         )
-        
+
         # Validate results
         if not all(np.isfinite([y_center, y_min, y_max])):
             return None
@@ -616,7 +616,7 @@ class Detect3DNode(LifecycleNode):
         x_center, x_min, x_max = Detect3DNode._compute_width_bounds(
             valid_coords, valid_depths, spatial_weights, depth_info
         )
-        
+
         # Validate results
         if not all(np.isfinite([x_center, x_min, x_max])):
             return None
@@ -696,47 +696,47 @@ class Detect3DNode(LifecycleNode):
             spatial_weights = np.asarray(spatial_weights, dtype=np.float64)
         except (ValueError, TypeError):
             return 0.0, 0.0, 0.0
-        
+
         if len(valid_coords) == 0 or len(valid_depths) == 0:
             return 0.0, 0.0, 0.0
-        
+
         if len(valid_coords) < 4:
             # Fallback: just use simple projection
             k = depth_info.k
             py, fy = k[5], k[4]
-            
+
             # Validate camera parameters
             if fy == 0:
                 return 0.0, 0.0, 0.0
-            
+
             # Validate depths are finite
             if not np.all(np.isfinite(valid_depths)):
                 return 0.0, 0.0, 0.0
-            
+
             y_coords_pixel = valid_coords[:, 1]
             y_3d = valid_depths * (y_coords_pixel - py) / fy
-            
+
             # Validate result
             if not np.all(np.isfinite(y_3d)):
                 return 0.0, 0.0, 0.0
-            
+
             return float(np.median(y_3d)), float(np.min(y_3d)), float(np.max(y_3d))
 
         # Convert pixel coordinates to 3D y-coordinates
         k = depth_info.k
         py, fy = k[5], k[4]
-        
+
         # Validate camera parameters
         if fy == 0:
             return 0.0, 0.0, 0.0
-        
+
         # Validate depths are finite before calculation
         if not np.all(np.isfinite(valid_depths)):
             return 0.0, 0.0, 0.0
-        
+
         y_coords_pixel = valid_coords[:, 1]
         y_3d = valid_depths * (y_coords_pixel - py) / fy
-        
+
         # Validate result
         if not np.any(np.isfinite(y_3d)):
             return 0.0, 0.0, 0.0
@@ -837,47 +837,47 @@ class Detect3DNode(LifecycleNode):
             spatial_weights = np.asarray(spatial_weights, dtype=np.float64)
         except (ValueError, TypeError):
             return 0.0, 0.0, 0.0
-        
+
         if len(valid_coords) == 0 or len(valid_depths) == 0:
             return 0.0, 0.0, 0.0
-        
+
         if len(valid_coords) < 4:
             # Fallback: just use simple projection
             k = depth_info.k
             px, fx = k[2], k[0]
-            
+
             # Validate camera parameters
             if fx == 0:
                 return 0.0, 0.0, 0.0
-            
+
             # Validate depths are finite
             if not np.all(np.isfinite(valid_depths)):
                 return 0.0, 0.0, 0.0
-            
+
             x_coords_pixel = valid_coords[:, 0]
             x_3d = valid_depths * (x_coords_pixel - px) / fx
-            
+
             # Validate result
             if not np.all(np.isfinite(x_3d)):
                 return 0.0, 0.0, 0.0
-            
+
             return float(np.median(x_3d)), float(np.min(x_3d)), float(np.max(x_3d))
 
         # Convert pixel coordinates to 3D x-coordinates
         k = depth_info.k
         px, fx = k[2], k[0]
-        
+
         # Validate camera parameters
         if fx == 0:
             return 0.0, 0.0, 0.0
-        
+
         # Validate depths are finite before calculation
         if not np.all(np.isfinite(valid_depths)):
             return 0.0, 0.0, 0.0
-        
+
         x_coords_pixel = valid_coords[:, 0]
         x_3d = valid_depths * (x_coords_pixel - px) / fx
-        
+
         # Validate result
         if not np.any(np.isfinite(x_3d)):
             return 0.0, 0.0, 0.0
@@ -979,18 +979,18 @@ class Detect3DNode(LifecycleNode):
             spatial_weights = np.asarray(spatial_weights, dtype=np.float64)
         except (ValueError, TypeError):
             return 0.0, 0.0, 0.0
-        
+
         if len(depth_values) == 0:
             return 0.0, 0.0, 0.0
-        
+
         # Validate that all values are finite
         valid_mask = np.isfinite(depth_values) & np.isfinite(spatial_weights)
         depth_values = depth_values[valid_mask]
         spatial_weights = spatial_weights[valid_mask]
-        
+
         if len(depth_values) == 0:
             return 0.0, 0.0, 0.0
-        
+
         if len(depth_values) < 4:
             z_center = float(np.median(depth_values))
             return z_center, float(np.min(depth_values)), float(np.max(depth_values))
@@ -1155,20 +1155,20 @@ class Detect3DNode(LifecycleNode):
 
         # Sample depth image and project to 3D
         z = depth_image[u, v]
-        
+
         # Validate and convert to float
         try:
             z = np.asarray(z, dtype=np.float64)
         except (ValueError, TypeError):
             return KeyPoint3DArray()
-        
+
         k = depth_info.k
         px, py, fx, fy = k[2], k[5], k[0], k[4]
-        
+
         # Validate camera parameters
         if fx == 0 or fy == 0:
             return KeyPoint3DArray()
-        
+
         x = z * (v - px) / fx
         y = z * (u - py) / fy
         points_3d = (
