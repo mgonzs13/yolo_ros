@@ -60,6 +60,7 @@ class Detect3DNode(LifecycleNode):
         super().__init__("bbox3d_node")
 
         # Parameters
+        self.declare_parameter("min_seg_points_for_orientation", 20)
         self.declare_parameter("target_frame", "base_link")
         self.declare_parameter("depth_image_units_divisor", 1000)
         self.declare_parameter(
