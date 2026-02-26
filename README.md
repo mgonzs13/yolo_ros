@@ -4,7 +4,7 @@ ROS 2 wrap for YOLO models from [Ultralytics](https://github.com/ultralytics/ult
 
 <div align="center">
 
-[![License: MIT](https://img.shields.io/badge/GitHub-GPL--3.0-informational)](https://opensource.org/license/gpl-3-0) [![GitHub release](https://img.shields.io/github/release/mgonzs13/yolo_ros.svg)](https://github.com/mgonzs13/yolo_ros/releases) [![Code Size](https://img.shields.io/github/languages/code-size/mgonzs13/yolo_ros.svg?branch=main)](https://github.com/mgonzs13/yolo_ros?branch=main) [![Dependencies](https://img.shields.io/librariesio/github/mgonzs13/yolo_ros?branch=main)](https://libraries.io/github/mgonzs13/yolo_ros?branch=main) [![Last Commit](https://img.shields.io/github/last-commit/mgonzs13/yolo_ros.svg)](https://github.com/mgonzs13/yolo_ros/commits/main) [![GitHub issues](https://img.shields.io/github/issues/mgonzs13/yolo_ros)](https://github.com/mgonzs13/yolo_ros/issues) [![GitHub pull requests](https://img.shields.io/github/issues-pr/mgonzs13/yolo_ros)](https://github.com/mgonzs13/yolo_ros/pulls) [![Contributors](https://img.shields.io/github/contributors/mgonzs13/yolo_ros.svg)](https://github.com/mgonzs13/yolo_ros/graphs/contributors) [![Python Formatter Check](https://github.com/mgonzs13/yolo_ros/actions/workflows/python-formatter.yml/badge.svg?branch=main)](https://github.com/mgonzs13/yolo_ros/actions/workflows/python-formatter.yml?branch=main) [![Doxygen Deployment](https://github.com/mgonzs13/yolo_ros/actions/workflows/doxygen-deployment.yml/badge.svg)](https://mgonzs13.github.io/yolo_ros/latest)
+[![License: GPL](https://img.shields.io/badge/GitHub-GPL--3.0-informational)](https://opensource.org/license/gpl-3-0) [![GitHub release](https://img.shields.io/github/release/mgonzs13/yolo_ros.svg)](https://github.com/mgonzs13/yolo_ros/releases) [![Code Size](https://img.shields.io/github/languages/code-size/mgonzs13/yolo_ros.svg?branch=main)](https://github.com/mgonzs13/yolo_ros?branch=main) [![Dependencies](https://img.shields.io/librariesio/github/mgonzs13/yolo_ros?branch=main)](https://libraries.io/github/mgonzs13/yolo_ros?branch=main) [![Last Commit](https://img.shields.io/github/last-commit/mgonzs13/yolo_ros.svg)](https://github.com/mgonzs13/yolo_ros/commits/main) [![GitHub issues](https://img.shields.io/github/issues/mgonzs13/yolo_ros)](https://github.com/mgonzs13/yolo_ros/issues) [![GitHub pull requests](https://img.shields.io/github/issues-pr/mgonzs13/yolo_ros)](https://github.com/mgonzs13/yolo_ros/pulls) [![Contributors](https://img.shields.io/github/contributors/mgonzs13/yolo_ros.svg)](https://github.com/mgonzs13/yolo_ros/graphs/contributors) [![Python Formatter Check](https://github.com/mgonzs13/yolo_ros/actions/workflows/python-formatter.yml/badge.svg?branch=main)](https://github.com/mgonzs13/yolo_ros/actions/workflows/python-formatter.yml?branch=main) [![Doxygen Deployment](https://github.com/mgonzs13/yolo_ros/actions/workflows/doxygen-deployment.yml/badge.svg)](https://mgonzs13.github.io/yolo_ros/latest)
 
 | ROS 2 Distro |                          Branch                          |                                                                                                      Build status                                                                                                      |                                                               Docker Image                                                                |
 | :----------: | :------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------: |
@@ -22,7 +22,8 @@ ROS 2 wrap for YOLO models from [Ultralytics](https://github.com/ultralytics/ult
 2. [Docker](#docker)
 3. [Models](#models)
 4. [Usage](#usage)
-5. [Demos](#demos)
+5. [Lifecycle Nodes](#lifecycle-nodes)
+6. [Demos](#demos)
 
 ## Installation
 
@@ -33,6 +34,7 @@ pip3 install -r yolo_ros/requirements.txt
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
 colcon build
+source ~/ros2_ws/install/setup.bash"
 ```
 
 ## Docker
@@ -176,12 +178,6 @@ These are some resource comparisons using the default yolov8m.pt model on a 30fp
 | Active   | 40-50% in one core      | 628 MB     | Up to 200 Mbps  |
 | Inactive | ~5-7% in one core       | 338 MB     | 0-20 Kbps       |
 
-### YOLO 3D
-
-```shell
-ros2 launch yolo_bringup yolov8.launch.py use_3d:=True
-```
-
 <p align="center">
   <img src="./docs/rqt_graph_yolov8_3d.png" width="100%" />
 </p>
@@ -210,7 +206,7 @@ ros2 launch yolo_bringup yolo.launch.py model:=yolov8m-seg.pt
 
 ## Human Pose
 
-Online persons are detected along with their keypoints.
+Visible persons are detected along with their skeleton keypoints.
 
 ```shell
 ros2 launch yolo_bringup yolo.launch.py model:=yolov8m-pose.pt
