@@ -134,6 +134,11 @@ ros2 launch yolo_bringup yoloe.launch.py
 - **/yolo/detections_3d**: 3D objects detected. YOLO results are used to crop the depth images to create the 3D bounding boxes and 3D keypoints.
 - **/yolo/debug_image**: Debug images showing the detected and tracked objects. They can be visualized with rviz2.
 
+### Services
+
+- **/yolo/enable**: Service to enable or disable the detection node. Accepts a boolean value (True/False).
+- **/yolo/set_classes** (YOLOWorld only): Service to dynamically set the detection classes. This service is only available when using the YOLO-World model and allows you to update the list of object classes the model should detect without restarting the node.
+
 ### Parameters
 
 These are the parameters from the [yolo.launch.py](./yolo_bringup/launch/yolo.launch.py), used to launch all models. Check out the [Ultralytics page](https://docs.ultralytics.com/modes/predict/#inference-arguments) for more details.
