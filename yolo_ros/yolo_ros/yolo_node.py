@@ -180,7 +180,7 @@ class YoloNode(LifecycleNode):
 
         self._enable_srv = self.create_service(SetBool, "enable", self.enable_cb)
 
-        if isinstance(self.yolo, YOLOWorld):
+        if isinstance(self.yolo, YOLOWorld) or isinstance(self.yolo, YOLOE):
             self._set_classes_srv = self.create_service(
                 SetClasses, "set_classes", self.set_classes_cb
             )
@@ -213,7 +213,7 @@ class YoloNode(LifecycleNode):
         self.destroy_service(self._enable_srv)
         self._enable_srv = None
 
-        if isinstance(self.yolo, YOLOWorld):
+        if isinstance(self.yolo, YOLOWorld) or isinstance(self.yolo, YOLOE):
             self.destroy_service(self._set_classes_srv)
             self._set_classes_srv = None
 
@@ -434,6 +434,7 @@ class YoloNode(LifecycleNode):
 
         if self.enable:
 
+            self.threshold = self.get_parameter("threshold").get_parameter_value().double_value
             # Convert image + predict
             cv_image = self.cv_bridge.imgmsg_to_cv2(
                 msg, desired_encoding=self.yolo_encoding
