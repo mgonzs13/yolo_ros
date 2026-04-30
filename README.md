@@ -69,6 +69,7 @@ The compatible models for yolo_ros are the following:
 - [YOLOv12](https://docs.ultralytics.com/models/yolo12/)
 - [YOLO-World](https://docs.ultralytics.com/models/yolo-world/)
 - [YOLOE](https://docs.ultralytics.com/models/yoloe/)
+- [YOLOv26](https://docs.ultralytics.com/models/yolo26/)
 
 ## Usage
 
