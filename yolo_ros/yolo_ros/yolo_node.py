@@ -180,7 +180,8 @@ class YoloNode(LifecycleNode):
 
         self._enable_srv = self.create_service(SetBool, "enable", self.enable_cb)
 
-        if isinstance(self.yolo, YOLOWorld) or isinstance(self.yolo, YOLOE):
+        self._has_set_classes = hasattr(self.yolo, "set_classes")
+        if self._has_set_classes:
             self._set_classes_srv = self.create_service(
                 SetClasses, "set_classes", self.set_classes_cb
             )
@@ -213,7 +214,7 @@ class YoloNode(LifecycleNode):
         self.destroy_service(self._enable_srv)
         self._enable_srv = None
 
-        if isinstance(self.yolo, YOLOWorld) or isinstance(self.yolo, YOLOE):
+        if self._has_set_classes:
             self.destroy_service(self._set_classes_srv)
             self._set_classes_srv = None
 
@@ -507,9 +508,13 @@ class YoloNode(LifecycleNode):
         @param res Service response
         @return Service response
         """
-        self.get_logger().info(f"Setting classes: {req.classes}")
-        self.yolo.set_classes(req.classes)
-        self.get_logger().info(f"New classes: {self.yolo.names}")
+
+        try:
+            self.get_logger().info(f"Setting classes: {req.classes}")
+            self.yolo.set_classes(req.classes)
+            self.get_logger().info(f"New classes: {self.yolo.names}")
+        except Exception as e:
+            self.get_logger().error(f"Error setting classes: {e}")
         return res
 
 

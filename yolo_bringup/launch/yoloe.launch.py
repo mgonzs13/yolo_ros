@@ -36,7 +36,7 @@ def generate_launch_description():
                 ),
                 launch_arguments={
                     "model_type": "YOLOE",
-                    "model": LaunchConfiguration("model", default="yoloe-11l-seg-pf.pt"),
+                    "model": LaunchConfiguration("model", default="yoloe-26m-seg.pt"),
                     "tracker": LaunchConfiguration("tracker", default="bytetrack.yaml"),
                     "device": LaunchConfiguration("device", default="cuda:0"),
                     "enable": LaunchConfiguration("enable", default="True"),
