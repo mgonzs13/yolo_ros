@@ -1,0 +1,12 @@
+[project]
+name = "yolo_ros"
+version = "4.5.1"
+description = "ROS 2 wrap for YOLO models from Ultralytics"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy<2",
+    "opencv-python>=4.8.1.78",
+    "typing-extensions>=4.4.0",
+    "ultralytics==8.4.6",
+    "lap>=0.5.12",
+]
