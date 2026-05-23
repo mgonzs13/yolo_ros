@@ -28,15 +28,21 @@ ROS 2 wrap for YOLO models from [Ultralytics](https://github.com/ultralytics/ult
 ## Installation
 
 ```shell
+# Clone this repo
 cd ~/ros2_ws/src
 git clone https://github.com/mgonzs13/yolo_ros.git
+
+# Install uv and python dependencies
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.bashrc
 cd yolo_ros
 uv sync
+
+# Install rosdep dependencies and build
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
 colcon build
 source ~/ros2_ws/install/setup.bash
-source ~/ros2_ws/src/yolo_ros/.venv/bin/activate
 ```
 
 ## Docker
