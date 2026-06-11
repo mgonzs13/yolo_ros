@@ -31,6 +31,7 @@ FROM deps AS builder
 SHELL ["/bin/bash", "-c"]
 
 # Build the workspace
+WORKDIR /root/ros2_ws
 RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build
 
 # Source the ROS 2 setup file
