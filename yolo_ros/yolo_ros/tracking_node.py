@@ -196,7 +196,17 @@ class TrackingNode(LifecycleNode):
             "bytetrack",
             "botsort",
         ], f"Only support 'bytetrack' and 'botsort' for now, but got '{cfg.tracker_type}'"
-        tracker = TRACKER_MAP[cfg.tracker_type](args=cfg, frame_rate=1)
+        tracker_class = TRACKER_MAP[cfg.tracker_type]
+
+        try:
+            # Newer Ultralytics releases accept only `args`.
+            tracker = tracker_class(args=cfg)
+        except TypeError as error:
+            # Backward compatibility with releases that still expect `frame_rate`.
+            if "frame_rate" not in str(error):
+                raise
+            tracker = tracker_class(args=cfg, frame_rate=1)
+
         return tracker
 
     def detections_cb(self, img_msg: Image, detections_msg: DetectionArray) -> None:
