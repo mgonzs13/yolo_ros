@@ -32,7 +32,7 @@ from cv_bridge import CvBridge
 from tf2_ros.buffer import Buffer
 from tf2_ros import TransformException
 from tf2_ros.transform_listener import TransformListener
-
+from scipy.spatial.transform import Rotation as Rot
 from sensor_msgs.msg import CameraInfo, Image
 from geometry_msgs.msg import TransformStamped
 from yolo_msgs.msg import Detection
@@ -82,10 +82,17 @@ class Detect3DNode(LifecycleNode):
         @return Transition callback return status
         """
         self.get_logger().info(f"[{self.get_name()}] Configuring...")
+        
+        self.min_seg_points_for_orientation = (
+            self.get_parameter("min_seg_points_for_orientation")
+            .get_parameter_value()
+            .integer_value
+        )
 
         self.target_frame = (
             self.get_parameter("target_frame").get_parameter_value().string_value
         )
+
         self.depth_image_units_divisor = (
             self.get_parameter("depth_image_units_divisor")
             .get_parameter_value()
@@ -196,6 +203,8 @@ class Detect3DNode(LifecycleNode):
 
         super().on_cleanup(state)
         self.get_logger().info(f"[{self.get_name()}] Cleaned up")
+        
+        return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
         """
@@ -536,106 +545,145 @@ class Detect3DNode(LifecycleNode):
         size_x = int(detection.bbox.size.x)
         size_y = int(detection.bbox.size.y)
 
+        H, W = depth_image.shape[:2]
+        inv_div = 1.0 / float(self.depth_image_units_divisor)
+
+        # -- ALWAYS compute bbox ROI first (small view, not full image) ---
+        u_min = max(center_x - size_x // 2, 0)
+        u_max = min(center_x + size_x // 2, W)   # NOTE: end is exclusive for slicing
+        v_min = max(center_y - size_y // 2, 0)
+        v_max = min(center_y + size_y // 2, H)   # NOTE: end is exclusive for slicing
+
+        if u_max <= u_min or v_max <= v_min:
+            return None
+
+        roi_raw = depth_image[v_min:v_max, u_min:u_max]  # usually uint16, view not copy
+        if roi_raw.size == 0:
+            return None
+
+        # valid depth pixels (ignore zeros)
+        valid = (roi_raw > 0)
+
+        # --- If we have a segmentation polygon, mask inside the ROI (small mask) ---
         if detection.mask.data:
-            # Crop depth image by mask
-            mask_array = np.array(
-                [[int(ele.x), int(ele.y)] for ele in detection.mask.data]
+            poly = np.asarray(
+                [[int(p.x), int(p.y)] for p in detection.mask.data],
+                dtype=np.int32,
             )
-            mask = np.zeros(depth_image.shape[:2], dtype=np.uint8)
-            cv2.fillPoly(mask, [np.array(mask_array, dtype=np.int32)], 255)
-            roi = cv2.bitwise_and(depth_image, depth_image, mask=mask)
 
-            # Get pixel coordinates for spatial weighting
-            y_coords, x_coords = np.where(mask > 0)
-            pixel_coords = np.column_stack([x_coords, y_coords])
+            # shift polygon points into ROI coordinates
+            poly[:, 0] -= u_min
+            poly[:, 1] -= v_min
 
-        else:
-            # Crop depth image by the 2D BB
-            u_min = max(center_x - size_x // 2, 0)
-            u_max = min(center_x + size_x // 2, depth_image.shape[1] - 1)
-            v_min = max(center_y - size_y // 2, 0)
-            v_max = min(center_y + size_y // 2, depth_image.shape[0] - 1)
+            # clip polygon into ROI bounds
+            poly[:, 0] = np.clip(poly[:, 0], 0, roi_raw.shape[1] - 1)
+            poly[:, 1] = np.clip(poly[:, 1], 0, roi_raw.shape[0] - 1)
 
-            roi = depth_image[v_min:v_max, u_min:u_max]
+            mask_roi = np.zeros(roi_raw.shape[:2], dtype=np.uint8)
+            cv2.fillPoly(mask_roi, [poly], 255)
 
-            # Generate pixel coordinates for spatial weighting
-            roi_h, roi_w = roi.shape
-            y_grid, x_grid = np.meshgrid(
-                np.arange(roi_h) + v_min, np.arange(roi_w) + u_min, indexing="ij"
-            )
-            pixel_coords = np.column_stack([x_grid.flatten(), y_grid.flatten()])
+            valid &= (mask_roi != 0)
 
-        roi = roi / self.depth_image_units_divisor  # Convert to meters
-
-        # Validate that division did not produce NaN or inf
-        if not np.any(np.isfinite(roi)):
+        # --- collect valid depth pixels after bbox/polygon mask ---
+        ys_roi, xs_roi = np.where(valid)
+        if xs_roi.size == 0:
             return None
 
-        if not np.any(roi):
+        depths_raw = roi_raw[ys_roi, xs_roi]
+        if depths_raw.size == 0:
             return None
 
-        # Extract valid depth values with their spatial positions
-        valid_depths = roi.flatten()
+        depths_m = depths_raw.astype(np.float64) * inv_div
 
-        # Ensure correct numeric type
-        try:
-            valid_depths = np.asarray(valid_depths, dtype=np.float64)
-        except (ValueError, TypeError):
+        xs_img = xs_roi.astype(np.float64) + float(u_min)
+        ys_img = ys_roi.astype(np.float64) + float(v_min)
+
+        valid_coords = np.column_stack([xs_img, ys_img])
+
+        finite = (depths_m > 0.0) & np.isfinite(depths_m)
+        if not np.any(finite):
             return None
 
-        valid_mask = (valid_depths > 0) & np.isfinite(valid_depths)
-        valid_depths = valid_depths[valid_mask]
-        valid_coords = pixel_coords[valid_mask]
+        depths_m = depths_m[finite]
+        valid_coords = valid_coords[finite]
 
-        if len(valid_depths) == 0:
-            return None
-
-        # Compute spatial weights based on distance from 2D bbox center
-        # Pixels closer to center are more likely to be the actual object
+        # --- use teammate robust weighting/bounds functions ---
         spatial_weights = self._compute_spatial_weights(
-            valid_coords, center_x, center_y, size_x, size_y
+            valid_coords,
+            center_x,
+            center_y,
+            size_x,
+            size_y,
         )
 
-        # Compute robust depth statistics with spatial weighting
         z, z_min, z_max = Detect3DNode._compute_depth_bounds_weighted(
-            valid_depths, spatial_weights
+            depths_m,
+            spatial_weights,
         )
 
-        if not np.isfinite(z) or z == 0:
+        if not np.isfinite(z) or z <= 0.0:
             return None
 
-        # Compute height (y-axis) statistics from actual 3D points
-        y_center, y_min, y_max = Detect3DNode._compute_height_bounds(
-            valid_coords, valid_depths, spatial_weights, depth_info
+        # Keep x/y estimation consistent with chosen depth cluster
+        depth_cluster = (depths_m >= z_min) & (depths_m <= z_max)
+        if not np.any(depth_cluster):
+            return None
+
+        depths_xy = depths_m[depth_cluster]
+        coords_xy = valid_coords[depth_cluster]
+        weights_xy = spatial_weights[depth_cluster]
+
+        x, x_min, x_max = Detect3DNode._compute_width_bounds(
+            coords_xy,
+            depths_xy,
+            weights_xy,
+            depth_info,
         )
 
-        # Validate results
-        if not all(np.isfinite([y_center, y_min, y_max])):
-            return None
-
-        # Compute width (x-axis) statistics from actual 3D points
-        x_center, x_min, x_max = Detect3DNode._compute_width_bounds(
-            valid_coords, valid_depths, spatial_weights, depth_info
+        y, y_min, y_max = Detect3DNode._compute_height_bounds(
+            coords_xy,
+            depths_xy,
+            weights_xy,
+            depth_info,
         )
 
-        # Validate results
-        if not all(np.isfinite([x_center, x_min, x_max])):
-            return None
-
-        # All dimensions come from actual 3D point analysis
-        x = x_center
-        y = y_center
         w = float(x_max - x_min)
         h = float(y_max - y_min)
 
-        # Create 3D BB
+        if not all(np.isfinite([x, y, z, w, h, z_min, z_max])):
+            return None
+
+        if z <= 0.0 or w <= 0.0 or h <= 0.0:
+            return None
+
         msg = BoundingBox3D()
-        msg.center.position.x = x
-        msg.center.position.y = y
-        msg.center.position.z = z
-        msg.size.x = w
-        msg.size.y = h
+        msg.center.position.x = float(x)
+        msg.center.position.y = float(y)
+        msg.center.position.z = float(z)
+        msg.size.x = float(w)
+        msg.size.y = float(h)
         msg.size.z = float(z_max - z_min)
+
+        # --- orientation unchanged from your current code ---
+        pts = self._sample_points_3d(depth_image, depth_info, detection, stride=4, max_points=4000)
+
+        msg.center.orientation.x = 0.0
+        msg.center.orientation.y = 0.0
+        msg.center.orientation.z = 0.0
+        msg.center.orientation.w = 1.0
+
+        if pts is not None and pts.shape[0] >= self.min_seg_points_for_orientation:
+            frame = Detect3DNode._plane_frame_from_pts_pca(pts)
+            if frame is not None:
+                z_axis, x_axis, y_axis = frame  # z_axis is the normal
+
+                R = np.column_stack([x_axis, y_axis, z_axis])
+                q_xyzw = Rot.from_matrix(R).as_quat()
+
+                msg.center.orientation.x = float(q_xyzw[0])
+                msg.center.orientation.y = float(q_xyzw[1])
+                msg.center.orientation.z = float(q_xyzw[2])
+                msg.center.orientation.w = float(q_xyzw[3])
 
         return msg
 
@@ -1133,63 +1181,63 @@ class Detect3DNode(LifecycleNode):
         depth_info: CameraInfo,
         detection: Detection,
     ) -> KeyPoint3DArray:
-        """
-        Convert 2D keypoints to 3D using depth information.
 
-        Samples depth at keypoint locations and projects to 3D coordinates.
+        msg_array = KeyPoint3DArray()
 
-        @param depth_image Depth image as numpy array
-        @param depth_info Camera intrinsic parameters
-        @param detection Detection containing 2D keypoints
-        @return Array of 3D keypoints
-        """
-        # Validate input
         if depth_image is None or not isinstance(depth_image, np.ndarray):
-            return KeyPoint3DArray()
+            return msg_array
 
-        # Build an array of 2D keypoints
+        if not detection.keypoints.data:
+            return msg_array
+
         keypoints_2d = np.array(
-            [[p.point.x, p.point.y] for p in detection.keypoints.data], dtype=np.int16
+            [[p.point.x, p.point.y] for p in detection.keypoints.data],
+            dtype=np.int32,
         )
-        u = np.array(keypoints_2d[:, 1]).clip(0, depth_info.height - 1)
-        v = np.array(keypoints_2d[:, 0]).clip(0, depth_info.width - 1)
 
-        # Sample depth image and project to 3D
-        z = depth_image[u, v]
+        h_img, w_img = depth_image.shape[:2]
 
-        # Validate and convert to float
+        u = keypoints_2d[:, 1].clip(0, h_img - 1)
+        v = keypoints_2d[:, 0].clip(0, w_img - 1)
+
+        z_raw = depth_image[u, v]
+
         try:
-            z = np.asarray(z, dtype=np.float64)
+            z = np.asarray(z_raw, dtype=np.float64)
         except (ValueError, TypeError):
-            return KeyPoint3DArray()
+            return msg_array
 
         k = depth_info.k
-        px, py, fx, fy = k[2], k[5], k[0], k[4]
+        px, py, fx, fy = float(k[2]), float(k[5]), float(k[0]), float(k[4])
 
-        # Validate camera parameters
-        if fx == 0 or fy == 0:
-            return KeyPoint3DArray()
+        if fx == 0.0 or fy == 0.0:
+            return msg_array
 
-        x = z * (v - px) / fx
-        y = z * (u - py) / fy
-        points_3d = (
-            np.dstack([x, y, z]).reshape(-1, 3) / self.depth_image_units_divisor
-        )  # Convert to meters
+        inv_div = 1.0 / float(self.depth_image_units_divisor)
 
-        # Generate message
-        msg_array = KeyPoint3DArray()
+        z_m = z * inv_div
+        x = z_m * (v.astype(np.float64) - px) / fx
+        y = z_m * (u.astype(np.float64) - py) / fy
+
+        points_3d = np.column_stack([x, y, z_m])
+
         for p, d in zip(points_3d, detection.keypoints.data):
-            if not np.isnan(p).any() and np.all(np.isfinite(p)):
-                msg = KeyPoint3D()
-                msg.point.x = float(p[0])
-                msg.point.y = float(p[1])
-                msg.point.z = float(p[2])
-                msg.id = d.id
-                msg.score = d.score
-                msg_array.data.append(msg)
+            if not np.all(np.isfinite(p)):
+                continue
+
+            if p[2] <= 0.0:
+                continue
+
+            msg = KeyPoint3D()
+            msg.point.x = float(p[0])
+            msg.point.y = float(p[1])
+            msg.point.z = float(p[2])
+            msg.id = d.id
+            msg.score = d.score
+            msg_array.data.append(msg)
 
         return msg_array
-
+    
     def get_transform(self, frame_id: str) -> Tuple[np.ndarray]:
         """
         Get TF transform from source frame to target frame.
@@ -1232,52 +1280,70 @@ class Detect3DNode(LifecycleNode):
             return None
 
     @staticmethod
+    def _quat_is_identity(q_wxyz, tol=1e-3) -> bool:
+        q = np.asarray(q_wxyz, dtype=np.float64)
+        q = Detect3DNode._quat_normalize(q)
+        # identity is [±1,0,0,0]
+        return (abs(q[1]) < tol and abs(q[2]) < tol and abs(q[3]) < tol and abs(abs(q[0]) - 1.0) < tol)
+    
+    @staticmethod
     def transform_3d_box(
         bbox: BoundingBox3D,
         translation: np.ndarray,
         rotation: np.ndarray,
     ) -> BoundingBox3D:
         """
-        Transform a 3D bounding box to a different reference frame.
+        Transform bbox center pose from source frame to target_frame.
 
-        Applies rotation and translation to both position and size of the bbox.
-
-        @param bbox Bounding box to transform
-        @param translation Translation vector
-        @param rotation Rotation quaternion [w, x, y, z]
-        @return Transformed bounding box
+        - translation: (3,) in target_frame
+        - rotation: quaternion [w, x, y, z] that rotates vectors from source->target
         """
 
-        # Position
-        position = (
-            Detect3DNode.qv_mult(
-                rotation,
-                np.array(
-                    [
-                        bbox.center.position.x,
-                        bbox.center.position.y,
-                        bbox.center.position.z,
-                    ]
-                ),
-            )
-            + translation
+        p_src = np.array(
+            [
+                bbox.center.position.x,
+                bbox.center.position.y,
+                bbox.center.position.z,
+            ],
+            dtype=np.float64,
         )
 
-        bbox.center.position.x = position[0]
-        bbox.center.position.y = position[1]
-        bbox.center.position.z = position[2]
+        p_tgt = Detect3DNode.qv_mult(rotation, p_src) + np.asarray(translation, dtype=np.float64)
 
-        # Size (only rotation, no translation)
-        size = Detect3DNode.qv_mult(
-            rotation, np.array([bbox.size.x, bbox.size.y, bbox.size.z])
+        bbox.center.position.x = float(p_tgt[0])
+        bbox.center.position.y = float(p_tgt[1])
+        bbox.center.position.z = float(p_tgt[2])
+
+        q_bbox = np.array(
+            [
+                bbox.center.orientation.w,
+                bbox.center.orientation.x,
+                bbox.center.orientation.y,
+                bbox.center.orientation.z,
+            ],
+            dtype=np.float64,
         )
 
-        bbox.size.x = abs(size[0])
-        bbox.size.y = abs(size[1])
-        bbox.size.z = abs(size[2])
+        if np.linalg.norm(q_bbox) < 1e-12:
+            q_bbox[:] = (1.0, 0.0, 0.0, 0.0)
+
+        if Detect3DNode._quat_is_identity(q_bbox, tol=1e-3):
+            bbox.center.orientation.x = 0.0
+            bbox.center.orientation.y = 0.0
+            bbox.center.orientation.z = 0.0
+            bbox.center.orientation.w = 1.0
+        else:
+            q_new = Detect3DNode._quat_multiply(rotation, q_bbox)
+            q_new = Detect3DNode._quat_normalize(q_new)
+
+            bbox.center.orientation.w = float(q_new[0])
+            bbox.center.orientation.x = float(q_new[1])
+            bbox.center.orientation.y = float(q_new[2])
+            bbox.center.orientation.z = float(q_new[3])
 
         return bbox
-
+    
+    
     @staticmethod
     def transform_3d_keypoints(
         keypoints: KeyPoint3DArray,
@@ -1327,7 +1393,172 @@ class Detect3DNode(LifecycleNode):
         uuv = np.cross(qvec, uv)
         return v + 2 * (uv * q[0] + uuv)
 
+    @staticmethod
+    def _quat_normalize(q_wxyz):
+        q = np.array(q_wxyz, dtype=np.float64)
+        n = np.linalg.norm(q)
+        if n < 1e-12:
+            return np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        return q / n
 
+    @staticmethod
+    def _quat_multiply(q1_wxyz, q2_wxyz):
+        w1, x1, y1, z1 = q1_wxyz
+        w2, x2, y2, z2 = q2_wxyz
+        return np.array([
+            w1*w2 - x1*x2 - y1*y2 - z1*z2,
+            w1*x2 + x1*w2 + y1*z2 - z1*y2,
+            w1*y2 - x1*z2 + y1*w2 + z1*x2,
+            w1*z2 + x1*y2 - y1*x2 + z1*w2,
+        ], dtype=np.float64)
+
+    @staticmethod
+    def _plane_frame_from_pts_pca(
+        pts: np.ndarray,
+        x_ref: np.ndarray = np.array([1.0, 0.0, 0.0], dtype=np.float64),
+    ):
+        c = np.mean(pts, axis=0)
+        Q = pts - c
+
+        cov = (Q.T @ Q) / len(pts)
+        w, V = np.linalg.eigh(cov)
+
+        # Normal = smallest variance direction
+        n = V[:, 0]
+
+        # Major in-plane axis = largest variance direction
+        x = V[:, 2]
+
+        # Make normal direction consistent: camera is at origin in camera frame
+        if np.dot(n, c) > 0:
+            n = -n
+
+        y = np.cross(n, x)
+        yn = np.linalg.norm(y)
+        if yn < 1e-12:
+            return None
+
+        y = y / yn
+        x = np.cross(y, n)
+        x = x / (np.linalg.norm(x) + 1e-12)
+
+        # Reduce 180-degree yaw flips
+        if np.dot(x, x_ref) < 0:
+            x = -x
+            y = -y
+
+        return n, x, y
+
+    def _sample_points_3d(self, depth_image, depth_info, detection, stride=4, max_points=4000):
+        k = depth_info.k
+        cx, cy, fx, fy = float(k[2]), float(k[5]), float(k[0]), float(k[4])
+
+        if fx == 0.0 or fy == 0.0:
+            return None
+
+        inv_div = 1.0 / float(self.depth_image_units_divisor)
+
+        h_img, w_img = depth_image.shape[:2]
+
+        center_x = int(detection.bbox.center.position.x)
+        center_y = int(detection.bbox.center.position.y)
+        size_x = int(detection.bbox.size.x)
+        size_y = int(detection.bbox.size.y)
+
+        u_min = max(center_x - size_x // 2, 0)
+        u_max = min(center_x + size_x // 2, w_img)
+        v_min = max(center_y - size_y // 2, 0)
+        v_max = min(center_y + size_y // 2, h_img)
+
+        if u_max <= u_min or v_max <= v_min:
+            return None
+
+        roi = depth_image[v_min:v_max, u_min:u_max]
+        if roi.size == 0:
+            return None
+
+        if detection.mask.data:
+            poly = np.asarray(
+                [[int(p.x), int(p.y)] for p in detection.mask.data],
+                dtype=np.int32,
+            )
+
+            poly[:, 0] -= u_min
+            poly[:, 1] -= v_min
+
+            poly[:, 0] = np.clip(poly[:, 0], 0, roi.shape[1] - 1)
+            poly[:, 1] = np.clip(poly[:, 1], 0, roi.shape[0] - 1)
+
+            mask = np.zeros(roi.shape[:2], dtype=np.uint8)
+            cv2.fillPoly(mask, [poly], 255)
+
+            m = mask[::stride, ::stride]
+            ys, xs = np.where(m > 0)
+
+            ys = ys * stride
+            xs = xs * stride
+        else:
+            ys = np.arange(0, roi.shape[0], stride, dtype=np.int32)
+            xs = np.arange(0, roi.shape[1], stride, dtype=np.int32)
+            ys, xs = np.meshgrid(ys, xs, indexing="ij")
+            ys = ys.ravel()
+            xs = xs.ravel()
+
+        if ys.size == 0:
+            return None
+
+        z_raw = roi[ys, xs].astype(np.float64)
+        z = z_raw * inv_div
+
+        valid = (z > 0.0) & np.isfinite(z)
+        if not np.any(valid):
+            return None
+
+        z = z[valid]
+        ys = ys[valid]
+        xs = xs[valid]
+
+        if z.size < self.min_seg_points_for_orientation:
+            return None
+
+        # Local orientation-only depth cleanup.
+        # This replaces self.maximum_detection_threshold, so no parameter is needed.
+        orientation_depth_threshold = 0.30
+        z_med = np.median(z)
+        keep = np.abs(z - z_med) <= orientation_depth_threshold
+
+        if not np.any(keep):
+            return None
+
+        z = z[keep]
+        ys = ys[keep]
+        xs = xs[keep]
+
+        if z.size < self.min_seg_points_for_orientation:
+            return None
+
+        if z.size > max_points:
+            idx = np.random.choice(z.size, size=max_points, replace=False)
+            ys = ys[idx]
+            xs = xs[idx]
+            z = z[idx]
+
+        xs_img = xs.astype(np.float64) + float(u_min)
+        ys_img = ys.astype(np.float64) + float(v_min)
+
+        X = z * (xs_img - cx) / fx
+        Y = z * (ys_img - cy) / fy
+
+        pts = np.column_stack((X, Y, z))
+
+        if not np.all(np.isfinite(pts)):
+            pts = pts[np.all(np.isfinite(pts), axis=1)]
+
+        if pts.shape[0] < self.min_seg_points_for_orientation:
+            return None
+
+        return pts
+    
 def main():
     rclpy.init()
     node = Detect3DNode()
