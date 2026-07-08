@@ -196,6 +196,8 @@ class Detect3DNode(LifecycleNode):
         super().on_cleanup(state)
         self.get_logger().info(f"[{self.get_name()}] Cleaned up")
 
+        return TransitionCallbackReturn.SUCCESS
+
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
         """
         Shutdown lifecycle callback.
