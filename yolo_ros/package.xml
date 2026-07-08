@@ -19,6 +19,8 @@
   <depend>sensor_msgs</depend>
   <depend>visualization_msgs</depend>
   <depend>yolo_msgs</depend>
+  <exec_depend>python3-torchvision</exec_depend>
+  <exec_depend>python3-ultralytics-pip</exec_depend>
   <export>
     <build_type>ament_python</build_type>
   </export>
