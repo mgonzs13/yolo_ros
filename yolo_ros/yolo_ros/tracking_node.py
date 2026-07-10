@@ -255,7 +255,7 @@ class TrackingNode(LifecycleNode):
                     # Get track ID
                     track_id = ""
                     if tracked_box.is_track:
-                        track_id = str(int(tracked_box.id))
+                        track_id = str(int(np.asarray(tracked_box.id).item()))
                     tracked_detection.id = track_id
 
                     # Append msg
