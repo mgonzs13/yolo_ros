@@ -2,3 +2,8 @@
 __pycache__
 uv.lock
 .venv
+# ROS/colcon workspace artifacts
+build/
+install/
+log/
+
