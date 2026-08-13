@@ -6,6 +6,7 @@ RUN apt update && apt install -y --no-install-recommends \
     git \
     build-essential \
     python3-rosdep \
+    python3-pip \
     python3-colcon-common-extensions \
     curl \
     && rm -rf /var/lib/apt/lists/*
