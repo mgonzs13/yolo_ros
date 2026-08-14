@@ -21,7 +21,10 @@ COPY . /root/ros2_ws/src
 
 # Install ROS dependencies
 RUN rosdep init && rosdep update --include-eol-distros
-RUN apt update && rosdep install --filter-for-installers apt --from-paths src --ignore-src -r -y && rm -rf /var/lib/apt/lists/*
+RUN apt update && rosdep install --filter-for-installers apt --from-paths src --ignore-src -r -y \
+    --dependency-types=buildtool \
+    --dependency-types=build \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages with uv
 WORKDIR /root/ros2_ws/src/yolo_ros
