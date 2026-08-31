@@ -1,4 +1,4 @@
-name: Jazzy Build and Test
+name: Jazzy Docker Build
 
 on:
   push:
@@ -7,18 +7,26 @@ on:
     - cron: "0 5 * * 1"
 
 jobs:
-  jazzy_build_and_test:
+  jazzy_docker_build:
     runs-on: ubuntu-latest
-    container:
-      image: ros:jazzy
     steps:
-      - name: Install pip
-        run: |
-          sudo apt update
-          sudo apt install -y python3-pip
-      - name: Build and Test
-        uses: ros-tooling/action-ros-ci@v0.4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build docker
+        uses: docker/build-push-action@v6
         with:
-          package-name: yolo_ros
-          target-ros2-distro: jazzy
-          coverage-result: false
+          build-args: ROS_DISTRO=kilted
+          push: false
+          load: true
+          tags: yolo_ros:kilted-test
+
+      - name: Run tests
+        run: |
+          docker run --rm yolo_ros:kilted-test bash -c \
+            "source /opt/ros/kilted/setup.bash && source /root/ros2_ws/install/setup.bash && \
+             cd /root/ros2_ws && colcon test --event-handlers console_direct+ && \
+             colcon test-result --verbose"
