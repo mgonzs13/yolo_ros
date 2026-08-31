@@ -19,14 +19,14 @@ jobs:
       - name: Build docker
         uses: docker/build-push-action@v6
         with:
-          build-args: ROS_DISTRO=kilted
+          build-args: ROS_DISTRO=jazzy
           push: false
           load: true
-          tags: yolo_ros:kilted-test
+          tags: yolo_ros:jazzy-test
 
       - name: Run tests
         run: |
-          docker run --rm yolo_ros:kilted-test bash -c \
-            "source /opt/ros/kilted/setup.bash && source /root/ros2_ws/install/setup.bash && \
+          docker run --rm yolo_ros:jazzy-test bash -c \
+            "source /opt/ros/jazzy/setup.bash && source /root/ros2_ws/install/setup.bash && \
              cd /root/ros2_ws && colcon test --event-handlers console_direct+ && \
              colcon test-result --verbose"
