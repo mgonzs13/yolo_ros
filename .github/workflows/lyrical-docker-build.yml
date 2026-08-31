@@ -21,3 +21,12 @@ jobs:
         with:
           build-args: ROS_DISTRO=lyrical
           push: false
+          load: true
+          tags: yolo_ros:lyrical-test
+
+      - name: Run tests
+        run: |
+          docker run --rm yolo_ros:lyrical-test bash -c \
+            "source /opt/ros/lyrical/setup.bash && source /root/ros2_ws/install/setup.bash && \
+             cd /root/ros2_ws && \
+             uv run --project /root/ros2_ws/src/ colcon test --packages-select yolo_ros"

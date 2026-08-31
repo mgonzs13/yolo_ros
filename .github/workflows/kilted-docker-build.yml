@@ -21,3 +21,12 @@ jobs:
         with:
           build-args: ROS_DISTRO=kilted
           push: false
+          load: true
+          tags: yolo_ros:kilted-test
+
+      - name: Run tests
+        run: |
+          docker run --rm yolo_ros:kilted-test bash -c \
+            "source /opt/ros/kilted/setup.bash && source /root/ros2_ws/install/setup.bash && \
+             cd /root/ros2_ws && \
+             uv run --project /root/ros2_ws/src/ colcon test --packages-select yolo_ros"
