@@ -213,6 +213,13 @@ def generate_launch_description():
             description="Divisor used to convert the raw depth image values into metres",
         )
 
+        enable_orientation = LaunchConfiguration("enable_orientation")
+        enable_orientation_cmd = DeclareLaunchArgument(
+            "enable_orientation",
+            default_value="False",
+            description="Whether to estimate and publish the orientation of the 3D bounding boxes",
+        )
+
         namespace = LaunchConfiguration("namespace")
         namespace_cmd = DeclareLaunchArgument(
             "namespace",
@@ -291,6 +298,7 @@ def generate_launch_description():
                     "depth_image_units_divisor": depth_image_units_divisor,
                     "depth_image_reliability": depth_image_reliability,
                     "depth_info_reliability": depth_info_reliability,
+                    "enable_orientation": enable_orientation,
                 }
             ],
             remappings=[
@@ -340,6 +348,7 @@ def generate_launch_description():
             depth_info_reliability_cmd,
             target_frame_cmd,
             depth_image_units_divisor_cmd,
+            enable_orientation_cmd,
             namespace_cmd,
             use_debug_cmd,
             yolo_node_cmd,
