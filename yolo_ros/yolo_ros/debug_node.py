@@ -367,11 +367,12 @@ class DebugNode(LifecycleNode):
         marker.pose.position.x = bbox3d.center.position.x
         marker.pose.position.y = bbox3d.center.position.y
         marker.pose.position.z = bbox3d.center.position.z
-
-        marker.pose.orientation.x = 0.0
-        marker.pose.orientation.y = 0.0
-        marker.pose.orientation.z = 0.0
-        marker.pose.orientation.w = 1.0
+        
+        marker.pose.orientation.x = bbox3d.center.orientation.x
+        marker.pose.orientation.y = bbox3d.center.orientation.y
+        marker.pose.orientation.z = bbox3d.center.orientation.z
+        marker.pose.orientation.w = bbox3d.center.orientation.w
+        
         marker.scale.x = bbox3d.size.x
         marker.scale.y = bbox3d.size.y
         marker.scale.z = bbox3d.size.z
