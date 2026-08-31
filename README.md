@@ -45,6 +45,13 @@ rosdep install --from-paths src --ignore-src -r -y
 colcon build && source install/setup.bash
 ```
 
+### Testing
+
+```shell
+colcon test --packages-select yolo_ros
+colcon test-result --verbose
+```
+
 ## Docker
 
 Build the yolo_ros docker.

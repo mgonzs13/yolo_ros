@@ -1,15 +1,15 @@
 # Copyright (C) 2023 Miguel Ángel González Santamarta
-
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
@@ -199,7 +199,8 @@ class YoloNode(LifecycleNode):
         """
         Deactivate lifecycle callback.
 
-        Destroys the YOLO model, clears CUDA cache if applicable, and cleans up services and subscriptions.
+        Destroys the YOLO model, clears CUDA cache if applicable, and cleans up
+        services and subscriptions.
 
         @param state Current lifecycle state
         @return Transition callback return status
@@ -284,7 +285,6 @@ class YoloNode(LifecycleNode):
         @param results YOLO detection results
         @return List of dictionaries containing class information and scores
         """
-
         hypothesis_list = []
 
         if results.boxes:
@@ -318,7 +318,6 @@ class YoloNode(LifecycleNode):
         @param results YOLO detection results
         @return List of BoundingBox2D messages
         """
-
         boxes_list = []
 
         if results.boxes:
@@ -363,7 +362,6 @@ class YoloNode(LifecycleNode):
         @param results YOLO detection results
         @return List of Mask messages
         """
-
         masks_list = []
 
         def create_point2d(x: float, y: float) -> Point2D:
@@ -397,7 +395,6 @@ class YoloNode(LifecycleNode):
         @param results YOLO detection results
         @return List of KeyPoint2DArray messages
         """
-
         keypoints_list = []
 
         points: Keypoints
@@ -432,7 +429,6 @@ class YoloNode(LifecycleNode):
 
         @param msg Image message to process
         """
-
         if self.enable:
 
             # Convert image + predict
@@ -508,7 +504,6 @@ class YoloNode(LifecycleNode):
         @param res Service response
         @return Service response
         """
-
         try:
             self.get_logger().info(f"Setting classes: {req.classes}")
             self.yolo.set_classes(req.classes)

@@ -1,15 +1,15 @@
 # Copyright (C) 2023 Miguel Ángel González Santamarta
-
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
@@ -195,7 +195,6 @@ class DebugNode(LifecycleNode):
         @param color RGB color tuple for the box
         @return Modified image with drawn bounding box
         """
-
         # Get detection info
         class_name = detection.class_name
         score = detection.score
@@ -229,7 +228,7 @@ class DebugNode(LifecycleNode):
         )
 
         # Rotate the corners of the rectangle
-        rect_pts = np.int0(cv2.transform(np.array([rect_pts]), rotation_matrix)[0])
+        rect_pts = np.intp(cv2.transform(np.array([rect_pts]), rotation_matrix)[0])
 
         # Draw the rotated rectangle
         for i in range(4):
@@ -263,7 +262,6 @@ class DebugNode(LifecycleNode):
         @param color RGB color tuple for the mask
         @return Modified image with drawn mask
         """
-
         mask_msg = detection.mask
         mask_array = np.array([[int(ele.x), int(ele.y)] for ele in mask_msg.data])
 
@@ -291,7 +289,6 @@ class DebugNode(LifecycleNode):
         @param detection Detection message containing keypoint information
         @return Modified image with drawn keypoints and skeleton
         """
-
         keypoints_msg = detection.keypoints
 
         ann = Annotator(cv_image)
@@ -353,7 +350,6 @@ class DebugNode(LifecycleNode):
         @param color RGB color tuple for the marker
         @return Marker message for visualization
         """
-
         bbox3d = detection.bbox3d
 
         marker = Marker()
@@ -394,7 +390,6 @@ class DebugNode(LifecycleNode):
         @param keypoint 3D keypoint to visualize
         @return Marker message for visualization
         """
-
         marker = Marker()
 
         marker.ns = "yolo_3d"
@@ -426,7 +421,7 @@ class DebugNode(LifecycleNode):
 
     def detections_cb(self, img_msg: Image, detection_msg: DetectionArray) -> None:
         """
-        Synchronized callback for image and detections.
+        Process synchronized image and detections messages.
 
         Processes detections and creates debug visualizations including annotated
         images and 3D markers for bounding boxes and keypoints.

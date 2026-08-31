@@ -1,15 +1,15 @@
 # Copyright (C) 2023 Miguel Ángel González Santamarta
-
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
@@ -185,7 +185,6 @@ class TrackingNode(LifecycleNode):
         @param tracker_yaml Path to tracker configuration YAML file
         @return Initialized tracker instance
         """
-
         TRACKER_MAP = {"bytetrack": BYTETracker, "botsort": BOTSORT}
         check_requirements("lap")  # For linear_assignment
 
@@ -211,14 +210,13 @@ class TrackingNode(LifecycleNode):
 
     def detections_cb(self, img_msg: Image, detections_msg: DetectionArray) -> None:
         """
-        Synchronized callback for image and detections.
+        Process synchronized image and detections messages.
 
         Performs tracking on detections and publishes tracked results with IDs.
 
         @param img_msg Image message
         @param detections_msg Detections message
         """
-
         tracked_detections_msg = DetectionArray()
         tracked_detections_msg.header = img_msg.header
 
@@ -265,7 +263,7 @@ class TrackingNode(LifecycleNode):
                     # Get track ID
                     track_id = ""
                     if tracked_box.is_track:
-                        track_id = str(int(tracked_box.id))
+                        track_id = str(int(tracked_box.id.item()))
                     tracked_detection.id = track_id
 
                     # Append msg

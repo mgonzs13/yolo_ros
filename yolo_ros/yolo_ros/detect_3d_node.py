@@ -1,15 +1,15 @@
 # Copyright (C) 2023 Miguel Ángel González Santamarta
-
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
@@ -78,7 +78,8 @@ class Detect3DNode(LifecycleNode):
         """
         Configure lifecycle callback.
 
-        Retrieves parameters, sets up QoS profiles, creates publishers, and initializes TF listener.
+        Retrieves parameters, sets up QoS profiles, creates publishers, and
+        initializes TF listener.
 
         @param state Current lifecycle state
         @return Transition callback return status
@@ -143,7 +144,8 @@ class Detect3DNode(LifecycleNode):
         """
         Activate lifecycle callback.
 
-        Creates subscriptions to depth image, camera info, and detections with time synchronization.
+        Creates subscriptions to depth image, camera info, and detections with
+        time synchronization.
 
         @param state Current lifecycle state
         @return Transition callback return status
@@ -234,7 +236,7 @@ class Detect3DNode(LifecycleNode):
         detections_msg: DetectionArray,
     ) -> None:
         """
-        Synchronized callback for depth image, camera info, and detections.
+        Process synchronized depth image, camera info, and detections messages.
 
         Processes detections to add 3D information and publishes the results.
 
@@ -242,7 +244,6 @@ class Detect3DNode(LifecycleNode):
         @param depth_info_msg Camera info message
         @param detections_msg Detections message
         """
-
         new_detections_msg = DetectionArray()
         new_detections_msg.header = detections_msg.header
         new_detections_msg.detections = self.process_detections(
@@ -267,7 +268,6 @@ class Detect3DNode(LifecycleNode):
         @param detections_msg Array of 2D detections
         @return List of detections with 3D information added
         """
-
         # Check if there are detections
         if not detections_msg.detections:
             return []
@@ -514,6 +514,7 @@ class Detect3DNode(LifecycleNode):
     ) -> np.ndarray:
         """
         Compute spatial weights for depth values based on distance from 2D bbox center.
+
         Pixels near the center get higher weight to handle occlusions better.
 
         Args:
@@ -523,8 +524,10 @@ class Detect3DNode(LifecycleNode):
             size_x: Width of bbox
             size_y: Height of bbox
 
-        Returns:
+        Returns
+        -------
             Array of weights (0-1) for each coordinate
+
         """
         # Compute normalized distance from center
         dx = (coords[:, 0] - center_x) / (size_x / 2 + 1e-6)
@@ -549,6 +552,7 @@ class Detect3DNode(LifecycleNode):
     ) -> Tuple[float, float, float]:
         """
         Compute 3D height (y-axis) statistics from valid depth points.
+
         Uses actual 3D point positions instead of just projecting 2D bbox.
 
         Args:
@@ -557,8 +561,10 @@ class Detect3DNode(LifecycleNode):
             spatial_weights: N array of spatial weights
             depth_info: Camera intrinsic parameters
 
-        Returns:
+        Returns
+        -------
             Tuple of (y_center, y_min, y_max) in meters
+
         """
         # Input validations
         try:
@@ -690,6 +696,7 @@ class Detect3DNode(LifecycleNode):
     ) -> Tuple[float, float, float]:
         """
         Compute 3D width (x-axis) statistics from valid depth points.
+
         Uses actual 3D point positions instead of just projecting 2D bbox.
 
         Args:
@@ -698,8 +705,10 @@ class Detect3DNode(LifecycleNode):
             spatial_weights: N array of spatial weights
             depth_info: Camera intrinsic parameters
 
-        Returns:
+        Returns
+        -------
             Tuple of (x_center, x_min, x_max) in meters
+
         """
         # Input validations
         try:
@@ -840,8 +849,10 @@ class Detect3DNode(LifecycleNode):
             depth_values: 1D array of valid depth values (> 0)
             spatial_weights: 1D array of spatial weights (0-1) for each depth
 
-        Returns:
+        Returns
+        -------
             Tuple of (z_center, z_min, z_max) representing the object's depth
+
         """
         # Input validations
         try:
@@ -1124,7 +1135,6 @@ class Detect3DNode(LifecycleNode):
         - translation: (3,) in target_frame
         - rotation: quaternion [w, x, y, z] that rotates vectors from source->target
         """
-
         p_src = np.array(
             [
                 bbox.center.position.x,
@@ -1187,7 +1197,6 @@ class Detect3DNode(LifecycleNode):
         @param rotation Rotation quaternion [w, x, y, z]
         @return Transformed keypoint array
         """
-
         for point in keypoints.data:
             position = (
                 Detect3DNode.qv_mult(
