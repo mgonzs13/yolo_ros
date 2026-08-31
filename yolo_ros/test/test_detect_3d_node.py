@@ -68,9 +68,7 @@ def test_detections_3d_pipeline():
     )
 
     depth_pub = node.create_publisher(Image, "depth_image", best_effort_qos())
-    info_pub = node.create_publisher(
-        CameraInfo, "depth_info", best_effort_qos()
-    )
+    info_pub = node.create_publisher(CameraInfo, "depth_info", best_effort_qos())
     det_pub = node.create_publisher(DetectionArray, "detections", 10)
 
     assert node.trigger_configure() == TransitionCallbackReturn.SUCCESS
@@ -153,9 +151,7 @@ def test_transform_3d_box():
 def test_compute_depth_bounds_weighted():
     depths = np.full(100, 2.0)
     weights = np.ones(100)
-    z, z_min, z_max = Detect3DNode._compute_depth_bounds_weighted(
-        depths, weights
-    )
+    z, z_min, z_max = Detect3DNode._compute_depth_bounds_weighted(depths, weights)
     assert z == pytest.approx(2.0, abs=0.01)
     assert z_min <= 2.0 + 1e-6
     assert z_max >= 2.0 - 1e-6

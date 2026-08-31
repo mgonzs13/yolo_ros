@@ -76,9 +76,7 @@ def test_tracking_pipeline(fixed_image, yolo_model):
 
 def test_create_tracker_invalid():
     node = TrackingNode()
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write("tracker_type: invalid_tracker\n")
         path = f.name
     try:

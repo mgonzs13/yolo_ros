@@ -66,14 +66,10 @@ def best_effort_qos(depth=1):
 def predict_detections(model, image_msg, conf=0.5):
     """Run real inference and build a DetectionArray message."""
     cv_image = BRIDGE.imgmsg_to_cv2(image_msg, desired_encoding="bgr8")
-    results = model.predict(
-        source=cv_image, verbose=False, conf=conf, device="cpu"
-    )[0]
+    results = model.predict(source=cv_image, verbose=False, conf=conf, device="cpu")[0]
     detections = DetectionArray()
     detections.header = image_msg.header
-    for box, cls, score in zip(
-        results.boxes.xywh, results.boxes.cls, results.boxes.conf
-    ):
+    for box, cls, score in zip(results.boxes.xywh, results.boxes.cls, results.boxes.conf):
         detection = Detection()
         detection.class_id = int(cls)
         detection.class_name = model.names[int(cls)]
@@ -87,8 +83,13 @@ def predict_detections(model, image_msg, conf=0.5):
 
 
 def make_detection(
-    cx=320.0, cy=240.0, size_x=240.0, size_y=280.0,
-    class_id=0, class_name="person", score=0.9,
+    cx=320.0,
+    cy=240.0,
+    size_x=240.0,
+    size_y=280.0,
+    class_id=0,
+    class_name="person",
+    score=0.9,
 ):
     """Create a synthetic detection message."""
     detection = Detection()

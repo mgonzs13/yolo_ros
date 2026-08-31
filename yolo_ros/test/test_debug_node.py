@@ -43,9 +43,7 @@ def test_debug_pipeline(fixed_image):
     dbg_images = []
     bb_markers = []
     kp_markers = []
-    node.create_subscription(
-        Image, "dbg_image", lambda msg: dbg_images.append(msg), 10
-    )
+    node.create_subscription(Image, "dbg_image", lambda msg: dbg_images.append(msg), 10)
     node.create_subscription(
         MarkerArray, "dgb_bb_markers", lambda msg: bb_markers.append(msg), 10
     )
@@ -89,9 +87,7 @@ def test_debug_pipeline(fixed_image):
 
     assert spin_until(
         executor,
-        lambda: len(dbg_images) > 0
-        and len(bb_markers) > 0
-        and len(kp_markers) > 0,
+        lambda: len(dbg_images) > 0 and len(bb_markers) > 0 and len(kp_markers) > 0,
     )
 
     assert dbg_images[0].height == fixed_image.height

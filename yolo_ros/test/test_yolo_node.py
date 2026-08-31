@@ -95,9 +95,9 @@ def test_enable_cb():
 
 def test_parse_hypothesis(fixed_image, yolo_model):
     cv_image = BRIDGE.imgmsg_to_cv2(fixed_image, desired_encoding="bgr8")
-    results = yolo_model.predict(
-        source=cv_image, verbose=False, conf=0.5, device="cpu"
-    )[0]
+    results = yolo_model.predict(source=cv_image, verbose=False, conf=0.5, device="cpu")[
+        0
+    ]
 
     node = YoloNode()
     node.yolo = yolo_model
@@ -114,9 +114,9 @@ def test_parse_hypothesis(fixed_image, yolo_model):
 
 def test_parse_boxes(fixed_image, yolo_model):
     cv_image = BRIDGE.imgmsg_to_cv2(fixed_image, desired_encoding="bgr8")
-    results = yolo_model.predict(
-        source=cv_image, verbose=False, conf=0.5, device="cpu"
-    )[0]
+    results = yolo_model.predict(source=cv_image, verbose=False, conf=0.5, device="cpu")[
+        0
+    ]
 
     node = YoloNode()
     boxes = node.parse_boxes(results)
