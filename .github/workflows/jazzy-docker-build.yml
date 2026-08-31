@@ -12,6 +12,10 @@ jobs:
     container:
       image: ros:jazzy
     steps:
+      - name: Install pip
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip
       - name: Build and Test
         uses: ros-tooling/action-ros-ci@v0.4
         with:
