@@ -1,4 +1,4 @@
-name: Humble Docker Build
+name: Humble Build and Test
 
 on:
   push:
@@ -7,17 +7,14 @@ on:
     - cron: "0 5 * * 1"
 
 jobs:
-  humble_docker_build:
+  humble_build_and_test:
     runs-on: ubuntu-latest
+    container:
+      image: ros:humble
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build docker
-        uses: docker/build-push-action@v6
+      - name: Build and Test
+        uses: ros-tooling/action-ros-ci@v0.4
         with:
-          build-args: ROS_DISTRO=humble
-          push: false
+          package-name: yolo_ros
+          target-ros2-distro: humble
+          coverage-result: false
