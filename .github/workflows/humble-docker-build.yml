@@ -28,6 +28,6 @@ jobs:
         run: |
           docker run --rm yolo_ros:humble-test bash -c \
             "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && \
-             source /root/ros2_ws/src/.venv/bin/activate && \
-             cd /root/ros2_ws && colcon test --event-handlers console_direct+ && \
+             cd /root/ros2_ws && \
+             uv run --project /root/ros2_ws/src/ colcon test --packages-select yolo_ros && \
              colcon test-result --verbose"

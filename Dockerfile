@@ -27,7 +27,7 @@ RUN apt update && rosdep install --filter-for-installers apt --from-paths src --
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages with uv
-WORKDIR /root/ros2_ws/src/yolo_ros
+WORKDIR /root/ros2_ws/src
 RUN uv sync
 
 FROM deps AS builder
@@ -36,7 +36,7 @@ SHELL ["/bin/bash", "-c"]
 
 # Build the workspace
 WORKDIR /root/ros2_ws
-RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --symlink-install
 
 # Source the ROS 2 setup file
 RUN echo "source /root/ros2_ws/install/setup.bash" >> ~/.bashrc
