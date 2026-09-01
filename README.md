@@ -48,7 +48,8 @@ colcon build && source install/setup.bash
 ### Testing
 
 ```shell
-colcon test --packages-select yolo_ros
+cd ~/ros2_ws
+uv run --project src/yolo_ros/ colcon test --packages-select yolo_ros
 colcon test-result --verbose
 ```
 
