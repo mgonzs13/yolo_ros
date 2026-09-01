@@ -1,0 +1,32 @@
+[project]
+name = "yolo_ros"
+version = "4.6.1"
+description = "YOLO for ROS 2"
+license = "GPL-3.0"
+maintainers = [{ name = "Miguel Ángel González Santamarta", email = "mgons@unileon.es" }]
+dependencies = [
+    "numpy<2",
+    "opencv-python-headless>=4.8.1.78",
+    "typing-extensions>=4.4.0",
+    "ultralytics==8.4.6",
+    "lap>=0.5.12",
+]
+
+[project.scripts]
+yolo_node = "yolo_ros.yolo_node:main"
+debug_node = "yolo_ros.debug_node:main"
+tracking_node = "yolo_ros.tracking_node:main"
+detect_3d_node = "yolo_ros.detect_3d_node:main"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+addopts = "-p no:launch_testing -p no:launch_ros"
+
+[dependency-groups]
+dev = [
+    "colcon-common-extensions>=0.3.0",
+    "lark>=1.3.1",
+    "pytest>=9.1.1",
+]

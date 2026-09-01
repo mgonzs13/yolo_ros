@@ -9,21 +9,7 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        ("share/" + package_name, ["../pyproject.toml"]),
+        ("share/" + package_name, ["pyproject.toml"]),
     ],
-    install_requires=["setuptools"],
     zip_safe=True,
-    maintainer="Miguel Ángel González Santamarta",
-    maintainer_email="mgons@unileon.es",
-    description="YOLO for ROS 2",
-    license="GPL-3.0",
-    extras_require={"test": ["pytest"]},
-    entry_points={
-        "console_scripts": [
-            "yolo_node = yolo_ros.yolo_node:main",
-            "debug_node = yolo_ros.debug_node:main",
-            "tracking_node = yolo_ros.tracking_node:main",
-            "detect_3d_node = yolo_ros.detect_3d_node:main",
-        ],
-    },
 )

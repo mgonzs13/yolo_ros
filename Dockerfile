@@ -26,10 +26,6 @@ RUN apt update && rosdep install --filter-for-installers apt --from-paths src --
     --dependency-types=build \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages with uv
-WORKDIR /root/ros2_ws/src
-RUN uv sync
-
 FROM deps AS builder
 
 SHELL ["/bin/bash", "-c"]
