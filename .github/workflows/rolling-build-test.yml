@@ -1,4 +1,4 @@
-name: Iron Docker Build
+name: Rolling Docker Build
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     - cron: "0 5 * * 1"
 
 jobs:
-  iron_docker_build:
+  rolling_build_and_test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -19,14 +19,14 @@ jobs:
       - name: Build docker
         uses: docker/build-push-action@v6
         with:
-          build-args: ROS_DISTRO=iron
+          build-args: ROS_DISTRO=rolling
           push: false
           load: true
-          tags: yolo_ros:iron-test
+          tags: yolo_ros:rolling-test
 
       - name: Run tests
         run: |
-          docker run --rm yolo_ros:iron-test bash -c \
-            "source /opt/ros/iron/setup.bash && source /root/ros2_ws/install/setup.bash && \
+          docker run --rm yolo_ros:rolling-test bash -c \
+            "source /opt/ros/rolling/setup.bash && source /root/ros2_ws/install/setup.bash && \
              cd /root/ros2_ws && \
              uv run --project /root/ros2_ws/src/ colcon test --packages-select yolo_ros"

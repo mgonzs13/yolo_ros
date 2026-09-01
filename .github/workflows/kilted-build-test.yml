@@ -1,4 +1,4 @@
-name: Jazzy Docker Build
+name: Kilted Docker Build
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     - cron: "0 5 * * 1"
 
 jobs:
-  jazzy_docker_build:
+  kilted_build_and_test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -19,14 +19,14 @@ jobs:
       - name: Build docker
         uses: docker/build-push-action@v6
         with:
-          build-args: ROS_DISTRO=jazzy
+          build-args: ROS_DISTRO=kilted
           push: false
           load: true
-          tags: yolo_ros:jazzy-test
+          tags: yolo_ros:kilted-test
 
       - name: Run tests
         run: |
-          docker run --rm yolo_ros:jazzy-test bash -c \
-            "source /opt/ros/jazzy/setup.bash && source /root/ros2_ws/install/setup.bash && \
+          docker run --rm yolo_ros:kilted-test bash -c \
+            "source /opt/ros/kilted/setup.bash && source /root/ros2_ws/install/setup.bash && \
              cd /root/ros2_ws && \
              uv run --project /root/ros2_ws/src/ colcon test --packages-select yolo_ros"

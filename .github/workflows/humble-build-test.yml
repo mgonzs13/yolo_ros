@@ -7,7 +7,7 @@ on:
     - cron: "0 5 * * 1"
 
 jobs:
-  humble_docker_build:
+  humble_build_and_test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
