@@ -2,7 +2,7 @@
 name = "yolo_ros"
 version = "4.6.1"
 description = "YOLO for ROS 2"
-license = "GPL-3.0"
+license = { text = "GPL-3.0" }
 maintainers = [{ name = "Miguel Ángel González Santamarta", email = "mgons@unileon.es" }]
 dependencies = [
     "numpy<2",
