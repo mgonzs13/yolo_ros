@@ -99,7 +99,7 @@ class uv_sync_develop(UvSyncMixin, develop):
 
 setup(
     name=package_name,
-    version="4.6.1",
+    version="4.7.0",
     packages=[package_name],
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
