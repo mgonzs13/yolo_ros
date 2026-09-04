@@ -16,7 +16,6 @@
 
 import os
 import glob
-import subprocess
 
 from launch import LaunchDescription, LaunchContext
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -34,10 +33,14 @@ def generate_launch_description():
         use_3d = eval(context.perform_substitution(use_3d))
 
         share_dir = get_package_share_directory("yolo_ros")
-        subprocess.run(["uv", "sync", "--project", share_dir], check=True)
         venv_site_pkgs = glob.glob(
             os.path.join(share_dir, ".venv", "lib", "python*", "site-packages")
         )
+        if not venv_site_pkgs:
+            raise RuntimeError(
+                f"No virtual environment found in '{share_dir}/.venv'. "
+                "Run 'colcon build' to create it."
+            )
         existing_pythonpath = os.environ.get("PYTHONPATH", "")
         new_pythonpath = ":".join(venv_site_pkgs + [existing_pythonpath]).strip(":")
 
