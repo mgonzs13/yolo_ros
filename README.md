@@ -33,12 +33,14 @@ ROS 2 wrap for YOLO models from [Ultralytics](https://github.com/ultralytics/ult
 cd ~/ros2_ws/src
 git clone https://github.com/mgonzs13/yolo_ros.git
 
-# Install uv and the dev python dependencies (required for testing)
+# Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source ~/.bashrc
+
+# Optional: manually create the runtime virtual environment before building
 cd ~/ros2_ws/src/yolo_ros/yolo_ros
 uv venv --python python3 --system-site-packages .venv
-uv sync
+uv sync --no-install-project --no-dev
 
 # Install rosdep dependencies and build
 # (colcon build runs `uv sync` automatically to keep the runtime virtual
@@ -49,22 +51,6 @@ cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
 colcon build && source install/setup.bash
 ```
-
-### Optional: manually create the runtime virtual environment before building
-
-By default `setup.py` creates the runtime virtual environment automatically
-during `colcon build` in the source tree. If you prefer to create it yourself
-beforehand, run the following before the build:
-
-```shell
-cd ~/ros2_ws/src/yolo_ros/yolo_ros
-uv venv --python python3 --system-site-packages .venv
-uv sync --no-install-project --no-dev
-```
-
-When `colcon build` runs, `setup.py` detects the existing environment (it must
-have `--system-site-packages`, so that the ROS 2 packages installed
-system-wide are visible to it) and reuses it instead of creating a new one.
 
 ### Testing
 
