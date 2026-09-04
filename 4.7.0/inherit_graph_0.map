@@ -1,0 +1,11 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="Node000000" title=" " alt="" coords="38,5,105,31"/>
+<area shape="rect" id="Node000001" href="$classsetup_1_1uv__sync__develop.html" title=" " alt="" coords="186,31,342,56"/>
+<area shape="poly" id="edge1_Node000000_Node000001" title=" " alt="" coords="120,22,185,31,185,36,120,27"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="44,104,99,130"/>
+<area shape="rect" id="Node000003" href="$classsetup_1_1uv__sync__install.html" title=" " alt="" coords="191,92,336,118"/>
+<area shape="poly" id="edge2_Node000004_Node000003" title=" " alt="" coords="115,112,191,107,191,112,115,117"/>
+<area shape="rect" id="Node000002" href="$classsetup_1_1UvSyncMixin.html" title=" " alt="" coords="5,55,138,80"/>
+<area shape="poly" id="edge3_Node000002_Node000001" title=" " alt="" coords="153,55,185,51,186,56,153,60"/>
+<area shape="poly" id="edge4_Node000002_Node000003" title=" " alt="" coords="153,81,195,89,194,94,152,86"/>
+</map>
