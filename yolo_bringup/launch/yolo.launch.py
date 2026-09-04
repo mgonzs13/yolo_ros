@@ -15,8 +15,6 @@
 
 
 import os
-import glob
-
 from launch import LaunchDescription, LaunchContext
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PythonExpression
@@ -33,16 +31,13 @@ def generate_launch_description():
         use_3d = eval(context.perform_substitution(use_3d))
 
         share_dir = get_package_share_directory("yolo_ros")
-        venv_site_pkgs = glob.glob(
-            os.path.join(share_dir, ".venv", "lib", "python*", "site-packages")
-        )
-        if not venv_site_pkgs:
+        venv_python = os.path.join(share_dir, ".venv", "bin", "python")
+
+        if not os.path.exists(venv_python):
             raise RuntimeError(
                 f"No virtual environment found in '{share_dir}/.venv'. "
                 "Run 'colcon build' to create it."
             )
-        existing_pythonpath = os.environ.get("PYTHONPATH", "")
-        new_pythonpath = ":".join(venv_site_pkgs + [existing_pythonpath]).strip(":")
 
         model_type = LaunchConfiguration("model_type")
         model_type_cmd = DeclareLaunchArgument(
@@ -254,7 +249,6 @@ def generate_launch_description():
             executable="yolo_node",
             name="yolo_node",
             namespace=namespace,
-            additional_env={"PYTHONPATH": new_pythonpath},
             parameters=[
                 {
                     "model_type": model_type,
@@ -283,7 +277,6 @@ def generate_launch_description():
             executable="tracking_node",
             name="tracking_node",
             namespace=namespace,
-            additional_env={"PYTHONPATH": new_pythonpath},
             parameters=[{"tracker": tracker, "image_reliability": image_reliability}],
             remappings=[("image_raw", input_image_topic)],
             condition=IfCondition(PythonExpression([str(use_tracking)])),
@@ -294,7 +287,6 @@ def generate_launch_description():
             executable="detect_3d_node",
             name="detect_3d_node",
             namespace=namespace,
-            additional_env={"PYTHONPATH": new_pythonpath},
             parameters=[
                 {
                     "target_frame": target_frame,
@@ -317,7 +309,6 @@ def generate_launch_description():
             executable="debug_node",
             name="debug_node",
             namespace=namespace,
-            additional_env={"PYTHONPATH": new_pythonpath},
             parameters=[{"image_reliability": image_reliability}],
             remappings=[
                 ("image_raw", input_image_topic),
