@@ -14,7 +14,9 @@ class UvSyncMixin:
     """Create the runtime venv in the source tree and point the nodes at it."""
 
     def uv_sync(self) -> None:
-        project = os.path.dirname(os.path.abspath(__file__))
+        # colcon runs `setup.py develop` from the build space with a symlinked
+        # setup.py, so resolve symlinks to always target the source tree
+        project = os.path.dirname(os.path.realpath(__file__))
         venv = os.path.join(project, ".venv")
         pyvenv_cfg = os.path.join(venv, "pyvenv.cfg")
 
