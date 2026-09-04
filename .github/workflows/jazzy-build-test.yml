@@ -28,5 +28,4 @@ jobs:
         run: |
           docker run --rm yolo_ros:jazzy-test bash -c \
             "source /opt/ros/jazzy/setup.bash && source /root/ros2_ws/install/setup.bash && \
-             cd /root/ros2_ws && \
-             uv run --project /root/ros2_ws/src/yolo_ros colcon test --packages-select yolo_ros"
+             cd /root/ros2_ws && colcon test --packages-select yolo_ros"
