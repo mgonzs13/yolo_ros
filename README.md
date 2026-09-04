@@ -36,16 +36,35 @@ git clone https://github.com/mgonzs13/yolo_ros.git
 # Install uv and the dev python dependencies (required for testing)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source ~/.bashrc
-cd ~/ros2_ws/src/yolo_ros
+cd ~/ros2_ws/src/yolo_ros/yolo_ros
+uv venv --python python3 --system-site-packages .venv
 uv sync
 
 # Install rosdep dependencies and build
-# (colcon build runs `uv sync` automatically to create the runtime virtual
-# environment inside the installed package, so uv is not needed at runtime)
+# (colcon build runs `uv sync` automatically to keep the runtime virtual
+# environment (yolo_ros/yolo_ros/.venv) in sync. If the venv already exists,
+# it is reused as-is; if it lacks system site packages, `setup.py` enables
+# them in place without recreating it)
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
 colcon build && source install/setup.bash
 ```
+
+### Optional: manually create the runtime virtual environment before building
+
+By default `setup.py` creates the runtime virtual environment automatically
+during `colcon build` in the source tree. If you prefer to create it yourself
+beforehand, run the following before the build:
+
+```shell
+cd ~/ros2_ws/src/yolo_ros/yolo_ros
+uv venv --python python3 --system-site-packages .venv
+uv sync --no-install-project --no-dev
+```
+
+When `colcon build` runs, `setup.py` detects the existing environment (it must
+have `--system-site-packages`, so that the ROS 2 packages installed
+system-wide are visible to it) and reuses it instead of creating a new one.
 
 ### Testing
 

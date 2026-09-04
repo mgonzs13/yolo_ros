@@ -34,8 +34,23 @@ def generate_launch_description():
         venv_python = os.path.join(share_dir, ".venv", "bin", "python")
 
         if not os.path.exists(venv_python):
+            # the runtime venv is created by setup.py in the source tree
+            workspace = os.path.dirname(
+                os.environ.get("COLCON_PREFIX_PATH", "").split(os.pathsep)[0]
+            )
+            if workspace:
+                for source_dir in (
+                    os.path.join(workspace, "yolo_ros"),
+                    os.path.join(workspace, "src", "yolo_ros", "yolo_ros"),
+                ):
+                    candidate = os.path.join(source_dir, ".venv", "bin", "python")
+                    if os.path.exists(candidate):
+                        venv_python = candidate
+                        break
+
+        if not os.path.exists(venv_python):
             raise RuntimeError(
-                f"No virtual environment found in '{share_dir}/.venv'. "
+                "No virtual environment found for 'yolo_ros'. "
                 "Run 'colcon build' to create it."
             )
 

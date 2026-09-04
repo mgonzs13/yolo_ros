@@ -1,6 +1,5 @@
 import glob
 import os
-import shutil
 import subprocess
 import sys
 
@@ -12,17 +11,10 @@ package_name = "yolo_ros"
 
 
 class UvSyncMixin:
-    """Create the runtime venv and point the nodes at it."""
+    """Create the runtime venv in the source tree and point the nodes at it."""
 
     def uv_sync(self) -> None:
-        install_base = getattr(self, "install_base", None) or sys.prefix
-        source_dir = getattr(self, "egg_base", None) or os.getcwd()
-        project = os.path.join(install_base, "share", package_name)
-        pyproject = os.path.join(project, "pyproject.toml")
-        if not os.path.exists(pyproject):
-            os.makedirs(project, exist_ok=True)
-            shutil.copy(os.path.join(source_dir, "pyproject.toml"), pyproject)
-
+        project = os.path.dirname(os.path.abspath(__file__))
         venv = os.path.join(project, ".venv")
         pyvenv_cfg = os.path.join(venv, "pyvenv.cfg")
 
@@ -33,18 +25,28 @@ class UvSyncMixin:
                 return "include-system-site-packages = true" in f.read()
 
         if not has_system_site_packages():
-            shutil.rmtree(venv, ignore_errors=True)
-            subprocess.run(
-                [
-                    "uv",
-                    "venv",
-                    "--python",
-                    sys.executable,
-                    "--system-site-packages",
-                    venv,
-                ],
-                check=True,
-            )
+            if os.path.exists(pyvenv_cfg):
+                # keep the existing venv and enable system site packages in place
+                with open(pyvenv_cfg, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                with open(pyvenv_cfg, "w", encoding="utf-8") as f:
+                    for line in lines:
+                        if line.startswith("include-system-site-packages"):
+                            continue
+                        f.write(line)
+                    f.write("include-system-site-packages = true\n")
+            else:
+                subprocess.run(
+                    [
+                        "uv",
+                        "venv",
+                        "--python",
+                        sys.executable,
+                        "--system-site-packages",
+                        venv,
+                    ],
+                    check=True,
+                )
 
         subprocess.run(
             [
@@ -67,6 +69,7 @@ class UvSyncMixin:
             )
 
         # point the installed entry point scripts at the venv interpreter
+        install_base = getattr(self, "install_base", None) or sys.prefix
         scripts_dir = os.path.join(install_base, "lib", package_name)
         venv_python = os.path.join(venv, "bin", "python")
         for script in glob.glob(os.path.join(scripts_dir, "*")):
