@@ -15,7 +15,38 @@
 
 
 import os
+import sys
+import glob
 import time
+
+# Make the venv dependencies importable when running pytest with the system
+# interpreter (e.g. `colcon test`), without modifying PYTHONPATH.
+if sys.prefix == sys.base_prefix:
+
+    site_packages = None
+    for prefix in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep):
+        if not prefix:
+            continue
+        project = os.path.join(prefix, "share", "yolo_ros")
+        if os.path.exists(os.path.join(project, "pyproject.toml")):
+            matches = glob.glob(
+                os.path.join(project, ".venv", "lib", "python*", "site-packages")
+            )
+            if matches:
+                site_packages = matches[0]
+                break
+
+    if site_packages is None:
+        for venv in (
+            os.path.join(os.path.dirname(__file__), "..", ".venv"),
+            os.path.join(os.path.dirname(__file__), "..", "..", ".venv"),
+        ):
+            matches = glob.glob(os.path.join(venv, "lib", "python*", "site-packages"))
+            if matches:
+                site_packages = matches[0]
+                break
+    if site_packages and site_packages not in sys.path:
+        sys.path.insert(0, site_packages)
 
 import cv2
 import numpy as np
