@@ -59,6 +59,8 @@ source install/setup.bash
 
 ### Pip Installation (Legacy)
 
+<details>
+
 The old way of installing yolo_ros, kept for backwards compatibility. The Python dependencies are installed directly into the system environment from a `requirements.txt` file, which can produce issues with the Python package versions. Prefer the [UV Installation](#uv-installation-recommended) section.
 
 When uv is not installed, `colcon build` skips the virtual environment management and the nodes run with the system Python interpreter, so the Python dependencies must be installed in the system environment as shown below.
@@ -78,7 +80,11 @@ colcon build
 source install/setup.bash
 ```
 
+</details>
+
 ### Rosdep Installation (Legacy)
+
+<details>
 
 The old way of installing yolo_ros, kept for backwards compatibility. The Python dependencies are installed directly into the system environment, which can produce issues with the Python package versions. Prefer the [UV Installation](#uv-installation-recommended) section.
 
@@ -100,6 +106,8 @@ PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install --from-paths src --ignore-src -r -y
 colcon build
 source install/setup.bash
 ```
+
+</details>
 
 ### Testing
 
