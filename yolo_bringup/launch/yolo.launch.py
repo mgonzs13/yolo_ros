@@ -14,13 +14,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-import os
 from launch import LaunchDescription, LaunchContext
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch.conditions import IfCondition
-from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
@@ -29,30 +27,6 @@ def generate_launch_description():
 
         use_tracking = eval(context.perform_substitution(use_tracking))
         use_3d = eval(context.perform_substitution(use_3d))
-
-        share_dir = get_package_share_directory("yolo_ros")
-        venv_python = os.path.join(share_dir, ".venv", "bin", "python")
-
-        if not os.path.exists(venv_python):
-            # the runtime venv is created by setup.py in the source tree
-            workspace = os.path.dirname(
-                os.environ.get("COLCON_PREFIX_PATH", "").split(os.pathsep)[0]
-            )
-            if workspace:
-                for source_dir in (
-                    os.path.join(workspace, "yolo_ros"),
-                    os.path.join(workspace, "src", "yolo_ros", "yolo_ros"),
-                ):
-                    candidate = os.path.join(source_dir, ".venv", "bin", "python")
-                    if os.path.exists(candidate):
-                        venv_python = candidate
-                        break
-
-        if not os.path.exists(venv_python):
-            raise RuntimeError(
-                "No virtual environment found for 'yolo_ros'. "
-                "Run 'colcon build' to create it."
-            )
 
         model_type = LaunchConfiguration("model_type")
         model_type_cmd = DeclareLaunchArgument(

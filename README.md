@@ -28,12 +28,16 @@ ROS 2 wrap for YOLO models from [Ultralytics](https://github.com/ultralytics/ult
 
 ## Installation
 
+### UV Installation
+
+`uv` is optional. If it is installed, the build creates and keeps in sync an isolated runtime virtual environment inside the package source tree. If it is not installed, the build is skipped entirely and the Python dependencies are expected to be installed in the system environment (see the [Rosdep Installation](#rosdep-installation) section).
+
 ```shell
 # Clone this repo
 cd ~/ros2_ws/src
 git clone https://github.com/mgonzs13/yolo_ros.git
 
-# Install uv
+# Install uv (optional, only needed for the isolated runtime virtual environment)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source ~/.bashrc
 
@@ -42,14 +46,33 @@ cd ~/ros2_ws/src/yolo_ros/yolo_ros
 uv venv --python python3 --system-site-packages .venv
 uv sync --no-install-project --no-dev
 
-# Install rosdep dependencies and build
-# (colcon build runs `uv sync` automatically to keep the runtime virtual
-# environment (yolo_ros/yolo_ros/.venv) in sync. If the venv already exists,
-# it is reused as-is; if it lacks system site packages, `setup.py` enables
-# them in place without recreating it)
+# Install rosdep dependencies
 cd ~/ros2_ws
-rosdep install --from-paths src --ignore-src -r -y
-colcon build && source install/setup.bash
+rosdep install --from-paths src --ignore-src --filter-for-installers "apt" -r -y
+
+# Builds
+colcon build
+source install/setup.bash
+```
+
+When uv is installed, `colcon build` runs `uv sync` automatically to keep the runtime virtual environment (`yolo_ros/yolo_ros/.venv`) in sync. If the venv already exists, it is reused as-is; if it lacks system site packages, `setup.py` enables them in place without recreating it.
+
+When uv is not installed, the virtual environment management is skipped and the nodes run with the system Python interpreter, so the Python dependencies must be installed in the system environment. Run the rosdep command below without the `--filter-for-installers "apt"` option (or use `PIP_BREAK_SYSTEM_PACKAGES=1`), as shown in the [Rosdep Installation](#rosdep-installation) section.
+
+### Rosdep Installation
+
+```shell
+# Clone this repo
+cd ~/ros2_ws/src
+git clone https://github.com/mgonzs13/yolo_ros.git
+
+# Install rosdep dependencies
+cd ~/ros2_ws
+PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install --from-paths src --ignore-src -r -y
+
+# Builds
+colcon build
+source install/setup.bash
 ```
 
 ### Testing

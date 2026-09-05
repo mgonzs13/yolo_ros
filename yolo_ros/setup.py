@@ -1,5 +1,6 @@
 import glob
 import os
+import shutil
 import subprocess
 import sys
 
@@ -19,6 +20,16 @@ class UvSyncMixin:
         project = os.path.dirname(os.path.realpath(__file__))
         venv = os.path.join(project, ".venv")
         pyvenv_cfg = os.path.join(venv, "pyvenv.cfg")
+
+        if shutil.which("uv") is None:
+            # uv is not installed, so skip the runtime virtual environment
+            # management entirely and rely on the system python environment
+            print(
+                "yolo_ros: 'uv' not found, skipping runtime virtual environment "
+                "management. Install the python dependencies in the system "
+                "environment (e.g. via rosdep) and rebuild."
+            )
+            return
 
         def has_system_site_packages() -> bool:
             if not os.path.exists(pyvenv_cfg):
