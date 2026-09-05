@@ -28,16 +28,16 @@ ROS 2 wrap for YOLO models from [Ultralytics](https://github.com/ultralytics/ult
 
 ## Installation
 
-### UV Installation
+### UV Installation (Recommended)
 
-`uv` is optional. If it is installed, the build creates and keeps in sync an isolated runtime virtual environment inside the package source tree. If it is not installed, the build is skipped entirely and the Python dependencies are expected to be installed in the system environment (see the [Rosdep Installation](#rosdep-installation) section).
+`uv` is the recommended way to install yolo_ros. It creates and keeps in sync an isolated runtime virtual environment inside the package source tree, guaranteeing the exact Python dependency versions declared in `pyproject.toml`. The [Pip Installation](#pip-installation-legacy) and [Rosdep Installation](#rosdep-installation-legacy) sections describe the old ways of installing, which install the Python dependencies into the system environment and may produce issues with the Python package versions.
 
 ```shell
 # Clone this repo
 cd ~/ros2_ws/src
 git clone https://github.com/mgonzs13/yolo_ros.git
 
-# Install uv (optional, only needed for the isolated runtime virtual environment)
+# Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source ~/.bashrc
 
@@ -55,16 +55,42 @@ colcon build
 source install/setup.bash
 ```
 
-When uv is installed, `colcon build` runs `uv sync` automatically to keep the runtime virtual environment (`yolo_ros/yolo_ros/.venv`) in sync. If the venv already exists, it is reused as-is; if it lacks system site packages, `setup.py` enables them in place without recreating it.
+`colcon build` runs `uv sync` automatically to keep the runtime virtual environment (`yolo_ros/yolo_ros/.venv`) in sync. If the venv already exists, it is reused as-is; if it lacks system site packages, `setup.py` enables them in place without recreating it.
 
-When uv is not installed, the virtual environment management is skipped and the nodes run with the system Python interpreter, so the Python dependencies must be installed in the system environment. Run the rosdep command below without the `--filter-for-installers "apt"` option (or use `PIP_BREAK_SYSTEM_PACKAGES=1`), as shown in the [Rosdep Installation](#rosdep-installation) section.
+### Pip Installation (Legacy)
 
-### Rosdep Installation
+The old way of installing yolo_ros, kept for backwards compatibility. The Python dependencies are installed directly into the system environment from a `requirements.txt` file, which can produce issues with the Python package versions. Prefer the [UV Installation](#uv-installation-recommended) section.
+
+When uv is not installed, `colcon build` skips the virtual environment management and the nodes run with the system Python interpreter, so the Python dependencies must be installed in the system environment as shown below.
 
 ```shell
 # Clone this repo
 cd ~/ros2_ws/src
 git clone https://github.com/mgonzs13/yolo_ros.git
+
+# Install the Python dependencies (includes lap, required by the tracker)
+cd ~/ros2_ws/src/yolo_ros/yolo_ros
+pip3 install -r requirements.txt --break-system-packages
+
+# Builds
+cd ~/ros2_ws
+colcon build
+source install/setup.bash
+```
+
+### Rosdep Installation (Legacy)
+
+The old way of installing yolo_ros, kept for backwards compatibility. The Python dependencies are installed directly into the system environment, which can produce issues with the Python package versions. Prefer the [UV Installation](#uv-installation-recommended) section.
+
+When uv is not installed, `colcon build` skips the virtual environment management and the nodes run with the system Python interpreter, so the Python dependencies must be installed in the system environment as shown below.
+
+```shell
+# Clone this repo
+cd ~/ros2_ws/src
+git clone https://github.com/mgonzs13/yolo_ros.git
+
+# Install the lap dependency (required by the tracker)
+pip3 install lap
 
 # Install rosdep dependencies
 cd ~/ros2_ws
