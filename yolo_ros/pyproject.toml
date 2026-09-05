@@ -1,6 +1,6 @@
 [project]
 name = "yolo_ros"
-version = "4.7.0"
+version = "4.7.1"
 description = "YOLO for ROS 2"
 license = { text = "GPL-3.0" }
 maintainers = [{ name = "Miguel Ángel González Santamarta", email = "mgons@unileon.es" }]
