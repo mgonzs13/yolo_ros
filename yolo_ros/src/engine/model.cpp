@@ -53,7 +53,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
   }
 
   // Resolve the availability-filtered provider fallback chain. "auto" prefers
-  // TensorRT, then CUDA, then CPU; an explicit provider forces its own chain.
+  // CUDA, then CPU; an explicit provider forces its own chain.
   std::string requested = yolo_ros::utils::to_lower(params.provider);
   if (requested.empty()) {
     requested = "auto";

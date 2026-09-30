@@ -37,9 +37,9 @@ struct ProviderConfig {
 std::vector<Provider> available_providers();
 
 /// @brief Resolve @p requested into an ordered, availability-filtered fallback
-/// chain. Unknown values are treated as "auto".
-/// @param[in] requested "auto", "tensorrt"/"trt", "cuda" or "cpu"
-/// (case-insensitive).
+/// chain. Unknown values are treated as "auto" (CUDA -> CPU).
+/// @param[in] requested "auto" (CUDA -> CPU), "cuda" (CUDA -> CPU),
+/// "tensorrt"/"trt" (TensorRT -> CUDA -> CPU) or "cpu" (case-insensitive).
 /// @param[in] available Providers present in the ONNX Runtime build.
 /// @return The ordered chain; CPU is always kept.
 std::vector<Provider> provider_chain(const std::string &requested,

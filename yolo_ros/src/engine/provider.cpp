@@ -67,11 +67,11 @@ std::vector<Provider> provider_chain(const std::string &requested,
   std::vector<Provider> base;
   if (key == "cpu") {
     base = {Provider::Cpu};
-  } else if (key == "cuda") {
-    base = {Provider::Cuda, Provider::Cpu};
-  } else {
-    // "auto", "tensorrt", "trt" and unknown values prefer TensorRT.
+  } else if (key == "tensorrt" || key == "trt") {
     base = {Provider::TensorRt, Provider::Cuda, Provider::Cpu};
+  } else {
+    // "auto", "cuda" and unknown values prefer CUDA.
+    base = {Provider::Cuda, Provider::Cpu};
   }
 
   std::vector<Provider> chain;

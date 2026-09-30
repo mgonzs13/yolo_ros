@@ -37,19 +37,16 @@ TEST(ProviderChain, TensorRtFallsBackToCudaThenCpu) {
                                    Provider::Cpu}));
 }
 
-TEST(ProviderChain, AutoPrefersTensorRt) {
+TEST(ProviderChain, AutoPrefersCuda) {
   EXPECT_EQ(provider_chain("auto", kAll),
-            (std::vector<Provider>{Provider::TensorRt, Provider::Cuda,
-                                   Provider::Cpu}));
+            (std::vector<Provider>{Provider::Cuda, Provider::Cpu}));
 }
 
 TEST(ProviderChain, UnknownAndEmptyFallBackToAuto) {
   EXPECT_EQ(provider_chain("bogus", kAll),
-            (std::vector<Provider>{Provider::TensorRt, Provider::Cuda,
-                                   Provider::Cpu}));
+            (std::vector<Provider>{Provider::Cuda, Provider::Cpu}));
   EXPECT_EQ(provider_chain("", kAll),
-            (std::vector<Provider>{Provider::TensorRt, Provider::Cuda,
-                                   Provider::Cpu}));
+            (std::vector<Provider>{Provider::Cuda, Provider::Cpu}));
 }
 
 TEST(ProviderChain, CaseInsensitive) {

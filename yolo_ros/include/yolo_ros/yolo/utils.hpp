@@ -121,8 +121,9 @@ struct YoloParams {
   std::string cache_dir; // HF cache dir, default ~/.cache/huggingface/hub
   /// @brief Re-download the model even when a cached copy exists.
   bool force_download = false; // re-download even if cached
-  /// @brief Execution provider preference: "auto" (TensorRT -> CUDA -> CPU
-  /// fallback chain) or "tensorrt"/"trt", "cuda", "cpu" (case-insensitive).
+  /// @brief Execution provider preference: "auto" (CUDA -> CPU fallback chain)
+  /// or "tensorrt"/"trt" (TensorRT -> CUDA -> CPU), "cuda" (CUDA -> CPU),
+  /// "cpu" (case-insensitive).
   std::string provider = "auto";
   /// @brief Execution device; its ordinal (e.g. "cuda:0", "trt:1", "1") is
   /// passed as device_id to the CUDA and TensorRT execution providers.

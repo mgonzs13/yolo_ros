@@ -33,7 +33,7 @@ docker run -it --rm \
 
 Note the cache is mounted under `~/.cache/yolo_ros/container`, not `~/.cache/yolo_ros` directly: a TensorRT engine plan file is only readable by the exact TensorRT version that built it. The image pins TensorRT 10.13.2 to match the development host, but if the host ever builds engines with a different version, sharing the cache would make the TensorRT provider fail to deserialize them and silently fall back to CUDA. A dedicated container cache avoids that entirely (or keep both sides on the same TensorRT version).
 
-`config/yolo.yaml` already defaults to `device: cuda:0` and `provider: auto` (TensorRT -> CUDA -> CPU). Force a backend with `provider:=tensorrt` or `provider:=cuda`, and check the startup log for the line `Using execution provider: tensorrt` (or `cuda`). If it reports `cpu`, the GPU libraries are not visible to the container — make sure you are using the GPU image and passed `--gpus all`.
+`config/yolo.yaml` already defaults to `device: cuda:0` and `provider: auto` (CUDA -> CPU). Select a backend with `provider:=tensorrt` (TensorRT -> CUDA -> CPU) or `provider:=cuda`, and check the startup log for the line `Using execution provider: tensorrt` (or `cuda`). If it reports `cpu`, the GPU libraries are not visible to the container — make sure you are using the GPU image and passed `--gpus all`.
 
 ### Pinned versions
 

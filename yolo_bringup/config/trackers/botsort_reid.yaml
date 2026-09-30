@@ -31,5 +31,5 @@
     reid_model: /home/agonzc34/models/osnet_x0_25_reid.onnx # ONNX ReID encoder path
     proximity_thresh: 0.5 # IoU distance above which appearance is ignored
     appearance_thresh: 0.25 # cap on the embedding distance accepted as a match
-    provider: auto # encoder EP: auto = TensorRT -> CUDA -> CPU
+    provider: auto # encoder EP: auto = CUDA -> CPU
     device: cuda:0 # encoder CUDA/TensorRT device ordinal

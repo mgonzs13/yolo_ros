@@ -12,7 +12,7 @@
     model_filename: yolo26l-seg.onnx # file inside that repo
     force_download: false
     device: cuda:0 # device ordinal for the CUDA/TensorRT EPs
-    provider: trt # auto = TensorRT -> CUDA -> CPU; or tensorrt/trt/cuda/cpu
+    provider: trt # auto = CUDA -> CPU; or tensorrt/trt/cuda/cpu
     trt_fp16_enable: false # TensorRT FP16 (provider: tensorrt/auto)
     trt_engine_cache_enable: true # persist built TensorRT engines
     trt_engine_cache_path: "" # empty -> ~/.cache/yolo_ros/trt_engines/<model>

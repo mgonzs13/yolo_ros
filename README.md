@@ -66,7 +66,7 @@ colcon build --symlink-install --cmake-args -DONNX_GPU=ON
 source install/setup.bash
 ```
 
-`-DONNX_GPU=ON` fetches the ONNX Runtime GPU build, which links against the CUDA 12 series at run time, so the host also needs an NVIDIA driver and a CUDA 12.x toolkit. TensorRT is optional: the default `provider: auto` tries the TensorRT execution provider first and falls back to CUDA (then CPU), so without it installed the model simply runs on the CUDA EP. `provider` and `device` are chosen at runtime — see [Parameters](#parameters). The prebuilt GPU tarball is x64-only; for CUDA/TensorRT on aarch64 and for custom ONNX Runtime builds see the [build guide](docs/build.md).
+`-DONNX_GPU=ON` fetches the ONNX Runtime GPU build, which links against the CUDA 12 series at run time, so the host also needs an NVIDIA driver and a CUDA 12.x toolkit. TensorRT is opt-in: the default `provider: auto` runs on the CUDA execution provider and falls back to CPU; set `provider: tensorrt` to prefer the TensorRT EP (TensorRT → CUDA → CPU) when it is installed. `provider` and `device` are chosen at runtime — see [Parameters](#parameters). The prebuilt GPU tarball is x64-only; for CUDA/TensorRT on aarch64 and for custom ONNX Runtime builds see the [build guide](docs/build.md).
 
 Launch from the workspace root so relative source paths resolve.
 
@@ -177,7 +177,7 @@ If you change `namespace:=`, update the matching config block names for any valu
 - **model_type**: Pipeline to run: `YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify` or `auto` (default: `auto`, which infers the task from the model file name: `-seg`/`segment`, `-pose`/`pose`, `-obb`/`obb`, `-cls`/`classify`).
 - **model**: Path to the ONNX model (default: machine-specific).
 - **model_repo** / **model_filename** / **force_download** / **cache_dir**: Hugging Face Hub download (used instead of `model` when set). The shipped configs default to the `unileon-robotics/YOLO26-ONNX` mirror; clear `model_repo` to fall back to the local `model` path.
-- **provider**: Execution provider: `auto` (TensorRT → CUDA → CPU fallback chain), or force `tensorrt`/`trt`, `cuda`, `cpu` (default: `auto`).
+- **provider**: Execution provider: `auto` (CUDA → CPU fallback chain), or force `tensorrt`/`trt` (TensorRT → CUDA → CPU), `cuda` (CUDA → CPU), `cpu` (default: `auto`).
 - **device**: CUDA/TensorRT device ordinal, e.g. `cuda:0`, `trt:1`, `1` (default: `cuda:0`). The `cuda:`/`trt:` prefix is accepted but `provider` selects the execution provider.
 - **trt_fp16_enable**: TensorRT FP16 precision (default: `true`).
 - **trt_engine_cache_enable**: Persist built TensorRT engines (default: `true`).
