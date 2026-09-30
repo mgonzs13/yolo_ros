@@ -3,7 +3,7 @@
 
 #include "yolo_ros/yolo/pose.hpp"
 #include "yolo_msgs/msg/key_point2_d.hpp"
-#include <iostream>
+#include "yolo_ros/utils/logs.hpp"
 #include <vector>
 
 namespace yolo_ros::yolo {
@@ -21,7 +21,7 @@ constexpr int kKeypointValues = kNumKeypoints * kKeypointDims; // 51
 } // namespace
 
 YoloPose::YoloPose(yolo_ros::yolo::utils::YoloParams params)
-    : yolo_ros::engine::Model(params) {}
+    : yolo_ros::engine::Model(params, "pose") {}
 
 YoloPose::~YoloPose() {}
 
@@ -97,8 +97,9 @@ YoloPose::postprocess(const cv::Size &original_image_size,
         static_cast<int>(num_features) - 4 - kKeypointValues;
 
     if (num_classes < 1) {
-      std::cerr << "YoloPose: unexpected output feature count " << num_features
-                << "; expected 4 + nc + " << kKeypointValues << std::endl;
+      YOLO_LOG_WARN("YoloPose: unexpected output feature count %zu; expected "
+                    "4 + nc + %d",
+                    num_features, kKeypointValues);
       return detection_array;
     }
 

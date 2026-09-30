@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/yolo/obb.hpp"
+#include "yolo_ros/utils/logs.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <iostream>
 #include <vector>
 
 namespace yolo_ros::yolo {
@@ -104,7 +104,7 @@ ObbBox scale_obb(const ObbBox &box, const cv::Size &original_image_size,
 } // namespace
 
 YoloOBB::YoloOBB(yolo_ros::yolo::utils::YoloParams params)
-    : yolo_ros::engine::Model(params) {}
+    : yolo_ros::engine::Model(params, "obb") {}
 
 YoloOBB::~YoloOBB() {}
 
@@ -124,16 +124,18 @@ YoloOBB::postprocess(const cv::Size &original_image_size,
   // [cx, cy, w, h, class_scores..., angle] with the class scores already
   // sigmoid'd and the angle already decoded (radians) by the ONNX graph.
   if (shape.size() < 3) {
-    std::cerr << "YoloOBB: unexpected output rank " << shape.size()
-              << "; expected [1, 4 + nc + 1, N]" << std::endl;
+    YOLO_LOG_WARN("YoloOBB: unexpected output rank %zu; expected [1, 4 + nc + "
+                  "1, N]",
+                  shape.size());
     return detection_array;
   }
   const int64_t num_features = shape[1];
   const int64_t num_detections = shape[2];
   const int num_classes = static_cast<int>(num_features) - 5;
   if (num_classes < 1) {
-    std::cerr << "YoloOBB: unexpected output feature count " << num_features
-              << "; expected 4 + nc + 1" << std::endl;
+    YOLO_LOG_WARN("YoloOBB: unexpected output feature count %lld; expected "
+                  "4 + nc + 1",
+                  static_cast<long long>(num_features));
     return detection_array;
   }
   const size_t angle_channel = static_cast<size_t>(num_features) - 1;

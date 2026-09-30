@@ -7,7 +7,7 @@
 namespace yolo_ros::yolo {
 
 YoloDetect::YoloDetect(yolo_ros::yolo::utils::YoloParams params)
-    : yolo_ros::engine::Model(params) {}
+    : yolo_ros::engine::Model(params, "detect") {}
 
 YoloDetect::~YoloDetect() {}
 

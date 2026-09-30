@@ -3,8 +3,8 @@
 
 #include "yolo_ros/yolo/segment.hpp"
 #include "yolo_msgs/msg/point2_d.hpp"
+#include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/yolo/utils.hpp"
-#include <iostream>
 #include <opencv2/core/types.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
@@ -139,7 +139,7 @@ std::vector<yolo_msgs::msg::Detection> masks_to_detections(
 } // namespace
 
 YoloSegment::YoloSegment(yolo_ros::yolo::utils::YoloParams params)
-    : yolo_ros::engine::Model(params) {}
+    : yolo_ros::engine::Model(params, "segment") {}
 
 YoloSegment::~YoloSegment() {}
 
@@ -166,9 +166,9 @@ YoloSegment::postprocess(const cv::Size &original_image_size,
     const size_t num_features = static_cast<size_t>(shape[1]);
     const int num_classes = static_cast<int>(num_features) - 4 - kProtos;
     if (num_classes < 1) {
-      std::cerr << "YoloSegment: unexpected output feature count "
-                << num_features << "; expected 4 + nc + " << kProtos
-                << std::endl;
+      YOLO_LOG_WARN("YoloSegment: unexpected output feature count %zu; "
+                    "expected 4 + nc + %d",
+                    num_features, kProtos);
       return {};
     }
 

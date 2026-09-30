@@ -4,6 +4,7 @@
 #include "yolo_ros/engine/model.hpp"
 #include "onnxruntime_cxx_api.h"
 #include "yolo_ros/engine/provider.hpp"
+#include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
 #include "yolo_ros/yolo/utils.hpp"
 #include <algorithm>
@@ -15,7 +16,6 @@
 #endif
 #include <cctype>
 #include <fstream>
-#include <iostream>
 #include <map>
 #include <numeric>
 #include <regex>
@@ -38,7 +38,56 @@ std::string get_package_share_directory(const std::string &package_name) {
 } // namespace
 
 namespace yolo_ros::engine {
-Model::Model(yolo_ros::yolo::utils::YoloParams params)
+namespace {
+
+/// @brief Render a tensor shape as "[d0, d1, ...]" (dynamic dims stay -1).
+std::string join_shape(const std::vector<int64_t> &shape) {
+  std::string out = "[";
+  for (std::size_t i = 0; i < shape.size(); ++i) {
+    if (i > 0) {
+      out += ", ";
+    }
+    out += std::to_string(shape[i]);
+  }
+  out += "]";
+  return out;
+}
+
+/// @brief Human-readable name for the element types the engine can meet.
+const char *element_type_name(ONNXTensorElementDataType type) {
+  switch (type) {
+  case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
+    return "float32";
+  case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16:
+    return "float16";
+  case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE:
+    return "float64";
+  case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64:
+    return "int64";
+  case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32:
+    return "int32";
+  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
+    return "uint8";
+  default:
+    return "other";
+  }
+}
+
+/// @brief Render a provider fallback chain as "tensorrt -> cuda -> cpu".
+std::string chain_to_string(const std::vector<Provider> &chain) {
+  std::string out;
+  for (const Provider provider : chain) {
+    if (!out.empty()) {
+      out += " -> ";
+    }
+    out += provider_name(provider);
+  }
+  return out;
+}
+
+} // namespace
+
+Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
     : env(ORT_LOGGING_LEVEL_WARNING, "yolo"), session_options(),
       input_image_shape(), num_input_nodes(0), num_output_nodes(0),
       memory_info(nullptr) {
@@ -60,17 +109,13 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
   }
   if (requested != "auto" && requested != "cpu" && requested != "cuda" &&
       requested != "tensorrt" && requested != "trt") {
-    std::cerr << "Unknown provider \"" << params.provider << "\"; using auto."
-              << std::endl;
+    YOLO_LOG_WARN("Unknown provider \"%s\"; using auto.",
+                  params.provider.c_str());
     requested = "auto";
   }
   const std::vector<Provider> chain =
       provider_chain(requested, available_providers());
-  std::cout << "Execution provider chain:";
-  for (const Provider provider : chain) {
-    std::cout << " " << provider_name(provider);
-  }
-  std::cout << std::endl;
+  YOLO_LOG_INFO("Execution provider chain: %s", chain_to_string(chain).c_str());
 
   // Warn when an explicitly requested provider was dropped by the
   // availability filter (e.g. TensorRT requested on a CPU build).
@@ -78,9 +123,8 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
       requested == "trt" ? "tensorrt" : requested;
   if (requested != "auto" && !chain.empty() &&
       requested_norm != provider_name(chain.front())) {
-    std::cerr << "Requested provider \"" << requested
-              << "\" is unavailable; using " << provider_name(chain.front())
-              << "." << std::endl;
+    YOLO_LOG_WARN("Requested provider \"%s\" is unavailable; using %s.",
+                  requested.c_str(), provider_name(chain.front()));
   }
 
   // An explicit provider wins over the device prefix; warn when they disagree
@@ -89,9 +133,9 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
   if (requested != "auto" && !chain.empty() &&
       requested_norm == provider_name(chain.front()) &&
       !device_provider.empty() && device_provider != requested_norm) {
-    std::cerr << "provider \"" << requested << "\" contradicts device \""
-              << params.device << "\"; using " << requested_norm << "."
-              << std::endl;
+    YOLO_LOG_WARN("Provider \"%s\" contradicts device \"%s\"; using %s.",
+                  requested.c_str(), params.device.c_str(),
+                  requested_norm.c_str());
   }
 
   // Try each provider in order. A provider can be available yet still fail to
@@ -99,6 +143,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
   // provider options and the Session construction both live in the retry loop.
   const int device_id = parse_device_id(params.device);
   std::string last_error;
+  std::string trt_cache_path;
   for (const Provider provider : chain) {
     ProviderConfig config;
     config.n_threads = n_threads;
@@ -108,6 +153,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
     if (provider == Provider::TensorRt && config.trt_engine_cache_enable) {
       config.trt_engine_cache_path =
           engine_cache_dir(params.trt_engine_cache_path, model_path);
+      trt_cache_path = config.trt_engine_cache_path;
       if (config.trt_engine_cache_path.empty()) {
         config.trt_engine_cache_enable = false;
       }
@@ -120,8 +166,8 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
       break;
     } catch (const Ort::Exception &e) {
       last_error = e.what();
-      std::cerr << "Execution provider " << provider_name(provider)
-                << " failed to initialize: " << e.what() << std::endl;
+      YOLO_LOG_WARN("Execution provider %s failed to initialize: %s",
+                    provider_name(provider), e.what());
     }
   }
 
@@ -132,8 +178,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
   }
   // Names the primary EP that accepted the session; within a TensorRT session
   // ORT may still fall back node-by-node to CUDA.
-  std::cout << "Using execution provider: " << this->active_provider_
-            << std::endl;
+  YOLO_LOG_INFO("Using execution provider: %s", this->active_provider_.c_str());
 
   Ort::AllocatorWithDefaultOptions allocator;
 
@@ -170,9 +215,8 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
       // `dynamic=True` exports carry dynamic H/W as well as batch, so the
       // graph cannot tell us the input size. All shipped models train at 640.
       this->input_image_shape = cv::Size(640, 640);
-      std::cerr << "Warning: dynamic input size in the ONNX graph; pinning "
-                   "640x640 (export with a static imgsz if this is wrong)."
-                << std::endl;
+      YOLO_LOG_WARN("Dynamic input size in the ONNX graph; pinning 640x640 "
+                    "(export with a static imgsz if this is wrong).");
     }
   } else {
     throw std::runtime_error("Invalid input tensor shape.");
@@ -195,8 +239,8 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
     if (color == "bgr") {
       this->input_is_rgb_ = false;
     } else if (!color.empty() && color != "rgb") {
-      std::cerr << "Unknown input_color \"" << params.input_color
-                << "\"; using rgb." << std::endl;
+      YOLO_LOG_WARN("Unknown input_color \"%s\"; using rgb.",
+                    params.input_color.c_str());
     }
     try {
       const Ort::ModelMetadata metadata = this->session.GetModelMetadata();
@@ -212,23 +256,73 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params)
         }
       }
     } catch (const Ort::Exception &e) {
-      std::cerr << "Warning: could not read \"input_color\" from the ONNX "
-                   "metadata: "
-                << e.what() << std::endl;
+      YOLO_LOG_WARN("Could not read \"input_color\" from the ONNX metadata: %s",
+                    e.what());
     }
-    std::cout << "Input channel order: "
-              << (this->input_is_rgb_ ? "rgb" : "bgr") << std::endl;
   }
 
   this->memory_info =
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
-  std::cout << "Model " << model_path << " has been successfully loaded"
-            << " (input " << this->input_image_shape.width << "x"
-            << this->input_image_shape.height << ", FP32, batch "
-            << (this->fixed_batch_ > 0 ? std::to_string(this->fixed_batch_)
-                                       : std::string("dynamic"))
-            << ")." << std::endl;
+  // Consolidated load report: everything above has been resolved by now, and
+  // this is the first thing to check when a model misbehaves.
+  const std::string batch_str = this->fixed_batch_ > 0
+                                    ? std::to_string(this->fixed_batch_)
+                                    : std::string("dynamic");
+  const std::string trt_cache_suffix =
+      trt_cache_path.empty() ? std::string() : " (" + trt_cache_path + ")";
+  YOLO_LOG_INFO("Model loaded: %s", model_path.c_str());
+  YOLO_LOG_INFO("  task=%s  model_type='%s'  provider=%s  device='%s' (id=%d)  "
+                "n_threads=%d",
+                task.c_str(), params.model_type.c_str(),
+                this->active_provider_.c_str(), params.device.c_str(),
+                device_id, n_threads);
+  YOLO_LOG_INFO("  provider chain (requested '%s'): %s", requested.c_str(),
+                chain_to_string(chain).c_str());
+  YOLO_LOG_INFO("  tensorrt: fp16=%s  engine_cache=%s%s",
+                params.trt_fp16_enable ? "on" : "off",
+                params.trt_engine_cache_enable ? "on" : "off",
+                trt_cache_suffix.c_str());
+  YOLO_LOG_INFO(
+      "  input: name='%s' shape=%s dtype=%s  channel_order=%s  "
+      "batch=%s  image=%dx%d",
+      inputNames[0], join_shape(input_tensor_shape_vec).c_str(),
+      element_type_name(
+          input_type_info.GetTensorTypeAndShapeInfo().GetElementType()),
+      this->input_is_rgb_ ? "rgb" : "bgr", batch_str.c_str(),
+      this->input_image_shape.width, this->input_image_shape.height);
+  for (std::size_t i = 0; i < this->num_output_nodes; ++i) {
+    // Keep the TypeInfo alive: the ConstTensorTypeAndShapeInfo view points into
+    // it, so binding it to a temporary leaves the shape dangling.
+    const Ort::TypeInfo info = this->session.GetOutputTypeInfo(i);
+    const auto shape_info = info.GetTensorTypeAndShapeInfo();
+    YOLO_LOG_INFO("  output[%zu]: name='%s' shape=%s dtype=%s", i,
+                  outputNames[i], join_shape(shape_info.GetShape()).c_str(),
+                  element_type_name(shape_info.GetElementType()));
+  }
+  YOLO_LOG_INFO("  onnxruntime=%s  classes=%zu (%s)",
+                Ort::GetVersionString().c_str(), this->class_names.size(),
+                this->class_names_from_metadata_ ? "ONNX metadata"
+                                                 : "coco.names fallback");
+  try {
+    const Ort::ModelMetadata metadata = this->session.GetModelMetadata();
+    for (const auto &key :
+         metadata.GetCustomMetadataMapKeysAllocated(allocator)) {
+      const std::string name = key.get();
+      if (name == "names") {
+        YOLO_LOG_INFO("  metadata: names=<%zu classes>",
+                      this->class_names.size());
+        continue;
+      }
+      auto value = metadata.LookupCustomMetadataMapAllocated(
+          name.c_str(), static_cast<OrtAllocator *>(allocator));
+      if (value) {
+        YOLO_LOG_INFO("  metadata: %s=%s", name.c_str(), value.get());
+      }
+    }
+  } catch (const Ort::Exception &e) {
+    YOLO_LOG_WARN("Could not read the ONNX custom metadata: %s", e.what());
+  }
 }
 
 Model::~Model() {}
@@ -262,13 +356,14 @@ void yolo_ros::engine::Model::load_class_names() {
         for (const auto &[idx, name] : indexed_names) {
           this->class_names[static_cast<size_t>(idx)] = name;
         }
-        std::cout << "Loaded " << this->class_names.size()
-                  << " class names from the ONNX metadata." << std::endl;
+        this->class_names_from_metadata_ = true;
+        YOLO_LOG_INFO("Loaded %zu class names from the ONNX metadata.",
+                      this->class_names.size());
       }
     }
   } catch (const Ort::Exception &e) {
-    std::cerr << "Warning: could not read \"names\" from the ONNX metadata: "
-              << e.what() << std::endl;
+    YOLO_LOG_WARN("Could not read \"names\" from the ONNX metadata: %s",
+                  e.what());
   }
 
   // 2) Fall back to the coco.names file (previous behaviour) when the model
@@ -281,14 +376,14 @@ void yolo_ros::engine::Model::load_class_names() {
       class_names_path =
           get_package_share_directory("yolo_ros") + "/conf/coco.names";
     } catch (const ament_index_cpp::PackageNotFoundError &e) {
-      std::cerr << "Error: could not locate yolo_ros share directory: "
-                << e.what() << std::endl;
+      YOLO_LOG_ERROR("Could not locate the yolo_ros share directory: %s",
+                     e.what());
       return;
     }
     std::ifstream class_names_file(class_names_path);
     if (!class_names_file.is_open()) {
-      std::cerr << "Error: Could not open coco.names file at "
-                << class_names_path << std::endl;
+      YOLO_LOG_ERROR("Could not open the coco.names file at %s",
+                     class_names_path.c_str());
       return;
     }
     std::string line;

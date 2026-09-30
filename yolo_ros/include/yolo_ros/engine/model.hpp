@@ -36,7 +36,9 @@ public:
   /// @brief Load @p params.model_path (or download it from the Hugging Face
   /// Hub) and create the ONNX Runtime session, then read the class vocabulary.
   /// @param params Model, task and preprocessing configuration.
-  Model(yolo_ros::yolo::utils::YoloParams params);
+  /// @param task Resolved task name (e.g. "detect", "segment") reported in the
+  /// load log; the base class cannot derive it from @p params alone.
+  Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task);
   /// @brief Destroy the model and release the ONNX Runtime session.
   ~Model();
 
@@ -67,6 +69,9 @@ protected:
   /// graph metadata, or from the coco.names fallback. @see load_class_names()
   std::vector<std::string>
       class_names; // Vector of class names loaded from file
+  /// @brief Whether class_names came from the ONNX graph metadata (true) or
+  /// from the coco.names fallback (false). @see load_class_names()
+  bool class_names_from_metadata_{false};
 
 private:
   /// @brief Fixed batch size read from the graph; 0 when the axis is dynamic.
