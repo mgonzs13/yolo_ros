@@ -143,6 +143,8 @@ private:
     double interval_inference_ms = 0.0;
     /// @brief Per-camera images inferred in the current interval.
     std::vector<uint64_t> per_camera;
+    /// @brief Distinct class names published in the current interval.
+    std::set<std::string> interval_classes;
     /// @brief Start of the current reporting interval.
     std::chrono::steady_clock::time_point interval_start{};
   };

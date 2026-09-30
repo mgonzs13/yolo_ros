@@ -276,6 +276,7 @@ void BatchNode::process_batch(
       std::chrono::duration<double, std::milli>(
           std::chrono::steady_clock::now() - inference_start)
           .count();
+  std::set<std::string> interval_classes;
   for (std::size_t i = 0; i < decoded.size() && i < results.size(); ++i) {
     auto detections = std::move(results[i]);
     {
@@ -293,6 +294,11 @@ void BatchNode::process_batch(
     if (static_cast<int>(detections.size()) > this->yolo_params_.max_det) {
       detections.resize(static_cast<std::size_t>(this->yolo_params_.max_det));
     }
+    for (const auto &detection : detections) {
+      if (!detection.class_name.empty()) {
+        interval_classes.insert(detection.class_name);
+      }
+    }
     yolo_msgs::msg::DetectionArray array;
     array.header = decoded[i].second.image->header;
     array.detections = std::move(detections);
@@ -306,6 +312,8 @@ void BatchNode::process_batch(
     this->stats_.interval_images += processed;
     this->stats_.interval_batches += 1;
     this->stats_.interval_inference_ms += inference_ms;
+    this->stats_.interval_classes.insert(interval_classes.begin(),
+                                         interval_classes.end());
     for (std::size_t i = 0; i < processed; ++i) {
       const std::size_t camera = decoded[i].first;
       if (camera < this->stats_.per_camera.size()) {
@@ -327,6 +335,7 @@ void BatchNode::report_stats() {
     this->stats_.interval_images = 0;
     this->stats_.interval_batches = 0;
     this->stats_.interval_inference_ms = 0.0;
+    this->stats_.interval_classes.clear();
     this->stats_.interval_start = now;
     std::fill(this->stats_.per_camera.begin(), this->stats_.per_camera.end(),
               0);
@@ -347,21 +356,34 @@ void BatchNode::report_stats() {
   std::string cameras;
   for (std::size_t i = 0; i < snapshot.per_camera.size(); ++i) {
     if (i > 0) {
-      cameras += " ";
+      cameras += ", ";
     }
     cameras += this->camera_names_[i];
-    cameras += "=+";
+    cameras += " +";
     cameras += std::to_string(snapshot.per_camera[i]);
+    cameras += " img";
+  }
+
+  std::string classes;
+  for (const auto &name : snapshot.interval_classes) {
+    if (!classes.empty()) {
+      classes += ", ";
+    }
+    classes += name;
+  }
+  if (classes.empty()) {
+    classes = "(none)";
   }
 
   RCLCPP_INFO(get_logger(),
-              "[%s] stats: processed=%llu (+%llu, %.1f Hz) batch=%.2f (max "
-              "%zu) infer=%.1f ms | %s",
+              "[%s] stats: processed=%llu img (interval +%llu img, %.1f img/s) "
+              "batch=%.2f img/batch (max %zu) infer=%.1f ms | cameras: %s | "
+              "classes: %s",
               this->get_name(),
               static_cast<unsigned long long>(snapshot.processed_total),
               static_cast<unsigned long long>(snapshot.interval_images), hz,
               avg_batch, this->max_batch_size_, avg_inference_ms,
-              cameras.c_str());
+              cameras.c_str(), classes.c_str());
 }
 
 void BatchNode::enable_service_callback(
