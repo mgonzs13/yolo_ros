@@ -10,12 +10,14 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "rclcpp/timer.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "std_srvs/srv/set_bool.hpp"
@@ -90,6 +92,8 @@ private:
   void set_classes_callback(
       const std::shared_ptr<yolo_msgs::srv::SetClasses::Request> request,
       std::shared_ptr<yolo_msgs::srv::SetClasses::Response> response);
+  /// @brief Log a one-line inference summary for the interval just elapsed.
+  void report_stats();
 
   /// @brief Camera names (also the published topic prefixes).
   std::vector<std::string> camera_names_;
@@ -126,6 +130,28 @@ private:
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr enable_service_;
   /// @brief Service restricting published classes.
   rclcpp::Service<yolo_msgs::srv::SetClasses>::SharedPtr set_classes_service_;
+
+  /// @brief Inference counters, written by the worker and read by the reporter.
+  struct Stats {
+    /// @brief Cumulative images inferred since activation.
+    uint64_t processed_total = 0;
+    /// @brief Images inferred in the current interval.
+    uint64_t interval_images = 0;
+    /// @brief Batches run in the current interval.
+    uint64_t interval_batches = 0;
+    /// @brief Summed detect_batch() wall time (ms) in the current interval.
+    double interval_inference_ms = 0.0;
+    /// @brief Per-camera images inferred in the current interval.
+    std::vector<uint64_t> per_camera;
+    /// @brief Start of the current reporting interval.
+    std::chrono::steady_clock::time_point interval_start{};
+  };
+  /// @brief Guards stats_.
+  std::mutex stats_mutex_;
+  /// @brief Inference counters reported every 5 s.
+  Stats stats_;
+  /// @brief Periodic stats reporter.
+  rclcpp::TimerBase::SharedPtr stats_timer_;
 };
 
 } // namespace yolo_ros::node

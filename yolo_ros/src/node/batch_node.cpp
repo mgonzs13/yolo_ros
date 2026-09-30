@@ -90,6 +90,16 @@ BatchNode::on_activate(const rclcpp_lifecycle::State &) {
         this->process_batch(std::move(batch));
       });
 
+  // Reset the inference counters and start the fixed 5 s stats reporter.
+  {
+    std::lock_guard<std::mutex> lock(this->stats_mutex_);
+    this->stats_ = Stats{};
+    this->stats_.per_camera.assign(count, 0);
+    this->stats_.interval_start = std::chrono::steady_clock::now();
+  }
+  this->stats_timer_ = this->create_wall_timer(
+      std::chrono::seconds(5), std::bind(&BatchNode::report_stats, this));
+
   RCLCPP_INFO(get_logger(), "[%s] Activated with %zu camera(s), max batch %zu",
               this->get_name(), count, this->max_batch_size_);
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -121,6 +131,7 @@ BatchNode::on_shutdown(const rclcpp_lifecycle::State &) {
 }
 
 void BatchNode::teardown() {
+  this->stats_timer_.reset();
   if (this->scheduler_) {
     this->scheduler_->stop();
     this->scheduler_.reset();
@@ -254,12 +265,17 @@ void BatchNode::process_batch(
     return;
   }
   std::vector<std::vector<yolo_msgs::msg::Detection>> results;
+  const auto inference_start = std::chrono::steady_clock::now();
   try {
     results = this->yolo_model_->detect_batch(images);
   } catch (const std::exception &e) {
     RCLCPP_ERROR(get_logger(), "batch inference failed: %s", e.what());
     return;
   }
+  const double inference_ms =
+      std::chrono::duration<double, std::milli>(
+          std::chrono::steady_clock::now() - inference_start)
+          .count();
   for (std::size_t i = 0; i < decoded.size() && i < results.size(); ++i) {
     auto detections = std::move(results[i]);
     {
@@ -282,6 +298,70 @@ void BatchNode::process_batch(
     array.detections = std::move(detections);
     this->detection_publishers_[decoded[i].first]->publish(array);
   }
+
+  const std::size_t processed = std::min(decoded.size(), results.size());
+  {
+    std::lock_guard<std::mutex> lock(this->stats_mutex_);
+    this->stats_.processed_total += processed;
+    this->stats_.interval_images += processed;
+    this->stats_.interval_batches += 1;
+    this->stats_.interval_inference_ms += inference_ms;
+    for (std::size_t i = 0; i < processed; ++i) {
+      const std::size_t camera = decoded[i].first;
+      if (camera < this->stats_.per_camera.size()) {
+        this->stats_.per_camera[camera] += 1;
+      }
+    }
+  }
+}
+
+void BatchNode::report_stats() {
+  Stats snapshot;
+  double elapsed = 0.0;
+  {
+    std::lock_guard<std::mutex> lock(this->stats_mutex_);
+    snapshot = this->stats_;
+    const auto now = std::chrono::steady_clock::now();
+    elapsed = std::chrono::duration<double>(now - this->stats_.interval_start)
+                  .count();
+    this->stats_.interval_images = 0;
+    this->stats_.interval_batches = 0;
+    this->stats_.interval_inference_ms = 0.0;
+    this->stats_.interval_start = now;
+    std::fill(this->stats_.per_camera.begin(), this->stats_.per_camera.end(),
+              0);
+  }
+
+  const double hz = elapsed > 0.0 ? snapshot.interval_images / elapsed : 0.0;
+  const double avg_batch =
+      snapshot.interval_batches > 0
+          ? static_cast<double>(snapshot.interval_images) /
+                static_cast<double>(snapshot.interval_batches)
+          : 0.0;
+  const double avg_inference_ms =
+      snapshot.interval_batches > 0
+          ? snapshot.interval_inference_ms /
+                static_cast<double>(snapshot.interval_batches)
+          : 0.0;
+
+  std::string cameras;
+  for (std::size_t i = 0; i < snapshot.per_camera.size(); ++i) {
+    if (i > 0) {
+      cameras += " ";
+    }
+    cameras += this->camera_names_[i];
+    cameras += "=+";
+    cameras += std::to_string(snapshot.per_camera[i]);
+  }
+
+  RCLCPP_INFO(get_logger(),
+              "[%s] stats: processed=%llu (+%llu, %.1f Hz) batch=%.2f (max "
+              "%zu) infer=%.1f ms | %s",
+              this->get_name(),
+              static_cast<unsigned long long>(snapshot.processed_total),
+              static_cast<unsigned long long>(snapshot.interval_images), hz,
+              avg_batch, this->max_batch_size_, avg_inference_ms,
+              cameras.c_str());
 }
 
 void BatchNode::enable_service_callback(
