@@ -87,6 +87,8 @@ public:
   }
 
 private:
+  /// @brief Worker loop: wait for a ready slot, drain a batch, invoke the
+  /// callback.
   void run() {
     for (;;) {
       Batch batch;
@@ -108,6 +110,7 @@ private:
     }
   }
 
+  /// @brief Whether at least one slot holds a pending frame.
   bool any_ready() const {
     for (const bool ready : ready_) {
       if (ready) {
@@ -117,13 +120,21 @@ private:
     return false;
   }
 
+  /// @brief Latest pending payload per camera.
   std::vector<T> slots_;
+  /// @brief Per-camera flag: true when a pending payload is present.
   std::vector<bool> ready_;
+  /// @brief Maximum frames drained per callback.
   std::size_t max_batch_;
+  /// @brief Guards slots_, ready_, callback_ and stopping_.
   std::mutex mutex_;
+  /// @brief Signalled on every push and on stop.
   std::condition_variable cond_;
+  /// @brief Invoked for each drained batch.
   Callback callback_;
+  /// @brief Drains ready slots on its own thread.
   std::thread worker_;
+  /// @brief Set by stop() to make the worker exit.
   bool stopping_ = false;
 };
 

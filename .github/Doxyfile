@@ -954,6 +954,7 @@ INPUT = README.md \
     docs/docker.md \
     docs/models.md \
     docs/benchmark.md \
+    docs/pipelines.md \
     yolo_ros/include \
     yolo_ros/src
 
