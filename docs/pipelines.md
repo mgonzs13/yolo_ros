@@ -11,7 +11,7 @@ A single `yolo_batch_node` subscribes to every camera's image topic and infers t
 `pipelines.yaml` has three parts:
 
 - **`namespace`**: launch namespace for the shared detector (default `yolo`).
-- **`model`**: one shared detector block, with the same parameters as the single-camera `yolo_node` plus `max_batch_size`. It must be a **dynamic-batch** ONNX export (`dynamic=True`) — see the [model export guide](models.md). A plain batch-1 export still runs, but is processed one image at a time.
+- **`model`**: one shared detector block, with the same parameters as the single-camera `yolo_node` plus `max_batch_size`. It must be a **dynamic-batch** ONNX export (`dynamic=True`) — see the [model export guide](models.md). The YOLO26 mirror ships the whole set under `dynamic/`, so the default config just downloads `dynamic/yolo26m.onnx`. A plain batch-1 export still runs, but is processed one image at a time.
 - **`cameras`**: a list of camera entries, each with a unique `name` and an `image_topic`, plus its own `tracker` (a `config/trackers/<name>.yaml` selector, e.g. `botsort`; defaults to the top-level `tracker`), `tracking` and `debug` flags, and an optional `depth` block that starts the 3D node (`image_topic` / `info_topic` / `target_frame` / `units_divisor` / `enable_orientation`).
 
 ```yaml
@@ -19,7 +19,8 @@ namespace: yolo
 tracker: bytetrack               # default for cameras that don't set one
 
 model:                           # shared detector (must be a dynamic-batch export)
-  model: /home/agonzc34/models/yolo26s-dyn.onnx
+  model_repo: unileon-robotics/YOLO26-ONNX
+  model_filename: dynamic/yolo26m.onnx
   max_batch_size: 8
 
 cameras:

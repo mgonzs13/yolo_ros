@@ -134,7 +134,7 @@ To run **one shared detector batched across several cameras**, with per-camera t
 ros2 launch yolo_bringup yolo_pipelines.launch.py
 ```
 
-See the [multi-camera pipelines guide](docs/pipelines.md) for the config schema, the per-camera stages and topics, and the batching-scaling numbers.
+The shared detector is a dynamic-batch ONNX export; the default config downloads `dynamic/yolo26m.onnx` from the Hugging Face mirror. See the [multi-camera pipelines guide](docs/pipelines.md) for the config schema, the per-camera stages and topics, and the batching-scaling numbers.
 
 ### Topics
 
