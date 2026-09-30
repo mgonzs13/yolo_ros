@@ -62,6 +62,7 @@ add_executable(yolo_node
 
   src/engine/model.cpp
   src/engine/provider.cpp
+  src/utils/logs.cpp
 )
 
 target_include_directories(yolo_node PUBLIC
@@ -121,6 +122,7 @@ add_executable(tracking_node
 
   src/engine/reid_encoder.cpp
   src/engine/provider.cpp
+  src/utils/logs.cpp
 )
 
 target_include_directories(tracking_node PUBLIC
@@ -179,6 +181,7 @@ add_executable(yolo_batch_node
 
   src/engine/model.cpp
   src/engine/provider.cpp
+  src/utils/logs.cpp
 )
 
 target_include_directories(yolo_batch_node PUBLIC
@@ -237,6 +240,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_provider
     test/test_provider.cpp
     src/engine/provider.cpp
+    src/utils/logs.cpp
   )
   target_include_directories(test_provider PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -259,6 +263,7 @@ if(BUILD_TESTING)
 
     src/engine/reid_encoder.cpp
     src/engine/provider.cpp
+    src/utils/logs.cpp
   )
   target_include_directories(test_tracking PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -296,6 +301,7 @@ if(BUILD_TESTING)
     src/yolo/utils.cpp
     src/engine/model.cpp
     src/engine/provider.cpp
+    src/utils/logs.cpp
   )
   set_tests_properties(test_yolo26n PROPERTIES TIMEOUT 300)
   target_include_directories(test_yolo26n PUBLIC
@@ -322,6 +328,7 @@ if(BUILD_TESTING)
     src/yolo/utils.cpp
     src/engine/model.cpp
     src/engine/provider.cpp
+    src/utils/logs.cpp
   )
   target_include_directories(test_batch PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
