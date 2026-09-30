@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/engine/provider.hpp"
+#include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
 
 #include <algorithm>
@@ -9,7 +10,6 @@
 #include <charconv>
 #include <cstdlib>
 #include <filesystem>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <system_error>
@@ -184,8 +184,7 @@ std::string engine_cache_dir(const std::string &base,
   if (root.empty()) {
     const char *home = std::getenv("HOME");
     if (home == nullptr) {
-      std::cerr << "Cannot resolve $HOME for the TensorRT engine cache."
-                << std::endl;
+      YOLO_LOG_ERROR("Cannot resolve $HOME for the TensorRT engine cache.");
       return "";
     }
     root = std::string(home) + "/.cache/yolo_ros/trt_engines";
@@ -196,8 +195,8 @@ std::string engine_cache_dir(const std::string &base,
   std::error_code error;
   std::filesystem::create_directories(dir, error);
   if (error) {
-    std::cerr << "Cannot create TensorRT engine cache directory " << dir << ": "
-              << error.message() << std::endl;
+    YOLO_LOG_ERROR("Cannot create the TensorRT engine cache directory %s: %s",
+                   dir.string().c_str(), error.message().c_str());
     return "";
   }
   return dir.string();

@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <exception>
-#include <iostream>
 #include <memory>
 #include <numeric>
 #include <utility>
@@ -16,6 +15,7 @@
 
 #include "yolo_ros/engine/reid_encoder.hpp"
 #include "yolo_ros/tracking/utils/matching.hpp"
+#include "yolo_ros/utils/logs.hpp"
 
 namespace yolo_ros::tracking {
 
@@ -27,18 +27,17 @@ BotSort::BotSort(const BotSortParams &params)
     return;
   }
   if (params_.reid_model.empty()) {
-    std::cerr << "with_reid is set but reid_model is empty; running the "
-                 "tracker without appearance association."
-              << std::endl;
+    YOLO_LOG_WARN("with_reid is set but reid_model is empty; running the "
+                  "tracker without appearance association.");
     return;
   }
   try {
     reid_ = std::make_unique<engine::ReIDEncoder>(
         params_.reid_model, params_.provider, params_.device);
   } catch (const std::exception &e) {
-    std::cerr << "Failed to initialize the ReID encoder (" << e.what()
-              << "); running the tracker without appearance association."
-              << std::endl;
+    YOLO_LOG_WARN("Failed to initialize the ReID encoder (%s); running the "
+                  "tracker without appearance association.",
+                  e.what());
     reid_.reset();
   }
 }
@@ -99,9 +98,9 @@ std::vector<Track> BotSort::update(const std::vector<TrackDetection> &dets,
         }
       } catch (const std::exception &e) {
         if (!reid_warned_) {
-          std::cerr << "ReID inference failed (" << e.what()
-                    << "); continuing without appearance features."
-                    << std::endl;
+          YOLO_LOG_WARN("ReID inference failed (%s); continuing without "
+                        "appearance features.",
+                        e.what());
           reid_warned_ = true;
         }
       }

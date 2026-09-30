@@ -3,13 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/tracking/utils/camera_motion.hpp"
+#include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -52,8 +52,9 @@ CameraMotionCompensator::CameraMotionCompensator(const std::string &method,
     ecc_criteria_ = cv::TermCriteria(
         cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 5000, 1e-6);
   } else if (method_ != "none" && method_ != "sparseoptflow") {
-    std::cerr << "Unknown camera-motion method \"" << method
-              << "\"; disabling camera-motion compensation." << std::endl;
+    YOLO_LOG_WARN("Unknown camera-motion method \"%s\"; disabling "
+                  "camera-motion compensation.",
+                  method.c_str());
     method_ = "none";
   }
 }

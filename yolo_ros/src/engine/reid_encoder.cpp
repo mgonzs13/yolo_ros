@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -15,6 +14,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "yolo_ros/engine/provider.hpp"
+#include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
 
 namespace yolo_ros::engine {
@@ -28,8 +28,8 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
   }
   if (requested != "auto" && requested != "cpu" && requested != "cuda" &&
       requested != "tensorrt" && requested != "trt") {
-    std::cerr << "Unknown ReID provider \"" << provider << "\"; using auto."
-              << std::endl;
+    YOLO_LOG_WARN("Unknown ReID provider \"%s\"; using auto.",
+                  provider.c_str());
     requested = "auto";
   }
   const std::vector<Provider> chain =
@@ -55,8 +55,8 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
       break;
     } catch (const Ort::Exception &e) {
       last_error = e.what();
-      std::cerr << "ReID execution provider " << provider_name(primary)
-                << " failed to initialize: " << e.what() << std::endl;
+      YOLO_LOG_WARN("ReID execution provider %s failed to initialize: %s",
+                    provider_name(primary), e.what());
     }
   }
   if (active_provider_.empty()) {
@@ -99,9 +99,9 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
   blob_.resize(static_cast<std::size_t>(input_height_) * input_width_ * 3);
   memory_info_ =
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  std::cout << "ReID encoder " << model_path << " loaded (" << input_width_
-            << "x" << input_height_ << ", provider " << active_provider_ << ")."
-            << std::endl;
+  YOLO_LOG_INFO("ReID encoder %s loaded (%dx%d, provider %s).",
+                model_path.c_str(), input_width_, input_height_,
+                active_provider_.c_str());
 }
 
 ReIDEncoder::~ReIDEncoder() {}
