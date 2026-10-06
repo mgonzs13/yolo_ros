@@ -1,0 +1,76 @@
+ARG ROS_DISTRO=humble
+ARG CUDA_VERSION=12.6.3
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS deps
+
+# An ARG declared before FROM is only in scope for the FROM line; re-declare it
+# so the ROS packages below resolve (the CUDA base, unlike ros:*, does not set
+# ROS_DISTRO as an environment variable).
+ARG ROS_DISTRO
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ROS 2 apt repository. The CUDA image already ships the NVIDIA/CUDA repository,
+# which also hosts the TensorRT 10 runtime packages.
+RUN apt update && apt install -y --no-install-recommends \
+    curl \
+    gnupg \
+    lsb-release \
+    ca-certificates \
+    && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+        -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+        > /etc/apt/sources.list.d/ros2.list \
+    && rm -rf /var/lib/apt/lists/*
+
+# CUDA 12 and cuDNN 9 come from the base image; the TensorRT 10 runtime libraries
+# are what the TensorRT execution provider of ONNX Runtime dlopens at run time.
+# The TensorRT version is pinned: the CUDA repository also publishes
+# +cuda12.9/+cuda13.x builds and apt would otherwise pick the newest, pulling a
+# second (incompatible) CUDA runtime into the image. 10.13.2 is the version used
+# on the development host (CUDA 12.6), so host and container TensorRT engine
+# caches are interchangeable; the +cuda12.9 build runs on this 12.6 base via
+# CUDA minor-version compatibility, exactly as it does on the host. The packages
+# are held so the `apt upgrade` below does not bump them back to the newest
+# build.
+ARG TENSORRT_VERSION=10.13.2.6-1+cuda12.9
+RUN apt update && apt install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-ros-core \
+    python3-rosdep \
+    python3-colcon-common-extensions \
+    git \
+    build-essential \
+    libnvinfer10=${TENSORRT_VERSION} \
+    libnvinfer-plugin10=${TENSORRT_VERSION} \
+    libnvonnxparsers10=${TENSORRT_VERSION} \
+    && apt-mark hold libnvinfer10 libnvinfer-plugin10 libnvonnxparsers10 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create ros2_ws and copy files
+WORKDIR /root/ros2_ws
+COPY . /root/ros2_ws/src
+
+# Install ROS dependencies
+RUN rosdep init && rosdep update --include-eol-distros
+# Upgrade the packages shipped in the base image first
+RUN apt update && apt upgrade -y && rosdep install --filter-for-installers apt --from-paths src --ignore-src -r -y \
+    --dependency-types=buildtool \
+    --dependency-types=build \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM deps AS builder
+
+ARG ROS_DISTRO
+
+SHELL ["/bin/bash", "-c"]
+
+# Build the workspace with the CUDA/TensorRT execution providers enabled. The
+# vendor package downloads the prebuilt onnxruntime-*-gpu tarball at configure
+# time, so this step needs network access.
+WORKDIR /root/ros2_ws
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --symlink-install --cmake-args -DONNX_GPU=ON
+
+# Source the ROS 2 setup file
+RUN echo "source /root/ros2_ws/install/setup.bash" >> ~/.bashrc
+
+# Run a default command, e.g., starting a bash shell
+CMD ["bash"]

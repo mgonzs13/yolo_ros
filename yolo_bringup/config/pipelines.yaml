@@ -1,0 +1,40 @@
+# Multi-camera pipeline config for yolo_pipelines.launch.py. One shared
+# detector is batched across every camera; each camera runs its own
+# tracking / depth-3D / debug stages. See docs/superpowers/specs/
+# 2026-09-24-multi-camera-pipelines-design.md.
+namespace: yolo
+tracker: bytetrack               # default for cameras that don't set one
+
+model:                           # shared detector (must be a dynamic batch export)
+  model_type: auto
+  model: /home/agonzc34/models/yolo26s-dyn.onnx
+  device: cuda:0
+  provider: auto
+  trt_fp16_enable: true
+  trt_engine_cache_enable: true
+  threshold: 0.7
+  iou: 0.45
+  max_det: 300
+  enable: true
+  image_reliability: 2
+  max_fps: 0
+  max_batch_size: 8
+
+cameras:
+  - name: front
+    image_topic: /camera/rgb/image_raw
+    tracker: botsort             # per-camera tracker (config/trackers/<name>.yaml)
+    tracking: true
+    debug: true
+    depth:
+      image_topic: /camera/depth/image_raw
+      info_topic: /camera/depth/camera_info
+      target_frame: camera_link
+      units_divisor: 1000
+      enable_orientation: false
+
+  - name: aux
+    image_topic: /aux/image_raw
+    tracking: false              # no tracker for this camera
+    debug: false
+    # no depth block -> no 3D stage

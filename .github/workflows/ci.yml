@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+  release:
+    types: [published]
+
+jobs:
+  build-test:
+    if: github.event_name != 'release'
+    strategy:
+      fail-fast: false
+      matrix:
+        ros_distro: [humble, iron, jazzy, kilted, lyrical]
+    uses: ./.github/workflows/docker-build-test.yml
+    with:
+      ros_distro: ${{ matrix.ros_distro }}
+
+  docker-push:
+    if: github.event_name == 'release'
+    strategy:
+      fail-fast: false
+      matrix:
+        ros_distro: [humble, iron, jazzy, kilted, lyrical]
+    uses: ./.github/workflows/docker-push.yml
+    with:
+      ros_distro: ${{ matrix.ros_distro }}
+    secrets: inherit

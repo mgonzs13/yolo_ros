@@ -1,0 +1,21 @@
+# Per-tracker ROS 2 parameters for the C++ tracking node
+# (yolo_ros::tracking_node). yolo.launch.py layers this file over the pipeline
+# config whenever the `tracker` argument selects `bytetrack` (the default), so
+# the pipeline config only carries the topics/QoS and this file carries the
+# tracker selection + tuning.
+#
+# Values mirror the ultralytics ByteTrack defaults:
+#   references/ultralytics/ultralytics/cfg/trackers/bytetrack.yaml
+#
+# IMPORTANT: rclcpp loads `--params-file` sections by the node's fully
+# qualified name, so the block key includes the launch namespace (default
+# "yolo"). If you change `namespace:=`, update the block name to match.
+/yolo/tracking_node:
+  ros__parameters:
+    tracker_type: bytetrack # tracker implementation key (bytetrack | botsort)
+    track_high_thresh: 0.25 # (float) first-stage association threshold; raise for cleaner tracks, lower to keep more
+    track_low_thresh: 0.1 # (float) second-stage threshold for low-score matches; balances recovery vs drift
+    new_track_thresh: 0.25 # (float) start a new track if no detection matches above this; higher reduces false tracks
+    track_buffer: 30 # (int) frames to keep lost tracks alive; higher handles occlusion, increases ID-switch risk
+    match_thresh: 0.8 # (float) association similarity threshold (IoU/cost); tune with detector quality
+    fuse_score: true # (bool) fuse detection score with IoU cost for matching; stabilizes weak detections

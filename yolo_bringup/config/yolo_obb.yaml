@@ -1,0 +1,76 @@
+# ROS 2 parameters file for the C++ oriented-bounding-box (OBB) preset
+# (select with `params_file:=` on yolo_bringup/launch/yolo.launch.py). The
+# launch passes this file as `parameters=[params_file]` plus any command-line
+# overrides from the matching launch arguments, and makes no topic remaps:
+# every node reads its input topic from a parameter here.
+#
+# IMPORTANT: rclcpp loads `--params-file` sections by the node's fully
+# qualified name, so each block key includes the launch namespace (default
+# "yolo"). If you change `namespace:=`, update the block names to match.
+#
+# OBB specifics: ultralytics OBB models (yolo11n-obb, yolo26-obb, ...) predict
+# one extra channel per anchor vs. Detect — [cx, cy, w, h, class_scores...,
+# angle] — with the angle already decoded to radians by the exported graph.
+# The rotation angle is published in BoundingBox2D.center.theta (see the
+# upstream Python node's parse_boxes()): center/position = cx,cy,
+# center/theta = angle (radians), size = w,h. Rotated NMS runs in the C++
+# postprocessor (it cannot be baked into the ONNX graph).
+/yolo/yolo_node:
+  ros__parameters:
+    model_type: OBB # force OBB (auto also works if the path contains "obb")
+    # The default sources the model from the Hugging Face Hub instead of the
+    # local path above (model is ignored when model_repo is set). The file is
+    # cached under ~/.cache/huggingface/hub and reused unless force_download.
+    # Defaults to the YOLO26 ONNX mirror
+    # (https://huggingface.co/unileon-robotics/YOLO26-ONNX); clear model_repo to
+    # fall back to the local `model` path.
+    model_repo: unileon-robotics/YOLO26-ONNX # HF repo id ("" -> use local `model`)
+    model_filename: yolo26m-obb.onnx # file inside that repo
+    force_download: false
+    device: cuda:0 # device ordinal for the CUDA/TensorRT EPs
+    provider: auto # auto = CUDA -> CPU; or tensorrt/trt/cuda/cpu
+    trt_fp16_enable: false # TensorRT FP16 (provider: tensorrt/auto)
+    trt_engine_cache_enable: true # persist built TensorRT engines
+    trt_engine_cache_path: "" # empty -> ~/.cache/yolo_ros/trt_engines/<model>
+    threshold: 0.7
+    iou: 0.45
+    max_det: 300
+    enable: true
+    image_reliability: 1 # 0=SystemDefault, 1=Reliable, 2=BestEffort
+    image_topic: /camera/rgb/image_raw
+    n_threads: -1 # -1 = auto (only used by the CPU EP)
+    max_fps: 0 # 0 = unlimited (process every frame); >0 caps inference/publish rate in Hz
+
+/yolo/tracking_node:
+  ros__parameters:
+    # `tracker` selects the config/trackers/<tracker>.yaml file that yolo.launch.py
+    # layers over this one (bytetrack | botsort | botsort_reid). That file defines
+    # the real `tracker_type` (the C++ implementation). Override from the CLI with
+    # `tracker:=<name|path>`.
+    tracker: bytetrack
+    image_reliability: 1 # 0=SystemDefault, 1=Reliable, 2=BestEffort
+    image_topic: /camera/rgb/image_raw
+
+/yolo/detect_3d_node:
+  ros__parameters:
+    target_frame: base_link
+    depth_image_units_divisor: 1000 # raw depth units -> meters
+    depth_image_reliability: 2 # 0=SystemDefault, 1=Reliable, 2=BestEffort
+    depth_info_reliability: 2
+    depth_image_topic: /camera/depth/image_raw
+    depth_info_topic: /camera/depth/camera_info
+    detections_topic: tracking # lift the tracked stream; use "detections" if tracking is off
+    # NOTE: the 3D node lifts the AXIS-ALIGNED bbox (center + size) stored in
+    # the Detection. For OBB this bbox holds the rotated w/h, so the 3D ROI is
+    # a generous axis-aligned estimate; orientation estimation is unaffected.
+    enable_orientation: false
+    min_seg_points_for_orientation: 20
+
+/yolo/debug_node:
+  ros__parameters:
+    image_reliability: 1 # 0=SystemDefault, 1=Reliable, 2=BestEffort
+    image_topic: /camera/rgb/image_raw
+    # "tracking" (tracked ids), "detections" (raw YOLO output) or
+    # "detections_3d" (3D-enriched, populates the RViz markers). The debug
+    # node draws the rotated quad when BoundingBox2D.center.theta != 0.
+    detections_topic: detections

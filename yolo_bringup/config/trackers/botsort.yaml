@@ -1,0 +1,34 @@
+# Per-tracker ROS 2 parameters for the C++ tracking node
+# (yolo_ros::tracking_node). yolo.launch.py layers this file over the pipeline
+# config whenever the `tracker` argument selects `botsort`.
+#
+# BoT-SORT = XYWH Kalman filter + camera-motion compensation. `gmc_method`
+# enables the compensation (the C++ default is "none", so this file turns it
+# on). Association defaults mirror ultralytics botsort.yaml.
+#
+# ReID (appearance association) is OFF here. Enable it from the command line:
+#   ros2 launch yolo_bringup yolo.launch.py tracker:=botsort \
+#     with_reid:=true reid_model:=/path/osnet_x0_25_reid.onnx
+# Only COCO `person` (class_id 0) detections are embedded; the encoder is a
+# second ONNX session whose EP/device come from `provider`/`device` below.
+#
+# IMPORTANT: rclcpp loads `--params-file` sections by the node's fully
+# qualified name, so the block key includes the launch namespace (default
+# "yolo"). If you change `namespace:=`, update the block name to match.
+/yolo/tracking_node:
+  ros__parameters:
+    tracker_type: botsort # tracker implementation key (bytetrack | botsort)
+    track_high_thresh: 0.25 # first-stage association threshold
+    track_low_thresh: 0.1 # second-stage threshold for low-score matches
+    new_track_thresh: 0.25 # start a new track above this score
+    track_buffer: 30 # frames to keep lost tracks alive
+    match_thresh: 0.8 # association similarity threshold (IoU/cost)
+    fuse_score: true # fuse detection score with IoU cost for matching
+    gmc_method: sparseOptFlow # none | sparseOptFlow | orb | ecc
+    gmc_downscale: 2 # camera-motion downscale factor (>= 1)
+    with_reid: false # enable the ReID appearance branch (person-only)
+    reid_model: "" # ONNX ReID encoder path (empty disables appearance)
+    proximity_thresh: 0.5 # IoU distance above which appearance is ignored
+    appearance_thresh: 0.25 # cap on the embedding distance accepted as a match
+    provider: auto # encoder EP: auto = CUDA -> CPU
+    device: cuda:0 # encoder CUDA/TensorRT device ordinal

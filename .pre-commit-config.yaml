@@ -1,0 +1,30 @@
+# Pre-commit hooks for yolo_ros.
+#
+# Install:  pre-commit install
+# Run all:  pre-commit run --all-files
+#
+# - black formats the launch files (line length 90, matching CI
+#   .github/workflows/python-formatter.yml)
+# - clang-format formats the C++ sources with the style in .clang-format
+repos:
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        # Check-only (lint): --check makes black report files that would be
+        # reformatted and exit non-zero without rewriting them, so staged
+        # .launch.py files are never auto-modified. Mirrors the clang-format
+        # check-only change below.
+        args: ["--line-length", "90", "--check"]
+        files: \.launch\.py$
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.8  # matches CI (.github/workflows/cpp-formatter.yml)
+    hooks:
+      - id: clang-format
+        # Check-only (lint): --dry-run cancels the -i baked into the mirror's
+        # entry, so staged files are never rewritten; --Werror turns the
+        # violations into a non-zero exit so the commit is blocked until you
+        # format. The hook no longer auto-reformats staged code.
+        args: ["--style=file", "--dry-run", "--Werror"]
+        files: \.(cpp|hpp)$

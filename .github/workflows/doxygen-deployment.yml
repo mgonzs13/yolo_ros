@@ -1,16 +1,42 @@
-name: Doxygen Deployment
+name: Doxygen
 
 on:
+  push:
+    branches: [yolo_onnx_cpp]
+    paths:
+      - ".github/Doxyfile"
+      - ".github/Doxyfile.check"
+      - ".github/workflows/doxygen-deployment.yml"
+      - "yolo_ros/**"
+      - "README.md"
+  pull_request:
+    paths:
+      - ".github/Doxyfile"
+      - ".github/Doxyfile.check"
+      - ".github/workflows/doxygen-deployment.yml"
+      - "yolo_ros/**"
+      - "README.md"
   release:
     types: [published]
 
 jobs:
-  doxygen_generation:
+  docs-check:
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
+      - name: Build docs and fail on warnings
+        uses: mattnotmitt/doxygen-action@v1.12
+        with:
+          doxyfile-path: ".github/Doxyfile.check"
+
+  doxygen_generation:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -18,7 +44,7 @@ jobs:
           fetch-depth: 0
 
       - name: Generate Doxygen
-        uses: mattnotmitt/doxygen-action@edge
+        uses: mattnotmitt/doxygen-action@v1.12
         with:
           doxyfile-path: ".github/Doxyfile"
 
@@ -32,7 +58,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: docs
+          publish_dir: docs/doxygen
           destination_dir: ${{ github.event.release.tag_name }}
           keep_files: true
 

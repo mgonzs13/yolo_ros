@@ -1,0 +1,30 @@
+// Copyright (c) 2026 Alejandro González Cantón
+// SPDX-License-Identifier: MIT
+
+/// @defgroup yolo_engine ONNX Runtime engine
+/// @brief Model loading, letterboxing, ONNX Runtime session setup and the
+/// base postprocessing dispatch used by every task.
+///
+/// The engine owns preprocessing and inference; each task overrides the
+/// postprocess() hook. See yolo_ros::engine::Model.
+
+/// @defgroup yolo_tasks YOLO task pipelines
+/// @brief Concrete postprocessors for the detection, segmentation, pose,
+/// oriented-bounding-box and classification exports, plus their shared
+/// box/keypoint helpers (yolo_ros::yolo::utils).
+
+/// @defgroup yolo_tracking Multi-object tracking
+/// @brief Tracker-agnostic interface (yolo_ros::tracking::Tracker) and its
+/// ByteTrack implementation, Kalman filter, assignment and IoU utilities.
+
+/// @defgroup yolo_nodes ROS 2 lifecycle nodes
+/// @brief The four executables' node classes: inference, tracking, debug
+/// visualization and depth-based 3D lifting.
+
+/// @defgroup yolo_3d Depth and 3D lifting
+/// @brief Robust depth statistics and 2D to 3D conversion for bounding boxes
+/// and pose keypoints, plus rigid-transform helpers.
+
+/// @defgroup yolo_utils Shared utilities
+/// @brief Cross-cutting helpers: string lowercasing and the message_filters
+/// cross-distro compatibility shim.

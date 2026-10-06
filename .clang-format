@@ -1,0 +1,11 @@
+# yolo_ros C++ style — LLVM base, 2-space indent, pointer/ref on the name.
+BasedOnStyle: LLVM
+ColumnLimit: 80
+IndentWidth: 2
+PointerAlignment: Right
+ReferenceAlignment: Pointer
+SortIncludes: true
+# Keep the repo's one-line short statements / empty ctors.
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true

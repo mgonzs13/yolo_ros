@@ -1,0 +1,32 @@
+name: Docker Build & Test
+
+on:
+  workflow_call:
+    inputs:
+      ros_distro:
+        required: true
+        type: string
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build docker
+        uses: docker/build-push-action@v6
+        with:
+          build-args: ROS_DISTRO=${{ inputs.ros_distro }}
+          push: false
+          load: true
+          tags: yolo_ros:${{ inputs.ros_distro }}-test
+
+      - name: Run tests
+        run: |
+          docker run --rm yolo_ros:${{ inputs.ros_distro }}-test bash -c \
+            "source /opt/ros/${{ inputs.ros_distro }}/setup.bash && source /root/ros2_ws/install/setup.bash && \
+             cd /root/ros2_ws && colcon test --packages-select yolo_ros"

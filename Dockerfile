@@ -6,14 +6,9 @@ RUN apt update && apt install -y --no-install-recommends \
     git \
     build-essential \
     python3-rosdep \
-    python3-pip \
     python3-colcon-common-extensions \
     curl \
     && rm -rf /var/lib/apt/lists/*
-
-# Install uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
 
 # Create ros2_ws and copy files
 WORKDIR /root/ros2_ws
@@ -33,7 +28,7 @@ SHELL ["/bin/bash", "-c"]
 
 # Build the workspace
 WORKDIR /root/ros2_ws
-RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --symlink-install
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build
 
 # Source the ROS 2 setup file
 RUN echo "source /root/ros2_ws/install/setup.bash" >> ~/.bashrc

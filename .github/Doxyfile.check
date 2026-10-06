@@ -1,0 +1,6 @@
+# Doxyfile for the CI docs-check job. It reuses the main configuration and
+# turns warnings into errors so the job fails on any documentation warning.
+# The @INCLUDE path is resolved relative to the working directory (the repo
+# root), which is where the doxygen-action runs doxygen.
+@INCLUDE = .github/Doxyfile
+WARN_AS_ERROR = FAIL_ON_WARNINGS
