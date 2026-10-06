@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/yolo/pose.hpp"
+
 #include "yolo_msgs/msg/key_point2_d.hpp"
 #include "yolo_ros/utils/logs.hpp"
+
 #include <vector>
 
 namespace yolo_ros::yolo {

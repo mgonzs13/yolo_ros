@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/yolo/detect.hpp"
+
 #include "yolo_ros/yolo/utils.hpp"
 
 namespace yolo_ros::yolo {

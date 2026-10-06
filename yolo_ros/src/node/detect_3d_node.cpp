@@ -39,8 +39,7 @@ Detect3DNode::on_activate(const rclcpp_lifecycle::State &) {
   auto reliability_to_policy = [](int r) {
     if (r == 0) {
       return rclcpp::ReliabilityPolicy::SystemDefault;
-    }
-    if (r == 1) {
+    } else if (r == 1) {
       return rclcpp::ReliabilityPolicy::Reliable;
     }
     return rclcpp::ReliabilityPolicy::BestEffort;
@@ -159,6 +158,7 @@ std::vector<yolo_msgs::msg::Detection> Detect3DNode::process_detections(
   // the Python node's "passthrough" encoding: keep the raw 16UC1 millimeters
   // (or 32FC1 meters) and divide by depth_image_units_divisor below.
   cv::Mat depth_image;
+
   try {
     auto cv_ptr = cv_bridge::toCvShare(
         depth_msg, sensor_msgs::image_encodings::TYPE_16UC1);
@@ -174,6 +174,7 @@ std::vector<yolo_msgs::msg::Detection> Detect3DNode::process_detections(
         this->depth_image_units_divisor_,
         {this->enable_orientation_, this->min_seg_points_for_orientation_},
         &this->orientation_state_);
+
     if (!bbox3d) {
       continue;
     }
@@ -213,6 +214,7 @@ Detect3DNode::get_transform(const std::string &frame_id) {
         transform.transform.rotation.y, transform.transform.rotation.z};
 
     return std::make_pair(translation, rotation);
+
   } catch (const tf2::TransformException &ex) {
     RCLCPP_ERROR(get_logger(), "Could not transform: %s", ex.what());
     return std::nullopt;

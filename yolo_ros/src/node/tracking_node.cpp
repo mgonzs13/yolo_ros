@@ -37,6 +37,7 @@ TrackingNode::on_configure(const rclcpp_lifecycle::State &) {
 
   int image_reliability = this->get_parameter("image_reliability").as_int();
   rclcpp::ReliabilityPolicy qos_reliability_policy;
+
   if (image_reliability == 0) {
     qos_reliability_policy = rclcpp::ReliabilityPolicy::SystemDefault;
   } else if (image_reliability == 1) {
@@ -44,6 +45,7 @@ TrackingNode::on_configure(const rclcpp_lifecycle::State &) {
   } else {
     qos_reliability_policy = rclcpp::ReliabilityPolicy::BestEffort;
   }
+
   this->image_qos_profile_ = rclcpp::QoS(1)
                                  .reliability(qos_reliability_policy)
                                  .durability_volatile()
@@ -144,6 +146,7 @@ void TrackingNode::load_params() {
                    "[%s] ByteTrack parameters not declared: %s",
                    this->get_name(), e.what());
     }
+
   } else if (tracker_type == "botsort") {
     try {
       const yolo_ros::tracking::BotSortParams params =
@@ -194,9 +197,11 @@ void TrackingNode::recieve_callback(
   dets.reserve(msg_detections->detections.size());
   for (std::size_t i = 0; i < msg_detections->detections.size(); ++i) {
     const auto &det = msg_detections->detections[i];
+
     if (det.bbox.size.x <= 0 || det.bbox.size.y <= 0) {
       continue;
     }
+
     yolo_ros::tracking::TrackDetection td;
     td.cx = det.bbox.center.position.x;
     td.cy = det.bbox.center.position.y;
@@ -230,6 +235,7 @@ void TrackingNode::recieve_callback(
         track.index >= static_cast<int>(msg_detections->detections.size())) {
       continue;
     }
+
     // Copy the original detection (keeps class name, mask, etc.) and overlay
     // the Kalman-refined box and the stable track id.
     auto tracked_detection = msg_detections->detections[track.index];

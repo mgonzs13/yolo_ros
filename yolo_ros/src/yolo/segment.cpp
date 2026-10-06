@@ -5,6 +5,7 @@
 #include "yolo_msgs/msg/point2_d.hpp"
 #include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/yolo/utils.hpp"
+
 #include <opencv2/core/types.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>

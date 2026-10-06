@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/yolo/utils.hpp"
+
 #include <algorithm>
 #include <cstdio>
 

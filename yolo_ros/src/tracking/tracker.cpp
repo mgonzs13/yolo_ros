@@ -7,11 +7,11 @@
 #include <cctype>
 #include <string>
 
+#include <opencv2/core.hpp>
+
 #include "yolo_ros/tracking/bot_sort.hpp"
 #include "yolo_ros/tracking/byte_tracker.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
-
-#include <opencv2/core.hpp>
 
 namespace yolo_ros::tracking {
 

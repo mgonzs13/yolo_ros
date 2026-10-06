@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/utils/string_utils.hpp"
+
 #include "yolo_ros/yolo/model_factory.hpp"
 
 namespace yolo_ros::yolo {

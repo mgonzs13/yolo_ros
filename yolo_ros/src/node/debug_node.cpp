@@ -2,22 +2,24 @@
 // Portions Copyright (c) 2023-2025 Miguel Ángel González Santamarta
 // SPDX-License-Identifier: MIT
 
+#include "yolo_ros/node/debug_node.hpp"
+
 #if defined(CV_BRIDGE_H)
 #include <cv_bridge/cv_bridge.h>
 #else
 #include <cv_bridge/cv_bridge.hpp>
 #endif
 
-#include "yolo_ros/node/debug_node.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <map>
-#include <opencv2/imgproc.hpp>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include <opencv2/imgproc.hpp>
 
 namespace yolo_ros::node {
 
@@ -94,6 +96,7 @@ DebugNode::on_configure(const rclcpp_lifecycle::State &) {
 
   int image_reliability = this->get_parameter("image_reliability").as_int();
   rclcpp::ReliabilityPolicy qos_reliability_policy;
+
   if (image_reliability == 0) {
     qos_reliability_policy = rclcpp::ReliabilityPolicy::SystemDefault;
   } else if (image_reliability == 1) {
@@ -101,6 +104,7 @@ DebugNode::on_configure(const rclcpp_lifecycle::State &) {
   } else {
     qos_reliability_policy = rclcpp::ReliabilityPolicy::BestEffort;
   }
+
   this->image_qos_profile = rclcpp::QoS(1)
                                 .reliability(qos_reliability_policy)
                                 .durability_volatile()
@@ -179,12 +183,14 @@ void DebugNode::recieve_callback(
     const sensor_msgs::msg::Image::ConstSharedPtr &msg_image,
     const yolo_msgs::msg::DetectionArray::ConstSharedPtr &msg_detections) {
   cv_bridge::CvImagePtr cv_ptr;
+
   try {
     cv_ptr = cv_bridge::toCvCopy(msg_image, sensor_msgs::image_encodings::BGR8);
   } catch (cv_bridge::Exception &e) {
     RCLCPP_ERROR(get_logger(), "cv_bridge exception: %s", e.what());
     return;
   }
+
   cv::Mat image = cv_ptr->image;
 
   // Draw ALL detections onto one image, then publish ONCE (not per-detection).
@@ -196,16 +202,19 @@ void DebugNode::recieve_callback(
   // class sits at the top of the stack. Spatial detections (non-empty bbox)
   // keep their per-box anchors and are drawn below.
   std::vector<const yolo_msgs::msg::Detection *> image_level;
+
   for (const auto &detection : msg_detections->detections) {
     if (detection.bbox.size.x <= 0.0 && detection.bbox.size.y <= 0.0) {
       image_level.push_back(&detection);
     }
   }
+
   std::sort(
       image_level.begin(), image_level.end(),
       [](const yolo_msgs::msg::Detection *a,
          const yolo_msgs::msg::Detection *b) { return a->score > b->score; });
   int image_label_y = 0;
+
   for (const auto *detection : image_level) {
     const auto color = color_for_class(detection->class_name);
     image_label_y +=
@@ -222,6 +231,7 @@ void DebugNode::recieve_callback(
     draw_mask(overlay, image, detection, color);
     image = draw_keypoints(image, detection);
   }
+
   cv::addWeighted(overlay, 0.4, image, 0.6, 0, image);
 
   // The debug image is only gated by the image<->2D-detections sync, so it
@@ -252,7 +262,7 @@ void DebugNode::markers_callback(
     // RViz markers for the 3D boxes (emitted only when a detect_3d node has
     // enriched the stream with bbox3d).
     if (!detection.bbox3d.frame_id.empty()) {
-      auto marker = create_bb_marker(detection, color);
+      auto marker = this->create_bb_marker(detection, color);
       marker.header.stamp = msg_detections->header.stamp;
       marker.id = bb_marker_array.markers.size();
       bb_marker_array.markers.push_back(marker);
@@ -264,7 +274,7 @@ void DebugNode::markers_callback(
       for (const auto &keypoint : detection.keypoints3d.data) {
         points[keypoint.id] = &keypoint;
 
-        auto marker = create_kp_marker(keypoint);
+        auto marker = this->create_kp_marker(keypoint);
         marker.header.frame_id = detection.keypoints3d.frame_id;
         marker.header.stamp = msg_detections->header.stamp;
         marker.id = kp_marker_array.markers.size();
@@ -277,11 +287,13 @@ void DebugNode::markers_callback(
       for (int i = 0; i < kNumSkeletonLimbs; ++i) {
         auto it1 = points.find(kSkeleton[i][0]);
         auto it2 = points.find(kSkeleton[i][1]);
+
         if (it1 == points.end() || it2 == points.end()) {
           continue;
         }
-        auto marker = create_limb_marker(*it1->second, *it2->second,
-                                         indexed_color(i + 32));
+
+        auto marker = this->create_limb_marker(*it1->second, *it2->second,
+                                               indexed_color(i + 32));
         marker.header.frame_id = detection.keypoints3d.frame_id;
         marker.header.stamp = msg_detections->header.stamp;
         marker.id = kp_marker_array.markers.size();
@@ -296,35 +308,44 @@ void DebugNode::markers_callback(
 
 cv::Scalar DebugNode::color_for_class(const std::string &class_name) {
   auto color_it = class_to_color.find(class_name);
+
   if (color_it == class_to_color.end()) {
     // Deterministic FNV-1a hash of the class name so the same class always
     // gets the same color across runs (rand() made colors change every run).
     uint32_t hash = 2166136261u;
+
     for (const char c : class_name) {
       hash ^= static_cast<uint8_t>(c);
       hash *= 16777619u;
     }
+
     class_to_color[class_name] = vivid_bgr(static_cast<int>(hash % 180));
     color_it = class_to_color.find(class_name);
   }
+
   return color_it->second;
 }
 
 std::string
 DebugNode::label_text(const yolo_msgs::msg::Detection &detection) const {
+
   std::string text = detection.class_name;
+
   if (detection.id != "") {
     text += " " + detection.id;
   }
+
   std::ostringstream ss;
   ss << std::fixed << std::setprecision(3) << detection.score;
   text += " " + ss.str();
+
   return text;
 }
 
 cv::Mat DebugNode::draw_box(const cv::Mat &image,
                             const yolo_msgs::msg::Detection &detection,
                             const cv::Scalar &color) {
+
   const auto &center = detection.bbox.center.position;
   const double theta = detection.bbox.center.theta;
 
@@ -351,14 +372,17 @@ cv::Mat DebugNode::draw_box(const cv::Mat &image,
     float min_x = corners[0].x, min_y = corners[0].y;
     std::vector<cv::Point> quad;
     quad.reserve(4);
+
     for (const auto &p : corners) {
       quad.emplace_back(cvRound(p.x), cvRound(p.y));
       min_x = std::min(min_x, p.x);
       min_y = std::min(min_y, p.y);
     }
+
     cv::polylines(image, quad, true, color, 2, cv::LINE_AA);
     label_anchor =
         cv::Point(cvRound(min_x) + kLabelInset, cvRound(min_y) + kLabelInset);
+
   } else {
     cv::Rect box(center.x - detection.bbox.size.x / 2,
                  center.y - detection.bbox.size.y / 2, detection.bbox.size.x,
@@ -368,7 +392,7 @@ cv::Mat DebugNode::draw_box(const cv::Mat &image,
   }
 
   // Text
-  draw_label(image, label_text(detection), label_anchor, color);
+  this->draw_label(image, this->label_text(detection), label_anchor, color);
 
   return image;
 }
@@ -393,13 +417,16 @@ int DebugNode::draw_label(const cv::Mat &image, const std::string &text,
   if (x0 + label_w > image.cols) {
     x0 = image.cols - label_w;
   }
+
   if (y0 + label_h > image.rows) {
     y0 = image.rows - label_h;
   }
+
   x0 = std::max(0, x0);
   y0 = std::max(0, y0);
   const int x1 = std::min(image.cols - 1, x0 + label_w - 1);
   const int y1 = std::min(image.rows - 1, y0 + label_h - 1);
+
   if (x1 <= x0 || y1 <= y0) {
     return 0; // degenerate or fully off-frame
   }
@@ -418,6 +445,7 @@ int DebugNode::draw_label(const cv::Mat &image, const std::string &text,
     return 0.2126 * channel(bgr[2]) + 0.7152 * channel(bgr[1]) +
            0.0722 * channel(bgr[0]);
   };
+
   const double luminance = relative_luminance(background);
   const double contrast_black = (luminance + 0.05) / 0.05;
   const double contrast_white = 1.05 / (luminance + 0.05);
@@ -436,6 +464,7 @@ void DebugNode::draw_mask(cv::Mat &overlay, cv::Mat &image,
   if (detection.mask.data.size() == 0) {
     return;
   }
+
   // Convert ROS Point2D (float64) mask boundary points to OpenCV points
   std::vector<std::vector<cv::Point>> contours(1);
   contours[0].reserve(detection.mask.data.size());
@@ -460,8 +489,8 @@ cv::Mat DebugNode::draw_keypoints(const cv::Mat &image,
     points[kp.id] = pt;
     const auto color_k = indexed_color(kp.id);
     cv::circle(image, pt, 5, color_k, -1, cv::LINE_AA);
-    draw_label(image, std::to_string(kp.id), pt + cv::Point(6, -7), color_k,
-               0.5, 1);
+    this->draw_label(image, std::to_string(kp.id), pt + cv::Point(6, -7),
+                     color_k, 0.5, 1);
   }
 
   // Draw the skeleton limbs on top (per-limb colors, only when both
@@ -474,6 +503,7 @@ cv::Mat DebugNode::draw_keypoints(const cv::Mat &image,
                cv::LINE_AA);
     }
   }
+
   return image;
 }
 

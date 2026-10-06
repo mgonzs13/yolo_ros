@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/yolo/model_factory.hpp"
+
 #include "yolo_ros/yolo/classify.hpp"
 #include "yolo_ros/yolo/detect.hpp"
 #include "yolo_ros/yolo/obb.hpp"

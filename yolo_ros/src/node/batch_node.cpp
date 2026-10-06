@@ -15,6 +15,7 @@
 #else
 #include <cv_bridge/cv_bridge.hpp>
 #endif
+
 #include "huggingface_hub.h"
 #include "yolo_ros/yolo/model_factory.hpp"
 
@@ -43,10 +44,12 @@ BatchNode::on_configure(const rclcpp_lifecycle::State &) {
     this->declare_params();
     this->params_declared_ = true;
   }
+
   if (!this->load_params()) {
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::FAILURE;
   }
+
   RCLCPP_INFO(get_logger(), "[%s] Configured", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
@@ -63,6 +66,7 @@ BatchNode::on_activate(const rclcpp_lifecycle::State &) {
 
   this->image_subscriptions_.clear();
   this->detection_publishers_.clear();
+
   for (std::size_t i = 0; i < count; ++i) {
     this->detection_publishers_.push_back(
         this->create_publisher<yolo_msgs::msg::DetectionArray>(
@@ -97,11 +101,13 @@ BatchNode::on_activate(const rclcpp_lifecycle::State &) {
     this->stats_.per_camera.assign(count, 0);
     this->stats_.interval_start = std::chrono::steady_clock::now();
   }
+
   this->stats_timer_ = this->create_wall_timer(
       std::chrono::seconds(5), std::bind(&BatchNode::report_stats, this));
 
   RCLCPP_INFO(get_logger(), "[%s] Activated with %zu camera(s), max batch %zu",
               this->get_name(), count, this->max_batch_size_);
+
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -204,12 +210,14 @@ bool BatchNode::load_params() {
                  "camera_names and image_topics must have the same length");
     return false;
   }
+
   // Hugging Face Hub: keep the same precedence as yolo_node.
   if (!this->yolo_params_.model_repo.empty() &&
       !this->yolo_params_.model_filename.empty()) {
     auto result = huggingface_hub::hf_hub_download_with_shards(
         this->yolo_params_.model_repo, this->yolo_params_.model_filename,
         this->yolo_params_.cache_dir, this->yolo_params_.force_download);
+
     if (result.success) {
       this->yolo_params_.model_path = result.path;
     } else {
@@ -220,6 +228,7 @@ bool BatchNode::load_params() {
                    this->yolo_params_.model_path.c_str());
     }
   }
+
   return true;
 }
 
@@ -228,6 +237,7 @@ void BatchNode::image_callback(std::size_t camera,
   if (!this->enable_inference_.load()) {
     return;
   }
+
   if (this->yolo_params_.max_fps > 0) {
     const auto now = std::chrono::steady_clock::now();
     if (std::chrono::duration<double>(now - this->last_inference_time_)
@@ -236,6 +246,7 @@ void BatchNode::image_callback(std::size_t camera,
     }
     this->last_inference_time_ = now;
   }
+
   PendingFrame frame;
   frame.image = msg;
   this->scheduler_->push(camera, std::move(frame));
@@ -243,13 +254,16 @@ void BatchNode::image_callback(std::size_t camera,
 
 void BatchNode::process_batch(
     std::vector<std::pair<std::size_t, PendingFrame>> batch) {
+
   if (batch.empty() || !this->yolo_model_ || !this->enable_inference_.load()) {
     return;
   }
+
   std::vector<std::pair<std::size_t, PendingFrame>> decoded;
   std::vector<cv::Mat> images;
   decoded.reserve(batch.size());
   images.reserve(batch.size());
+
   for (auto &item : batch) {
     try {
       images.push_back(cv_bridge::toCvCopy(item.second.image,
@@ -261,26 +275,32 @@ void BatchNode::process_batch(
     }
     decoded.push_back(std::move(item));
   }
+
   if (images.empty()) {
     return;
   }
+
   std::vector<std::vector<yolo_msgs::msg::Detection>> results;
   const auto inference_start = std::chrono::steady_clock::now();
+
   try {
     results = this->yolo_model_->detect_batch(images);
   } catch (const std::exception &e) {
     RCLCPP_ERROR(get_logger(), "batch inference failed: %s", e.what());
     return;
   }
+
   const double inference_ms =
       std::chrono::duration<double, std::milli>(
           std::chrono::steady_clock::now() - inference_start)
           .count();
   std::set<std::string> interval_classes;
+
   for (std::size_t i = 0; i < decoded.size() && i < results.size(); ++i) {
     auto detections = std::move(results[i]);
     {
       std::lock_guard<std::mutex> lock(this->classes_mutex_);
+
       if (!this->allowed_classes_.empty()) {
         detections.erase(
             std::remove_if(detections.begin(), detections.end(),
@@ -291,14 +311,17 @@ void BatchNode::process_batch(
             detections.end());
       }
     }
+
     if (static_cast<int>(detections.size()) > this->yolo_params_.max_det) {
       detections.resize(static_cast<std::size_t>(this->yolo_params_.max_det));
     }
+
     for (const auto &detection : detections) {
       if (!detection.class_name.empty()) {
         interval_classes.insert(detection.class_name);
       }
     }
+
     yolo_msgs::msg::DetectionArray array;
     array.header = decoded[i].second.image->header;
     array.detections = std::move(detections);
@@ -306,6 +329,7 @@ void BatchNode::process_batch(
   }
 
   const std::size_t processed = std::min(decoded.size(), results.size());
+
   {
     std::lock_guard<std::mutex> lock(this->stats_mutex_);
     this->stats_.processed_total += processed;
@@ -314,6 +338,7 @@ void BatchNode::process_batch(
     this->stats_.interval_inference_ms += inference_ms;
     this->stats_.interval_classes.insert(interval_classes.begin(),
                                          interval_classes.end());
+
     for (std::size_t i = 0; i < processed; ++i) {
       const std::size_t camera = decoded[i].first;
       if (camera < this->stats_.per_camera.size()) {
@@ -326,6 +351,7 @@ void BatchNode::process_batch(
 void BatchNode::report_stats() {
   Stats snapshot;
   double elapsed = 0.0;
+
   {
     std::lock_guard<std::mutex> lock(this->stats_mutex_);
     snapshot = this->stats_;
@@ -371,6 +397,7 @@ void BatchNode::report_stats() {
     }
     classes += name;
   }
+
   if (classes.empty()) {
     classes = "(none)";
   }
@@ -399,15 +426,18 @@ void BatchNode::set_classes_callback(
     const std::shared_ptr<yolo_msgs::srv::SetClasses::Request> request,
     std::shared_ptr<yolo_msgs::srv::SetClasses::Response> response) {
   std::set<std::string> classes;
+
   for (const auto &name : request->classes) {
     if (!name.empty()) {
       classes.insert(name);
     }
   }
+
   {
     std::lock_guard<std::mutex> lock(this->classes_mutex_);
     this->allowed_classes_ = classes;
   }
+
   response->success = true;
   response->message =
       classes.empty()

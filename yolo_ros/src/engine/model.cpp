@@ -2,18 +2,23 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/engine/model.hpp"
+
 #include "onnxruntime_cxx_api.h"
+
 #include "yolo_ros/engine/provider.hpp"
 #include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
 #include "yolo_ros/yolo/utils.hpp"
-#include <algorithm>
+
 #include <ament_index_cpp/get_package_prefix.hpp>
+
 #if __has_include(<ament_index_cpp/get_package_share_directory.hpp>)
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #else
 #include <ament_index_cpp/get_package_share_path.hpp>
 #endif
+
+#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <map>

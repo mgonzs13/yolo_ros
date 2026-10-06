@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/yolo/classify.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <numeric>

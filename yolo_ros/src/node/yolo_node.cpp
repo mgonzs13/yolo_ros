@@ -3,11 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/node/yolo_node.hpp"
+
+#include <algorithm>
+#include <string>
+
 #include "huggingface_hub.h"
 #include "rclcpp/qos.hpp"
 #include "yolo_ros/yolo/model_factory.hpp"
-#include <algorithm>
-#include <string>
 
 namespace yolo_ros::node {
 
