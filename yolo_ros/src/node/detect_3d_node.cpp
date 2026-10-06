@@ -16,7 +16,7 @@ Detect3DNode::Detect3DNode()
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 Detect3DNode::on_configure(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(get_logger(), "[%s] Configuring...", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Configuring...", this->get_name());
 
   this->load_params();
 
@@ -29,7 +29,7 @@ Detect3DNode::on_configure(const rclcpp_lifecycle::State &) {
   this->tf_listener_ = std::make_shared<tf2_ros::TransformListener>(
       this->tf_buffer_, this->shared_from_this());
 
-  RCLCPP_INFO(get_logger(), "[%s] Configured", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Configured", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -42,6 +42,7 @@ Detect3DNode::on_activate(const rclcpp_lifecycle::State &) {
     } else if (r == 1) {
       return rclcpp::ReliabilityPolicy::Reliable;
     }
+
     return rclcpp::ReliabilityPolicy::BestEffort;
   };
 
@@ -66,7 +67,7 @@ Detect3DNode::on_activate(const rclcpp_lifecycle::State &) {
       std::bind(&Detect3DNode::recieve_callback, this, std::placeholders::_1,
                 std::placeholders::_2, std::placeholders::_3));
 
-  RCLCPP_INFO(get_logger(), "[%s] Activated", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Activated", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -78,7 +79,7 @@ Detect3DNode::on_deactivate(const rclcpp_lifecycle::State &) {
   this->depth_image_subscription_.unsubscribe();
   this->synchronizer_.reset();
 
-  RCLCPP_INFO(get_logger(), "[%s] Deactivated", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Deactivated", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -89,14 +90,14 @@ Detect3DNode::on_cleanup(const rclcpp_lifecycle::State &) {
   this->detections_3d_publisher_.reset();
   this->orientation_state_.last_axes.clear();
 
-  RCLCPP_INFO(get_logger(), "[%s] Cleaned up", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Cleaned up", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 Detect3DNode::on_shutdown(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(get_logger(), "[%s] Shutting down", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Shutting down", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -150,6 +151,7 @@ std::vector<yolo_msgs::msg::Detection> Detect3DNode::process_detections(
   }
 
   auto transform = this->get_transform(depth_info_msg->header.frame_id);
+
   if (!transform) {
     return new_detections;
   }
@@ -164,7 +166,7 @@ std::vector<yolo_msgs::msg::Detection> Detect3DNode::process_detections(
         depth_msg, sensor_msgs::image_encodings::TYPE_16UC1);
     depth_image = cv_ptr->image;
   } catch (cv_bridge::Exception &e) {
-    RCLCPP_ERROR(get_logger(), "cv_bridge exception: %s", e.what());
+    RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
     return new_detections;
   }
 
@@ -216,7 +218,7 @@ Detect3DNode::get_transform(const std::string &frame_id) {
     return std::make_pair(translation, rotation);
 
   } catch (const tf2::TransformException &ex) {
-    RCLCPP_ERROR(get_logger(), "Could not transform: %s", ex.what());
+    RCLCPP_ERROR(this->get_logger(), "Could not transform: %s", ex.what());
     return std::nullopt;
   }
 }

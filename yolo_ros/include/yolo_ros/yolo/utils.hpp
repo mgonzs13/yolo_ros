@@ -8,11 +8,12 @@
 #ifndef YOLO_ROS__YOLO__UTILS_HPP_
 #define YOLO_ROS__YOLO__UTILS_HPP_
 
+#include <vector>
+
 #include "onnxruntime_cxx_api.h"
 #include "yolo_msgs/msg/bounding_box2_d.hpp"
 #include <algorithm>
 #include <opencv2/opencv.hpp>
-#include <vector>
 
 /// @addtogroup yolo_tasks
 /// @{
@@ -211,12 +212,13 @@ std::vector<int> nms(std::vector<BoxT> &boxes, float iou_threshold,
     if (boxes[i].score < conf_threshold || suppressed[i]) {
       continue;
     }
+
     indices.push_back(static_cast<int>(i));
+
     for (size_t j = i + 1; j < boxes.size(); ++j) {
       if (suppressed[j] || boxes[j].class_id != boxes[i].class_id) {
         continue;
-      }
-      if (iou(boxes[i], boxes[j]) > iou_threshold) {
+      } else if (iou(boxes[i], boxes[j]) > iou_threshold) {
         suppressed[j] = true;
       }
     }

@@ -43,11 +43,11 @@ public:
 
   /// @brief Whether the estimator performs any work.
   /// @return True unless the method is "none".
-  bool enabled() const { return method_ != "none"; }
+  bool enabled() const { return this->method_ != "none"; }
 
   /// @brief Normalized method name.
   /// @return "none", "sparseoptflow", "orb" or "ecc".
-  const std::string &method() const { return method_; }
+  const std::string &method() const { return this->method_; }
 
   /// @brief Drop the previous-frame state.
   void reset();

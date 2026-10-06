@@ -20,6 +20,7 @@ std::vector<yolo_msgs::msg::Detection>
 YoloClassify::postprocess(const cv::Size &, const cv::Size &,
                           const std::vector<Ort::Value> &preds) {
   std::vector<yolo_msgs::msg::Detection> detections;
+
   if (preds.empty()) {
     return detections;
   }
@@ -31,9 +32,11 @@ YoloClassify::postprocess(const cv::Size &, const cv::Size &,
   // add extra singleton dims, e.g. [1, 1, N]); the number of classes is the
   // product of every dimension after the batch one.
   size_t num_classes = 1;
+
   for (size_t i = 1; i < shape.size(); ++i) {
     num_classes *= static_cast<size_t>(shape[i]);
   }
+
   if (num_classes == 0) {
     return detections;
   }
@@ -49,6 +52,7 @@ YoloClassify::postprocess(const cv::Size &, const cv::Size &,
   const float sum = std::accumulate(scores.begin(), scores.end(), 0.0f,
                                     [](float a, float b) { return a + b; });
   bool already_probs = std::isfinite(sum) && std::abs(sum - 1.0f) < 1e-2f;
+
   if (already_probs) {
     already_probs = std::all_of(scores.begin(), scores.end(),
                                 [](float s) { return s >= 0.0f && s <= 1.0f; });
@@ -57,10 +61,12 @@ YoloClassify::postprocess(const cv::Size &, const cv::Size &,
   if (!already_probs) {
     const float max_score = *std::max_element(scores.begin(), scores.end());
     float exp_sum = 0.0f;
+
     for (float &s : scores) {
       s = std::exp(s - max_score);
       exp_sum += s;
     }
+
     for (float &s : scores) {
       s /= exp_sum;
     }
@@ -78,6 +84,7 @@ YoloClassify::postprocess(const cv::Size &, const cv::Size &,
       [&scores](size_t a, size_t b) { return scores[a] > scores[b]; });
 
   detections.reserve(k);
+
   for (size_t i = 0; i < k; ++i) {
     const size_t class_id = indices[i];
     yolo_msgs::msg::Detection detection;
@@ -86,11 +93,13 @@ YoloClassify::postprocess(const cv::Size &, const cv::Size &,
     detection.score = scores[class_id];
     detection.class_id = static_cast<int32_t>(class_id);
     detection.id = "0";
+
     if (class_id < this->class_names.size()) {
       detection.class_name = this->class_names[class_id];
     } else {
       detection.class_name = "unknown";
     }
+
     detections.push_back(detection);
   }
 

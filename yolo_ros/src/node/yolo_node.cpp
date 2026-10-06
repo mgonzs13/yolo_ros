@@ -21,9 +21,10 @@ YoloNode::on_configure(const rclcpp_lifecycle::State &) {
     this->declare_params();
     this->params_declared = true;
   }
+
   this->yolo_params = this->get_params();
   this->enable_inference_.store(this->yolo_params.enable);
-  RCLCPP_INFO(get_logger(), "[%s] Configured", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Configured", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -32,6 +33,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 YoloNode::on_activate(const rclcpp_lifecycle::State &) {
   int image_reliability = this->yolo_params.image_reliability;
   rclcpp::ReliabilityPolicy qos_reliability_policy;
+
   if (image_reliability == 0) {
     qos_reliability_policy = rclcpp::ReliabilityPolicy::SystemDefault;
   } else if (image_reliability == 1) {
@@ -39,6 +41,7 @@ YoloNode::on_activate(const rclcpp_lifecycle::State &) {
   } else {
     qos_reliability_policy = rclcpp::ReliabilityPolicy::BestEffort;
   }
+
   auto img_sub_qos = rclcpp::QoS(1).reliability(qos_reliability_policy);
 
   this->detection_publisher =
@@ -60,7 +63,7 @@ YoloNode::on_activate(const rclcpp_lifecycle::State &) {
                                std::placeholders::_1, std::placeholders::_2));
 
   this->create_yolo(this->yolo_params);
-  RCLCPP_INFO(get_logger(), "[%s] Activated", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Activated", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -72,21 +75,21 @@ YoloNode::on_deactivate(const rclcpp_lifecycle::State &) {
   this->set_classes_service_.reset();
   this->detection_publisher.reset();
   this->image_subscription.reset();
-  RCLCPP_INFO(get_logger(), "[%s] Deactivated", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Deactivated", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 YoloNode::on_cleanup(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(get_logger(), "[%s] Cleaned up", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Cleaned up", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 YoloNode::on_shutdown(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(get_logger(), "[%s] Shutting down", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Shutting down", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -150,28 +153,31 @@ yolo_ros::yolo::utils::YoloParams yolo_ros::node::YoloNode::get_params() {
     auto result = huggingface_hub::hf_hub_download_with_shards(
         params.model_repo, params.model_filename, params.cache_dir,
         params.force_download);
+
     if (result.success) {
       params.model_path = result.path;
-      RCLCPP_INFO(get_logger(), "[huggingface] model %s/%s -> %s",
+      RCLCPP_INFO(this->get_logger(), "[huggingface] model %s/%s -> %s",
                   params.model_repo.c_str(), params.model_filename.c_str(),
                   result.path.c_str());
     } else {
-      RCLCPP_ERROR(get_logger(),
+      RCLCPP_ERROR(this->get_logger(),
                    "[huggingface] failed to download %s/%s; falling back to "
                    "[local] %s",
                    params.model_repo.c_str(), params.model_filename.c_str(),
                    params.model_path.c_str());
     }
   } else {
-    RCLCPP_INFO(get_logger(), "[local] model %s", params.model_path.c_str());
+    RCLCPP_INFO(this->get_logger(), "[local] model %s",
+                params.model_path.c_str());
   }
+
   return params;
 }
 
 void yolo_ros::node::YoloNode::create_yolo(
     yolo_ros::yolo::utils::YoloParams params) {
   this->yolo_model = yolo_ros::yolo::create_model(params);
-  RCLCPP_INFO(get_logger(), "[%s] Yolo model loaded", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Yolo model loaded", this->get_name());
 }
 
 void YoloNode::destroy_yolo() { this->yolo_model.reset(); }
@@ -181,7 +187,7 @@ void YoloNode::enable_service_callback(
     std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
   this->enable_inference_.store(request->data);
   response->success = true;
-  RCLCPP_INFO(get_logger(), "[%s] inference %s", this->get_name(),
+  RCLCPP_INFO(this->get_logger(), "[%s] inference %s", this->get_name(),
               request->data ? "enabled" : "disabled");
 }
 
@@ -189,11 +195,13 @@ void YoloNode::set_classes_callback(
     const std::shared_ptr<yolo_msgs::srv::SetClasses::Request> request,
     std::shared_ptr<yolo_msgs::srv::SetClasses::Response> response) {
   std::set<std::string> classes;
+
   for (const auto &name : request->classes) {
     if (!name.empty()) {
       classes.insert(name);
     }
   }
+
   {
     std::lock_guard<std::mutex> lock(this->classes_mutex_);
     this->allowed_classes_ = classes;
@@ -203,7 +211,7 @@ void YoloNode::set_classes_callback(
       classes.empty()
           ? "publishing all classes"
           : "publishing " + std::to_string(classes.size()) + " class(es)";
-  RCLCPP_INFO(get_logger(), "[%s] set_classes: %s", this->get_name(),
+  RCLCPP_INFO(this->get_logger(), "[%s] set_classes: %s", this->get_name(),
               response->message.c_str());
 }
 
@@ -215,10 +223,12 @@ void YoloNode::recieve_image_callback(
   if (this->yolo_params.max_fps > 0) {
     const auto now = std::chrono::steady_clock::now();
     const double period_s = 1.0 / this->yolo_params.max_fps;
+
     if (std::chrono::duration<double>(now - this->last_inference_time_)
             .count() < period_s) {
       return; // too soon since the last processed frame: drop this one
     }
+
     this->last_inference_time_ = now;
   }
 
@@ -232,7 +242,7 @@ void YoloNode::recieve_image_callback(
       image =
           cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8)->image;
     } catch (const cv_bridge::Exception &e) {
-      RCLCPP_ERROR(get_logger(), "cv_bridge exception: %s", e.what());
+      RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
       return;
     }
     auto detections = this->yolo_model->detect(image);
@@ -241,6 +251,7 @@ void YoloNode::recieve_image_callback(
     // not in the allowed set. An empty set publishes every class.
     {
       std::lock_guard<std::mutex> lock(this->classes_mutex_);
+
       if (!this->allowed_classes_.empty()) {
         detections.erase(
             std::remove_if(detections.begin(), detections.end(),
@@ -262,23 +273,24 @@ void YoloNode::recieve_image_callback(
     detection_array.detections = detections;
 
     std::map<std::string, int> detections_per_class;
+
     for (const auto &detection : detections) {
       detections_per_class[detection.class_name]++;
     }
 
     if (detections.empty()) {
-      RCLCPP_INFO(get_logger(), "No detections");
+      RCLCPP_INFO(this->get_logger(), "No detections");
     } else {
-      RCLCPP_INFO(get_logger(), "Total detections: %zu;%s", detections.size(),
-                  std::accumulate(detections_per_class.begin(),
-                                  detections_per_class.end(), std::string(),
-                                  [](const std::string &a,
-                                     const std::pair<std::string, int> &b) {
-                                    return a + (a.empty() ? "" : ", ") + " - " +
-                                           b.first + ": " +
-                                           std::to_string(b.second);
-                                  })
-                      .c_str()); // TODO: sometimes it breaks here
+      RCLCPP_INFO(
+          this->get_logger(), "Total detections: %zu;%s", detections.size(),
+          std::accumulate(
+              detections_per_class.begin(), detections_per_class.end(),
+              std::string(),
+              [](const std::string &a, const std::pair<std::string, int> &b) {
+                return a + (a.empty() ? "" : ", ") + " - " + b.first + ": " +
+                       std::to_string(b.second);
+              })
+              .c_str()); // TODO: sometimes it breaks here
     }
 
     // Publish detection array

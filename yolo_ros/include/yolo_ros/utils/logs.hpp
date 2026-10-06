@@ -53,9 +53,11 @@ extern std::atomic<LogLevel> log_level;
 /// @return Pointer inside @p path at the file name.
 inline const char *extract_filename(const char *path) {
   const char *filename = std::strrchr(path, '/');
+
   if (!filename) {
     filename = std::strrchr(path, '\\');
   }
+
   return filename ? filename + 1 : path;
 }
 

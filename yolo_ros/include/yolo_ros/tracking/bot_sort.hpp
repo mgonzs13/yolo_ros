@@ -41,7 +41,7 @@ namespace yolo_ros::tracking {
 /// camera-motion compensator.
 struct BotSortParams : public TrackerParams {
   /// @brief Construct with `type = "botsort"`.
-  BotSortParams() { type = "botsort"; }
+  BotSortParams() { this->type = "botsort"; }
   /// @brief First-stage (high-score) association threshold.
   double track_high_thresh = 0.25;
   /// @brief Second-stage low-score detection threshold.
@@ -154,7 +154,7 @@ public:
 
   /// @brief Current internal frame counter.
   /// @return Number of frames processed since construction/reset().
-  int frame_id() const { return frame_id_; }
+  int frame_id() const { return this->frame_id_; }
 
 private:
   /// @brief Configuration copied at construction.

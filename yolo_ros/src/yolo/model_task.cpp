@@ -42,20 +42,18 @@ ModelTask select_model_task(const std::string &model_type,
        !explicit_pose && !explicit_classify && !by_filename_pose &&
        !by_filename_segment && !by_filename_classify)) {
     return ModelTask::Obb;
-  }
-  if (explicit_pose ||
-      (by_filename_pose && !explicit_detect && !explicit_segment &&
-       !explicit_classify && !by_filename_segment && !by_filename_classify)) {
+  } else if (explicit_pose || (by_filename_pose && !explicit_detect &&
+                               !explicit_segment && !explicit_classify &&
+                               !by_filename_segment && !by_filename_classify)) {
     return ModelTask::Pose;
-  }
-  if (explicit_segment ||
-      (by_filename_segment && !explicit_detect && !explicit_classify)) {
+  } else if (explicit_segment ||
+             (by_filename_segment && !explicit_detect && !explicit_classify)) {
     return ModelTask::Segment;
-  }
-  if (explicit_classify || (by_filename_classify && !explicit_detect &&
-                            !explicit_segment && !by_filename_segment)) {
+  } else if (explicit_classify || (by_filename_classify && !explicit_detect &&
+                                   !explicit_segment && !by_filename_segment)) {
     return ModelTask::Classify;
   }
+
   return ModelTask::Detect;
 }
 

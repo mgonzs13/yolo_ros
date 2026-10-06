@@ -37,6 +37,7 @@ float rotated_iou(const ObbBox &a, const ObbBox &b) {
 
   const float area_a = static_cast<float>(cv::contourArea(pa));
   const float area_b = static_cast<float>(cv::contourArea(pb));
+
   if (area_a <= 0.0f || area_b <= 0.0f) {
     return 0.0f;
   }
@@ -58,20 +59,23 @@ std::vector<int> rotated_nms(std::vector<ObbBox> &boxes, float iou_threshold,
             [](const ObbBox &a, const ObbBox &b) { return a.score > b.score; });
 
   std::vector<bool> suppressed(boxes.size(), false);
+
   for (size_t i = 0; i < boxes.size(); ++i) {
     if (boxes[i].score < conf_threshold || suppressed[i]) {
       continue;
     }
+
     indices.push_back(static_cast<int>(i));
+
     for (size_t j = i + 1; j < boxes.size(); ++j) {
       if (suppressed[j] || boxes[j].class_id != boxes[i].class_id) {
         continue;
-      }
-      if (rotated_iou(boxes[i], boxes[j]) > iou_threshold) {
+      } else if (rotated_iou(boxes[i], boxes[j]) > iou_threshold) {
         suppressed[j] = true;
       }
     }
   }
+
   return indices;
 }
 
@@ -114,6 +118,7 @@ YoloOBB::postprocess(const cv::Size &original_image_size,
                      const cv::Size &resized_image_size,
                      const std::vector<Ort::Value> &preds) {
   std::vector<yolo_msgs::msg::Detection> detection_array;
+
   if (preds.empty()) {
     return detection_array;
   }
@@ -130,15 +135,18 @@ YoloOBB::postprocess(const cv::Size &original_image_size,
                   shape.size());
     return detection_array;
   }
+
   const int64_t num_features = shape[1];
   const int64_t num_detections = shape[2];
   const int num_classes = static_cast<int>(num_features) - 5;
+
   if (num_classes < 1) {
     YOLO_LOG_WARN("YoloOBB: unexpected output feature count %lld; expected "
                   "4 + nc + 1",
                   static_cast<long long>(num_features));
     return detection_array;
   }
+
   const size_t angle_channel = static_cast<size_t>(num_features) - 1;
 
   const float *raw = preds[0].GetTensorData<float>();
@@ -146,16 +154,20 @@ YoloOBB::postprocess(const cv::Size &original_image_size,
 
   std::vector<ObbBox> boxes;
   boxes.reserve(n);
+
   for (size_t i = 0; i < n; ++i) {
     int class_id = -1;
     float max_score = -1.0f;
+
     for (int j = 0; j < num_classes; ++j) {
       const float score = raw[(4 + j) * n + i];
+
       if (score > max_score) {
         max_score = score;
         class_id = j;
       }
     }
+
     // Skip anchors whose best class score is below the threshold (most of the
     // 8400 anchors are background), avoiding the box/scale/NMS work for them.
     if (max_score < this->conf_threshold) {
@@ -170,9 +182,11 @@ YoloOBB::postprocess(const cv::Size &original_image_size,
     box.angle = raw[angle_channel * n + i];
     box.score = max_score;
     box.class_id = class_id;
+
     if (box.w <= 0.0f || box.h <= 0.0f) {
       continue;
     }
+
     boxes.push_back(scale_obb(box, original_image_size, resized_image_size));
   }
 
@@ -192,11 +206,13 @@ YoloOBB::postprocess(const cv::Size &original_image_size,
     detection.score = b.score;
     detection.class_id = b.class_id;
     detection.id = "0";
+
     if (b.class_id < static_cast<int>(this->class_names.size())) {
       detection.class_name = this->class_names[b.class_id];
     } else {
       detection.class_name = "unknown";
     }
+
     detection_array.push_back(detection);
   }
 

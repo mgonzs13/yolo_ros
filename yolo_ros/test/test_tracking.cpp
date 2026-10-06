@@ -35,9 +35,11 @@ TEST(KalmanFilter, InitiateSetsPositionAndZeroVelocity) {
   EXPECT_DOUBLE_EQ(mean[1], 20.0);
   EXPECT_DOUBLE_EQ(mean[2], 2.0);
   EXPECT_DOUBLE_EQ(mean[3], 40.0);
+
   for (int i = 4; i < 8; ++i) {
     EXPECT_DOUBLE_EQ(mean[i], 0.0);
   }
+
   EXPECT_GT(cov[0][0], 0.0);
   EXPECT_GT(cov[3][3], 0.0);
 }
@@ -124,6 +126,7 @@ TEST(Lapjv, IdentityCost) {
       {0.0, 1.0, 2.0}, {2.0, 0.0, 1.0}, {1.0, 2.0, 0.0}};
   std::vector<int> rowsol, colsol;
   ASSERT_EQ(utils::lapjv_internal(3, cost, rowsol, colsol), 0);
+
   for (int i = 0; i < 3; ++i) {
     EXPECT_EQ(rowsol[i], i);
   }
@@ -145,9 +148,11 @@ TEST(KalmanFilterXYWH, InitiateSetsObservationAndZeroVelocity) {
   EXPECT_DOUBLE_EQ(mean[1], 20.0);
   EXPECT_DOUBLE_EQ(mean[2], 30.0);
   EXPECT_DOUBLE_EQ(mean[3], 40.0);
+
   for (int i = 4; i < 8; ++i) {
     EXPECT_DOUBLE_EQ(mean[i], 0.0);
   }
+
   EXPECT_GT(cov[0][0], 0.0);
   EXPECT_GT(cov[2][2], 0.0);
   EXPECT_GT(cov[3][3], 0.0);
@@ -335,6 +340,7 @@ TEST(ByteTrack, DropsTrackAfterBufferExpiry) {
   const auto out1 = tracker.update(high);
   ASSERT_EQ(out1.size(), 1u);
   const int id = out1[0].id;
+
   // The expired track is dropped from the lost pool after a short grace
   // (upstream ByteTrack's removal ordering); once gone, a new detection must
   // get a fresh id rather than reviving the old one. A brand-new track is only
@@ -342,10 +348,13 @@ TEST(ByteTrack, DropsTrackAfterBufferExpiry) {
   for (int i = 0; i < 4; ++i) {
     EXPECT_TRUE(tracker.update({}).empty());
   }
+
   const auto first = tracker.update(high);
+
   for (const auto &t : first) {
     EXPECT_NE(t.id, id);
   }
+
   const auto out = tracker.update(high);
   ASSERT_EQ(out.size(), 1u);
   EXPECT_NE(out[0].id, id);
@@ -424,11 +433,13 @@ TEST(CameraMotionCompensator, FirstFrameIsIdentity) {
 TEST(CameraMotionCompensator, SparseOptFlowRecoversTranslation) {
   utils::CameraMotionCompensator cmc("sparseOptFlow", 1);
   cv::Mat frame1(240, 320, CV_8UC1, cv::Scalar(0));
+
   for (int y = 20; y < 220; y += 40) {
     for (int x = 20; x < 300; x += 40) {
       cv::circle(frame1, cv::Point(x, y), 5, cv::Scalar(255), cv::FILLED);
     }
   }
+
   cv::Mat frame2;
   const cv::Mat translate = (cv::Mat_<double>(2, 3) << 1, 0, 4, 0, 1, -3);
   cv::warpAffine(frame1, frame2, translate, frame1.size());
@@ -493,9 +504,11 @@ TEST(BotSort, ExpiresLostTrackAfterBuffer) {
   const auto out1 = tracker.update(dets);
   ASSERT_EQ(out1.size(), 1u);
   const int id = out1[0].id;
+
   for (int i = 0; i < 4; ++i) {
     EXPECT_TRUE(tracker.update({}).empty());
   }
+
   const auto out = tracker.update(dets);
   ASSERT_EQ(out.size(), 1u);
   EXPECT_NE(out[0].id, id);
@@ -671,9 +684,11 @@ TEST(ReIDEncoder, MakeBatchHandlesDegenerateAndOutOfFrameBoxes) {
   std::vector<float> out;
   ASSERT_NO_THROW(engine::ReIDEncoder::make_batch(frame, boxes, 4, 2, out));
   ASSERT_EQ(out.size(), 2u * 3u * 2u * 4u);
+
   for (const float value : out) {
     EXPECT_TRUE(std::isfinite(value));
   }
+
   // Box 1 lies entirely outside the frame: its whole 3*H*W slice stays zero
   // (3 channels * 2 * 4 = 24 floats per box, so [24, 48)).
   for (std::size_t i = 24; i < 48; ++i) {
@@ -717,9 +732,11 @@ TEST(ReIDEncoder, ProducesUnitNormEmbeddingsWhenModelAvailable) {
   const std::string path =
       env != nullptr ? env : "/home/agonzc34/models/osnet_x0_25_reid.onnx";
   std::ifstream probe(path);
+
   if (!probe.good()) {
     GTEST_SKIP() << "set YOLO_ROS_REID_MODEL to a ReID ONNX model to run this";
   }
+
   engine::ReIDEncoder encoder(path, "cpu", "cpu");
   cv::Mat frame(240, 320, CV_8UC3, cv::Scalar(10, 20, 30));
   const std::vector<std::array<float, 4>> boxes = {{10, 10, 90, 210},
@@ -727,11 +744,14 @@ TEST(ReIDEncoder, ProducesUnitNormEmbeddingsWhenModelAvailable) {
   const auto feats = encoder.inference(frame, boxes);
   ASSERT_EQ(feats.size(), 2u);
   EXPECT_EQ(feats[0].size(), 512u);
+
   for (const auto &feature : feats) {
     double norm = 0.0;
+
     for (const float value : feature) {
       norm += static_cast<double>(value) * value;
     }
+
     EXPECT_NEAR(std::sqrt(norm), 1.0, 1e-3);
   }
 }

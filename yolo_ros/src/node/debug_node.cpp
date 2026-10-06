@@ -87,7 +87,7 @@ DebugNode::DebugNode()
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 DebugNode::on_configure(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(get_logger(), "[%s] Configuring...", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Configuring...", this->get_name());
 
   this->image_topic_ = this->get_parameter("image_topic").as_string();
   this->detections_topic_ = this->get_parameter("detections_topic").as_string();
@@ -121,17 +121,18 @@ DebugNode::on_configure(const rclcpp_lifecycle::State &) {
       this->create_publisher<visualization_msgs::msg::MarkerArray>(
           "debug_kp_markers", 10);
 
-  RCLCPP_INFO(get_logger(), "[%s] Configured", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Configured", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 DebugNode::on_activate(const rclcpp_lifecycle::State &) {
-  this->image_subscription.subscribe(this->shared_from_this(),
-                                     this->image_topic_, image_qos_profile);
-  this->detection_subscription.subscribe(
-      this->shared_from_this(), this->detections_topic_, image_qos_profile);
+  this->image_subscription.subscribe(
+      this->shared_from_this(), this->image_topic_, this->image_qos_profile);
+  this->detection_subscription.subscribe(this->shared_from_this(),
+                                         this->detections_topic_,
+                                         this->image_qos_profile);
 
   uint32_t queue_size = 10;
 
@@ -152,7 +153,7 @@ DebugNode::on_activate(const rclcpp_lifecycle::State &) {
           this->markers_topic_, rclcpp::QoS(1),
           std::bind(&DebugNode::markers_callback, this, std::placeholders::_1));
 
-  RCLCPP_INFO(get_logger(), "[%s] Activated", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Activated", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -160,21 +161,21 @@ DebugNode::on_activate(const rclcpp_lifecycle::State &) {
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 DebugNode::on_deactivate(const rclcpp_lifecycle::State &) {
   this->markers_subscription_.reset();
-  RCLCPP_INFO(get_logger(), "[%s] Deactivated", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Deactivated", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 DebugNode::on_cleanup(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(get_logger(), "[%s] Cleaned up", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Cleaned up", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 DebugNode::on_shutdown(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(get_logger(), "[%s] Shutting down", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Shutting down", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -187,7 +188,7 @@ void DebugNode::recieve_callback(
   try {
     cv_ptr = cv_bridge::toCvCopy(msg_image, sensor_msgs::image_encodings::BGR8);
   } catch (cv_bridge::Exception &e) {
-    RCLCPP_ERROR(get_logger(), "cv_bridge exception: %s", e.what());
+    RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
     return;
   }
 
@@ -216,20 +217,21 @@ void DebugNode::recieve_callback(
   int image_label_y = 0;
 
   for (const auto *detection : image_level) {
-    const auto color = color_for_class(detection->class_name);
-    image_label_y +=
-        draw_label(image, label_text(*detection),
-                   cv::Point(kLabelInset, kLabelInset + image_label_y), color);
+    const auto color = this->color_for_class(detection->class_name);
+    image_label_y += this->draw_label(
+        image, this->label_text(*detection),
+        cv::Point(kLabelInset, kLabelInset + image_label_y), color);
   }
 
   for (const auto &detection : msg_detections->detections) {
     if (detection.bbox.size.x <= 0.0 && detection.bbox.size.y <= 0.0) {
       continue; // image-level label already drawn above
     }
-    auto color = color_for_class(detection.class_name);
-    image = draw_box(image, detection, color);
-    draw_mask(overlay, image, detection, color);
-    image = draw_keypoints(image, detection);
+
+    auto color = this->color_for_class(detection.class_name);
+    image = this->draw_box(image, detection, color);
+    this->draw_mask(overlay, image, detection, color);
+    image = this->draw_keypoints(image, detection);
   }
 
   cv::addWeighted(overlay, 0.4, image, 0.6, 0, image);
@@ -257,7 +259,7 @@ void DebugNode::markers_callback(
   visualization_msgs::msg::MarkerArray kp_marker_array;
 
   for (const auto &detection : msg_detections->detections) {
-    auto color = color_for_class(detection.class_name);
+    auto color = this->color_for_class(detection.class_name);
 
     // RViz markers for the 3D boxes (emitted only when a detect_3d node has
     // enriched the stream with bbox3d).
@@ -271,6 +273,7 @@ void DebugNode::markers_callback(
     // RViz markers for the 3D keypoints (pose output from a detect_3d node).
     if (!detection.keypoints3d.frame_id.empty()) {
       std::map<int, const yolo_msgs::msg::KeyPoint3D *> points;
+
       for (const auto &keypoint : detection.keypoints3d.data) {
         points[keypoint.id] = &keypoint;
 
@@ -307,9 +310,9 @@ void DebugNode::markers_callback(
 }
 
 cv::Scalar DebugNode::color_for_class(const std::string &class_name) {
-  auto color_it = class_to_color.find(class_name);
+  auto color_it = this->class_to_color.find(class_name);
 
-  if (color_it == class_to_color.end()) {
+  if (color_it == this->class_to_color.end()) {
     // Deterministic FNV-1a hash of the class name so the same class always
     // gets the same color across runs (rand() made colors change every run).
     uint32_t hash = 2166136261u;
@@ -319,8 +322,8 @@ cv::Scalar DebugNode::color_for_class(const std::string &class_name) {
       hash *= 16777619u;
     }
 
-    class_to_color[class_name] = vivid_bgr(static_cast<int>(hash % 180));
-    color_it = class_to_color.find(class_name);
+    this->class_to_color[class_name] = vivid_bgr(static_cast<int>(hash % 180));
+    color_it = this->class_to_color.find(class_name);
   }
 
   return color_it->second;
@@ -414,6 +417,7 @@ int DebugNode::draw_label(const cv::Mat &image, const std::string &text,
   // touching the border), so the text is never clipped.
   int x0 = anchor.x;
   int y0 = anchor.y;
+
   if (x0 + label_w > image.cols) {
     x0 = image.cols - label_w;
   }
@@ -468,9 +472,11 @@ void DebugNode::draw_mask(cv::Mat &overlay, cv::Mat &image,
   // Convert ROS Point2D (float64) mask boundary points to OpenCV points
   std::vector<std::vector<cv::Point>> contours(1);
   contours[0].reserve(detection.mask.data.size());
+
   for (const auto &p : detection.mask.data) {
     contours[0].emplace_back(cvRound(p.x), cvRound(p.y));
   }
+
   // Fill the mask onto the shared overlay layer (blended once by the caller)
   // and draw the crisp outline directly on the final image.
   cv::fillPoly(overlay, contours, color, cv::LINE_AA);
@@ -484,6 +490,7 @@ cv::Mat DebugNode::draw_keypoints(const cv::Mat &image,
   }
 
   std::map<int, cv::Point> points;
+
   for (const auto &kp : detection.keypoints.data) {
     const auto pt = cv::Point(cvRound(kp.point.x), cvRound(kp.point.y));
     points[kp.id] = pt;
@@ -498,6 +505,7 @@ cv::Mat DebugNode::draw_keypoints(const cv::Mat &image,
   for (int i = 0; i < kNumSkeletonLimbs; ++i) {
     auto it1 = points.find(kSkeleton[i][0]);
     auto it2 = points.find(kSkeleton[i][1]);
+
     if (it1 != points.end() && it2 != points.end()) {
       cv::line(image, it1->second, it2->second, indexed_color(i + 32), 2,
                cv::LINE_AA);

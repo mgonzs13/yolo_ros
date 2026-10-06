@@ -42,7 +42,7 @@ public:
         max_batch_(std::max<std::size_t>(1, max_batch)) {}
 
   /// @brief Stop the worker (if running) and destroy the scheduler.
-  ~BatchScheduler() { stop(); }
+  ~BatchScheduler() { this->stop(); }
 
   BatchScheduler(const BatchScheduler &) = delete;
   BatchScheduler &operator=(const BatchScheduler &) = delete;
@@ -51,39 +51,42 @@ public:
   /// @param callback Invoked for each drained batch.
   void start(Callback callback) {
     {
-      std::lock_guard<std::mutex> lock(mutex_);
-      callback_ = std::move(callback);
-      stopping_ = false;
+      std::lock_guard<std::mutex> lock(this->mutex_);
+      this->callback_ = std::move(callback);
+      this->stopping_ = false;
     }
-    worker_ = std::thread([this] { run(); });
+    this->worker_ = std::thread([this] { this->run(); });
   }
 
   /// @brief Signal the worker to stop and join it. Safe to call twice.
   void stop() {
     {
-      std::lock_guard<std::mutex> lock(mutex_);
-      if (!worker_.joinable()) {
+      std::lock_guard<std::mutex> lock(this->mutex_);
+
+      if (!this->worker_.joinable()) {
         return;
       }
-      stopping_ = true;
+
+      this->stopping_ = true;
     }
-    cond_.notify_all();
-    worker_.join();
+    this->cond_.notify_all();
+    this->worker_.join();
   }
 
   /// @brief Store @p frame as the latest pending frame for @p camera.
   /// @param camera Camera index; out-of-range values are ignored.
   /// @param frame Payload to enqueue (overwrites any pending one).
   void push(std::size_t camera, T frame) {
-    if (camera >= slots_.size()) {
+    if (camera >= this->slots_.size()) {
       return;
     }
+
     {
-      std::lock_guard<std::mutex> lock(mutex_);
-      slots_[camera] = std::move(frame);
-      ready_[camera] = true;
+      std::lock_guard<std::mutex> lock(this->mutex_);
+      this->slots_[camera] = std::move(frame);
+      this->ready_[camera] = true;
     }
-    cond_.notify_one();
+    this->cond_.notify_one();
   }
 
 private:
@@ -93,30 +96,34 @@ private:
     for (;;) {
       Batch batch;
       {
-        std::unique_lock<std::mutex> lock(mutex_);
-        cond_.wait(lock, [this] { return stopping_ || any_ready(); });
-        if (stopping_) {
+        std::unique_lock<std::mutex> lock(this->mutex_);
+        this->cond_.wait(
+            lock, [this] { return this->stopping_ || this->any_ready(); });
+
+        if (this->stopping_) {
           return; // drop pending frames on shutdown
         }
-        for (std::size_t i = 0; i < slots_.size() && batch.size() < max_batch_;
-             ++i) {
-          if (ready_[i]) {
-            batch.emplace_back(i, std::move(slots_[i]));
-            ready_[i] = false;
+
+        for (std::size_t i = 0;
+             i < this->slots_.size() && batch.size() < this->max_batch_; ++i) {
+          if (this->ready_[i]) {
+            batch.emplace_back(i, std::move(this->slots_[i]));
+            this->ready_[i] = false;
           }
         }
       }
-      callback_(std::move(batch));
+      this->callback_(std::move(batch));
     }
   }
 
   /// @brief Whether at least one slot holds a pending frame.
   bool any_ready() const {
-    for (const bool ready : ready_) {
+    for (const bool ready : this->ready_) {
       if (ready) {
         return true;
       }
     }
+
     return false;
   }
 

@@ -52,11 +52,13 @@ YoloDetect::postprocess(const cv::Size &original_image_size,
     detection.score = detections[i].score;
     detection.class_id = detections[i].class_id;
     detection.id = "0";
+
     if (detections[i].class_id < static_cast<int>(this->class_names.size())) {
       detection.class_name = this->class_names[detections[i].class_id];
     } else {
       detection.class_name = "unknown";
     }
+
     detection_array.push_back(detection);
   }
 
@@ -67,6 +69,7 @@ std::vector<yolo_ros::yolo::utils::Box> get_detection_without_nms(
     const std::vector<Ort::Value> &preds, std::vector<int64_t> output_shape,
     const cv::Size &original_image_size, const cv::Size &resized_image_size) {
   std::vector<yolo_ros::yolo::utils::Box> boxes;
+
   for (size_t i = 0; i < preds.size(); ++i) {
     auto pred = preds[i].GetTensorData<float>();
 
@@ -111,9 +114,11 @@ std::vector<yolo_ros::yolo::utils::Box> get_detection_with_nms(
   auto indices =
       yolo_ros::yolo::utils::nms(boxes, iou_threshold, conf_threshold);
   std::vector<yolo_ros::yolo::utils::Box> filtered_boxes;
+
   for (size_t i = 0; i < indices.size(); ++i) {
     filtered_boxes.push_back(boxes[indices[i]]);
   }
+
   return filtered_boxes;
 }
 

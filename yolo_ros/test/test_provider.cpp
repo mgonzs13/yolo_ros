@@ -170,6 +170,7 @@ TEST(BuildSessionOptions, AvailableGpuProvidersDoNotThrow) {
   ProviderConfig config;
   config.n_threads = 1;
   config.trt_engine_cache_enable = false; // do not write anything to disk
+
   if (std::find(available.begin(), available.end(), Provider::Cuda) !=
       available.end()) {
     EXPECT_NO_THROW({
@@ -177,6 +178,7 @@ TEST(BuildSessionOptions, AvailableGpuProvidersDoNotThrow) {
       (void)options;
     });
   }
+
   if (std::find(available.begin(), available.end(), Provider::TensorRt) !=
       available.end()) {
     EXPECT_NO_THROW({

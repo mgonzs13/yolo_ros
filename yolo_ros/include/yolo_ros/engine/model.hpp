@@ -10,14 +10,17 @@
 
 #include "yolo_msgs/msg/detection.hpp"
 #include "yolo_ros/yolo/utils.hpp"
+
 #if defined(CV_BRIDGE_H)
 #include <cv_bridge/cv_bridge.h>
 #else
 #include <cv_bridge/cv_bridge.hpp>
 #endif
-#include <cstddef>
+
 #include <onnxruntime_cxx_api.h>
 #include <opencv2/opencv.hpp>
+
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -57,7 +60,7 @@ public:
 
   /// @brief Name of the execution provider that initialized the session.
   /// @return "cpu", "cuda" or "tensorrt".
-  const std::string &active_provider() const { return active_provider_; }
+  const std::string &active_provider() const { return this->active_provider_; }
 
   /// @brief Confidence threshold for detections, in [0, 1]. @see detect()
   float conf_threshold{0.5}; // Confidence threshold for detections

@@ -29,7 +29,7 @@ TrackingNode::TrackingNode()
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 TrackingNode::on_configure(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(get_logger(), "[%s] Configuring...", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Configuring...", this->get_name());
 
   this->load_params();
 
@@ -54,17 +54,17 @@ TrackingNode::on_configure(const rclcpp_lifecycle::State &) {
   this->tracking_publisher_ =
       this->create_publisher<yolo_msgs::msg::DetectionArray>("tracking", 10);
 
-  RCLCPP_INFO(get_logger(), "[%s] Configured", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Configured", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 TrackingNode::on_activate(const rclcpp_lifecycle::State &) {
-  this->image_subscription_.subscribe(this->shared_from_this(),
-                                      this->image_topic_, image_qos_profile_);
-  this->detection_subscription_.subscribe(this->shared_from_this(),
-                                          "detections", image_qos_profile_);
+  this->image_subscription_.subscribe(
+      this->shared_from_this(), this->image_topic_, this->image_qos_profile_);
+  this->detection_subscription_.subscribe(
+      this->shared_from_this(), "detections", this->image_qos_profile_);
 
   this->synchronizer_ =
       std::make_shared<message_filters::Synchronizer<TrackingSyncPolicy>>(10);
@@ -74,7 +74,7 @@ TrackingNode::on_activate(const rclcpp_lifecycle::State &) {
       std::bind(&TrackingNode::recieve_callback, this, std::placeholders::_1,
                 std::placeholders::_2));
 
-  RCLCPP_INFO(get_logger(), "[%s] Activated", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Activated", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -84,7 +84,7 @@ TrackingNode::on_deactivate(const rclcpp_lifecycle::State &) {
   this->detection_subscription_.unsubscribe();
   this->image_subscription_.unsubscribe();
   this->synchronizer_.reset();
-  RCLCPP_INFO(get_logger(), "[%s] Deactivated", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Deactivated", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -93,14 +93,14 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 TrackingNode::on_cleanup(const rclcpp_lifecycle::State &) {
   this->tracker_.reset();
   this->tracking_publisher_.reset();
-  RCLCPP_INFO(get_logger(), "[%s] Cleaned up", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Cleaned up", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 TrackingNode::on_shutdown(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(get_logger(), "[%s] Shutting down", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Shutting down", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -195,6 +195,7 @@ void TrackingNode::recieve_callback(
   // keypoints, ...) can be fetched back after tracking.
   std::vector<yolo_ros::tracking::TrackDetection> dets;
   dets.reserve(msg_detections->detections.size());
+
   for (std::size_t i = 0; i < msg_detections->detections.size(); ++i) {
     const auto &det = msg_detections->detections[i];
 
@@ -216,6 +217,7 @@ void TrackingNode::recieve_callback(
   // Camera-motion compensation needs the current frame; decode it only when
   // the active tracker actually consumes it (BoT-SORT with gmc_method != none).
   cv::Mat frame;
+
   if (this->tracker_->needs_frame()) {
     try {
       frame = cv_bridge::toCvShare(msg_image, "bgr8")->image;

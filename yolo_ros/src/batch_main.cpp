@@ -14,15 +14,15 @@ int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
 
   auto node = std::make_shared<BatchNode>();
+
   if (node->configure().id() !=
       lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE) {
     RCLCPP_ERROR(node->get_logger(), "Failed to configure %s",
                  node->get_name());
     rclcpp::shutdown();
     return 1;
-  }
-  if (node->activate().id() !=
-      lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE) {
+  } else if (node->activate().id() !=
+             lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE) {
     RCLCPP_ERROR(node->get_logger(), "Failed to activate %s", node->get_name());
     rclcpp::shutdown();
     return 1;

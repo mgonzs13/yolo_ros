@@ -17,7 +17,7 @@ namespace yolo_ros::tracking {
 
 std::vector<Track>
 Tracker::update(const std::vector<TrackDetection> &detections) {
-  return update(detections, cv::Mat{});
+  return this->update(detections, cv::Mat{});
 }
 
 std::unique_ptr<Tracker> create_tracker(const TrackerParams &params) {
@@ -35,17 +35,19 @@ std::unique_ptr<Tracker> create_tracker(const TrackerParams &params) {
     // struct for the requested tracker — report it via the nullptr return
     // instead of throwing std::bad_cast.
     const auto *byte_params = dynamic_cast<const ByteTrackParams *>(&params);
+
     if (byte_params == nullptr) {
       return nullptr;
     }
-    return std::make_unique<ByteTrack>(*byte_params);
-  }
 
-  if (type == "botsort") {
+    return std::make_unique<ByteTrack>(*byte_params);
+  } else if (type == "botsort") {
     const auto *bot_params = dynamic_cast<const BotSortParams *>(&params);
+
     if (bot_params == nullptr) {
       return nullptr;
     }
+
     return std::make_unique<BotSort>(*bot_params);
   }
 

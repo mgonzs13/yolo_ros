@@ -34,7 +34,7 @@ public:
   Tensor &operator=(const Tensor &) = delete;
   Tensor(Tensor &&) = delete;
 
-  Ort::Value &value() { return value_; }
+  Ort::Value &value() { return this->value_; }
 
 private:
   std::vector<int64_t> shape_;

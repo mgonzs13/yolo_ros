@@ -25,10 +25,10 @@ namespace {
 rclcpp::ReliabilityPolicy reliability_from(int value) {
   if (value == 0) {
     return rclcpp::ReliabilityPolicy::SystemDefault;
-  }
-  if (value == 1) {
+  } else if (value == 1) {
     return rclcpp::ReliabilityPolicy::Reliable;
   }
+
   return rclcpp::ReliabilityPolicy::BestEffort;
 }
 
@@ -50,7 +50,7 @@ BatchNode::on_configure(const rclcpp_lifecycle::State &) {
         CallbackReturn::FAILURE;
   }
 
-  RCLCPP_INFO(get_logger(), "[%s] Configured", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Configured", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -94,7 +94,7 @@ BatchNode::on_activate(const rclcpp_lifecycle::State &) {
         this->process_batch(std::move(batch));
       });
 
-  // Reset the inference counters and start the fixed 5 s stats reporter.
+  // Reset the inference counters and start the fixed 5s stats reporter.
   {
     std::lock_guard<std::mutex> lock(this->stats_mutex_);
     this->stats_ = Stats{};
@@ -105,7 +105,8 @@ BatchNode::on_activate(const rclcpp_lifecycle::State &) {
   this->stats_timer_ = this->create_wall_timer(
       std::chrono::seconds(5), std::bind(&BatchNode::report_stats, this));
 
-  RCLCPP_INFO(get_logger(), "[%s] Activated with %zu camera(s), max batch %zu",
+  RCLCPP_INFO(this->get_logger(),
+              "[%s] Activated with %zu camera(s), max batch %zu",
               this->get_name(), count, this->max_batch_size_);
 
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -115,7 +116,7 @@ BatchNode::on_activate(const rclcpp_lifecycle::State &) {
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 BatchNode::on_deactivate(const rclcpp_lifecycle::State &) {
   this->teardown();
-  RCLCPP_INFO(get_logger(), "[%s] Deactivated", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Deactivated", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -123,7 +124,7 @@ BatchNode::on_deactivate(const rclcpp_lifecycle::State &) {
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 BatchNode::on_cleanup(const rclcpp_lifecycle::State &) {
   this->teardown();
-  RCLCPP_INFO(get_logger(), "[%s] Cleaned up", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Cleaned up", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -131,17 +132,19 @@ BatchNode::on_cleanup(const rclcpp_lifecycle::State &) {
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 BatchNode::on_shutdown(const rclcpp_lifecycle::State &) {
   this->teardown();
-  RCLCPP_INFO(get_logger(), "[%s] Shutting down", this->get_name());
+  RCLCPP_INFO(this->get_logger(), "[%s] Shutting down", this->get_name());
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
 
 void BatchNode::teardown() {
   this->stats_timer_.reset();
+
   if (this->scheduler_) {
     this->scheduler_->stop();
     this->scheduler_.reset();
   }
+
   this->yolo_model_.reset();
   this->enable_service_.reset();
   this->set_classes_service_.reset();
@@ -206,14 +209,13 @@ bool BatchNode::load_params() {
   this->max_batch_size_ = static_cast<std::size_t>(std::max(1, max_batch));
 
   if (this->camera_names_.size() != this->image_topics_.size()) {
-    RCLCPP_ERROR(get_logger(),
+    RCLCPP_ERROR(this->get_logger(),
                  "camera_names and image_topics must have the same length");
     return false;
   }
-
   // Hugging Face Hub: keep the same precedence as yolo_node.
-  if (!this->yolo_params_.model_repo.empty() &&
-      !this->yolo_params_.model_filename.empty()) {
+  else if (!this->yolo_params_.model_repo.empty() &&
+           !this->yolo_params_.model_filename.empty()) {
     auto result = huggingface_hub::hf_hub_download_with_shards(
         this->yolo_params_.model_repo, this->yolo_params_.model_filename,
         this->yolo_params_.cache_dir, this->yolo_params_.force_download);
@@ -221,7 +223,7 @@ bool BatchNode::load_params() {
     if (result.success) {
       this->yolo_params_.model_path = result.path;
     } else {
-      RCLCPP_ERROR(get_logger(),
+      RCLCPP_ERROR(this->get_logger(),
                    "[huggingface] failed to download %s/%s; using %s",
                    this->yolo_params_.model_repo.c_str(),
                    this->yolo_params_.model_filename.c_str(),
@@ -236,14 +238,14 @@ void BatchNode::image_callback(std::size_t camera,
                                const sensor_msgs::msg::Image::SharedPtr msg) {
   if (!this->enable_inference_.load()) {
     return;
-  }
-
-  if (this->yolo_params_.max_fps > 0) {
+  } else if (this->yolo_params_.max_fps > 0) {
     const auto now = std::chrono::steady_clock::now();
+
     if (std::chrono::duration<double>(now - this->last_inference_time_)
             .count() < 1.0 / this->yolo_params_.max_fps) {
       return;
     }
+
     this->last_inference_time_ = now;
   }
 
@@ -270,7 +272,7 @@ void BatchNode::process_batch(
                                            sensor_msgs::image_encodings::BGR8)
                            ->image);
     } catch (const cv_bridge::Exception &e) {
-      RCLCPP_ERROR(get_logger(), "cv_bridge exception: %s", e.what());
+      RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
       continue;
     }
     decoded.push_back(std::move(item));
@@ -286,7 +288,7 @@ void BatchNode::process_batch(
   try {
     results = this->yolo_model_->detect_batch(images);
   } catch (const std::exception &e) {
-    RCLCPP_ERROR(get_logger(), "batch inference failed: %s", e.what());
+    RCLCPP_ERROR(this->get_logger(), "batch inference failed: %s", e.what());
     return;
   }
 
@@ -341,6 +343,7 @@ void BatchNode::process_batch(
 
     for (std::size_t i = 0; i < processed; ++i) {
       const std::size_t camera = decoded[i].first;
+
       if (camera < this->stats_.per_camera.size()) {
         this->stats_.per_camera[camera] += 1;
       }
@@ -380,10 +383,12 @@ void BatchNode::report_stats() {
           : 0.0;
 
   std::string cameras;
+
   for (std::size_t i = 0; i < snapshot.per_camera.size(); ++i) {
     if (i > 0) {
       cameras += ", ";
     }
+
     cameras += this->camera_names_[i];
     cameras += " +";
     cameras += std::to_string(snapshot.per_camera[i]);
@@ -391,10 +396,12 @@ void BatchNode::report_stats() {
   }
 
   std::string classes;
+
   for (const auto &name : snapshot.interval_classes) {
     if (!classes.empty()) {
       classes += ", ";
     }
+
     classes += name;
   }
 
@@ -402,7 +409,7 @@ void BatchNode::report_stats() {
     classes = "(none)";
   }
 
-  RCLCPP_INFO(get_logger(),
+  RCLCPP_INFO(this->get_logger(),
               "[%s] stats: processed=%llu img (interval +%llu img, %.1f img/s) "
               "batch=%.2f img/batch (max %zu) infer=%.1f ms | cameras: %s | "
               "classes: %s",
@@ -418,7 +425,7 @@ void BatchNode::enable_service_callback(
     std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
   this->enable_inference_.store(request->data);
   response->success = true;
-  RCLCPP_INFO(get_logger(), "[%s] inference %s", this->get_name(),
+  RCLCPP_INFO(this->get_logger(), "[%s] inference %s", this->get_name(),
               request->data ? "enabled" : "disabled");
 }
 
@@ -443,7 +450,7 @@ void BatchNode::set_classes_callback(
       classes.empty()
           ? "publishing all classes"
           : "publishing " + std::to_string(classes.size()) + " class(es)";
-  RCLCPP_INFO(get_logger(), "[%s] set_classes: %s", this->get_name(),
+  RCLCPP_INFO(this->get_logger(), "[%s] set_classes: %s", this->get_name(),
               response->message.c_str());
 }
 

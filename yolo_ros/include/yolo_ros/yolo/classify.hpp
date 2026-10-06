@@ -7,10 +7,11 @@
 #ifndef YOLO_ROS__YOLO__CLASSIFY_HPP_
 #define YOLO_ROS__YOLO__CLASSIFY_HPP_
 
+#include <vector>
+
 #include "yolo_msgs/msg/detection.hpp"
 #include "yolo_ros/engine/model.hpp"
 #include "yolo_ros/yolo/utils.hpp"
-#include <vector>
 
 /// @addtogroup yolo_tasks
 /// @{

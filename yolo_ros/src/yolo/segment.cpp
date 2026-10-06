@@ -42,6 +42,7 @@ std::vector<yolo_msgs::msg::Detection> masks_to_detections(
 
   std::vector<cv::Mat> mask_protos;
   const float *mask_ptr = preds[1].GetTensorData<float>();
+
   for (int64_t i = 0; i < mask_shape[1]; ++i) {
     cv::Mat mask(mask_h, mask_w, CV_32F,
                  const_cast<float *>(mask_ptr + i * mask_h * mask_w));
@@ -49,6 +50,7 @@ std::vector<yolo_msgs::msg::Detection> masks_to_detections(
   }
 
   std::vector<std::vector<cv::Point>> masks;
+
   for (size_t i = 0; i < bbox_array.size(); ++i) {
     const auto &mask_coeffs = bbox_array[i].mask_coeffs;
     cv::Mat seg_mask = cv::Mat::zeros(mask_h, mask_w, CV_32F);
@@ -80,6 +82,7 @@ std::vector<yolo_msgs::msg::Detection> masks_to_detections(
                  bbox_array[i].y2 - bbox_array[i].y1);
     roi &= cv::Rect(0, 0, filtered_seg_mask.cols, filtered_seg_mask.rows);
     cv::Mat cropped_mask = cv::Mat::zeros(filtered_seg_mask.size(), CV_8U);
+
     if (roi.area() > 0) {
       filtered_seg_mask(roi).copyTo(cropped_mask(roi));
     }
@@ -92,13 +95,16 @@ std::vector<yolo_msgs::msg::Detection> masks_to_detections(
     // Find the largest contour
     double max_area = 0;
     int max_contour_index = -1;
+
     for (size_t j = 0; j < contours.size(); ++j) {
       double area = cv::contourArea(contours[j]);
+
       if (area > max_area) {
         max_area = area;
         max_contour_index = static_cast<int>(j);
       }
     }
+
     if (max_contour_index != -1) {
       masks.push_back(contours[max_contour_index]);
     } else {
@@ -115,6 +121,7 @@ std::vector<yolo_msgs::msg::Detection> masks_to_detections(
     detection.mask.height = original_image_size.height;
     detection.mask.width = original_image_size.width;
     detection.mask.data.clear();
+
     for (const auto &point : masks[i]) {
       yolo_msgs::msg::Point2D point2d;
       point2d.x = point.x;
@@ -126,11 +133,13 @@ std::vector<yolo_msgs::msg::Detection> masks_to_detections(
     detection.score = bbox_array[i].score;
     detection.class_id = bbox_array[i].class_id;
     detection.id = "0";
+
     if (bbox_array[i].class_id < static_cast<int>(class_names.size())) {
       detection.class_name = class_names[bbox_array[i].class_id];
     } else {
       detection.class_name = "unknown";
     }
+
     detection_array.push_back(detection);
   }
 
@@ -160,12 +169,14 @@ YoloSegment::postprocess(const cv::Size &original_image_size,
   const bool baked_head = shape.size() >= 2 && shape.back() == 4 + 2 + kProtos;
 
   std::vector<yolo_ros::yolo::utils::BoxWithMask> bbox_array;
+
   if (baked_head) {
     bbox_array = get_segmentation_baked_head(
         preds, original_image_size, resized_image_size, this->conf_threshold);
   } else {
     const size_t num_features = static_cast<size_t>(shape[1]);
     const int num_classes = static_cast<int>(num_features) - 4 - kProtos;
+
     if (num_classes < 1) {
       YOLO_LOG_WARN("YoloSegment: unexpected output feature count %zu; "
                     "expected 4 + nc + %d",
@@ -200,6 +211,7 @@ std::vector<yolo_ros::yolo::utils::BoxWithMask> get_segmentation_baked_head(
 
   for (size_t i = 0; i < num_rows; ++i) {
     const float *row = raw + i * stride;
+
     if (row[4] < conf_threshold) {
       continue;
     }
@@ -216,6 +228,7 @@ std::vector<yolo_ros::yolo::utils::BoxWithMask> get_segmentation_baked_head(
                                            resized_image_size);
 
     std::vector<float> mask_coeffs(static_cast<size_t>(kProtos));
+
     for (int m = 0; m < kProtos; ++m) {
       mask_coeffs[static_cast<size_t>(m)] = row[6 + m];
     }
@@ -246,20 +259,24 @@ std::vector<yolo_ros::yolo::utils::BoxWithMask> get_segmentation_with_nms(
 
   // 2. Add the mask coefficients to the boxes
   std::vector<yolo_ros::yolo::utils::BoxWithMask> boxes_with_mask;
+
   for (size_t i = 0; i < boxes.size(); ++i) {
     if (boxes[i].score < conf_threshold) {
       continue;
     }
+
     yolo_ros::yolo::utils::BoxWithMask box_with_mask(boxes[i]);
     std::vector<float> mask_coeffs(kProtos);
     // get_boxes() returns a *compacted* list (anchors below the confidence
     // threshold are dropped), so the coefficient column must be addressed by
     // the box's original anchor index, not by its position in this vector.
     const size_t anchor = static_cast<size_t>(boxes[i].index);
+
     for (int m = 0; m < kProtos; ++m) {
       mask_coeffs[static_cast<size_t>(m)] =
           raw_output[(num_classes + 4 + m) * num_detections + anchor];
     }
+
     box_with_mask.mask_coeffs = mask_coeffs;
     boxes_with_mask.push_back(box_with_mask);
   }
@@ -269,6 +286,7 @@ std::vector<yolo_ros::yolo::utils::BoxWithMask> get_segmentation_with_nms(
                                             conf_threshold);
 
   std::vector<yolo_ros::yolo::utils::BoxWithMask> filtered_boxes;
+
   for (size_t i = 0; i < indices.size(); ++i) {
     filtered_boxes.push_back(boxes_with_mask[indices[i]]);
   }

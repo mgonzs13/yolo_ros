@@ -23,25 +23,27 @@ using BatchScheduler = yolo_ros::engine::BatchScheduler<int>;
 class Collector {
 public:
   void add(Batch batch) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    batch_sizes_.push_back(batch.size());
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    this->batch_sizes_.push_back(batch.size());
+
     for (auto &item : batch) {
-      items_.push_back(item);
+      this->items_.push_back(item);
     }
-    cond_.notify_all();
+
+    this->cond_.notify_all();
   }
   bool wait_for(std::size_t count) {
-    std::unique_lock<std::mutex> lock(mutex_);
-    return cond_.wait_for(lock, std::chrono::seconds(5),
-                          [&] { return items_.size() >= count; });
+    std::unique_lock<std::mutex> lock(this->mutex_);
+    return this->cond_.wait_for(lock, std::chrono::seconds(5),
+                                [&] { return this->items_.size() >= count; });
   }
   std::vector<std::pair<std::size_t, int>> items() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return items_;
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    return this->items_;
   }
   std::vector<std::size_t> batch_sizes() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return batch_sizes_;
+    std::lock_guard<std::mutex> lock(this->mutex_);
+    return this->batch_sizes_;
   }
 
 private:
@@ -61,9 +63,11 @@ TEST(BatchScheduler, BatchesOnlyReadyCameras) {
   ASSERT_TRUE(collector.wait_for(2));
   const auto items = collector.items();
   ASSERT_EQ(items.size(), 2u);
+
   for (const auto &item : items) {
     EXPECT_NE(item.first, 1u); // the idle camera never appears
   }
+
   scheduler.stop();
 }
 
@@ -91,9 +95,11 @@ TEST(BatchScheduler, RespectsMaxBatch) {
   scheduler.push(1, 1);
   scheduler.push(2, 2);
   ASSERT_TRUE(collector.wait_for(3));
+
   for (const std::size_t size : collector.batch_sizes()) {
     EXPECT_LE(size, 2u);
   }
+
   scheduler.stop();
 }
 

@@ -33,9 +33,11 @@ int ccrrt_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
     v[i] = kLarge;
     y[i] = 0;
   }
+
   for (std::size_t i = 0; i < n; i++) {
     for (std::size_t j = 0; j < n; j++) {
       const cost_t c = cost[i][j];
+
       if (c < v[j]) {
         v[j] = c;
         y[j] = static_cast<int>(i);
@@ -46,9 +48,11 @@ int ccrrt_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
   std::vector<bool> unique(n, true);
   {
     std::size_t j = n;
+
     do {
       j--;
       const int i = y[j];
+
       if (x[i] < 0) {
         x[i] = static_cast<int>(j);
       } else {
@@ -59,24 +63,30 @@ int ccrrt_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
   }
 
   int n_free_rows = 0;
+
   for (std::size_t i = 0; i < n; i++) {
     if (x[i] < 0) {
       free_rows[n_free_rows++] = static_cast<int>(i);
     } else if (unique[i]) {
       const int j = x[i];
       cost_t min = kLarge;
+
       for (std::size_t j2 = 0; j2 < n; j2++) {
         if (j2 == static_cast<std::size_t>(j)) {
           continue;
         }
+
         const cost_t c = cost[i][j2] - v[j2];
+
         if (c < min) {
           min = c;
         }
       }
+
       v[j] -= min;
     }
   }
+
   return n_free_rows;
 }
 
@@ -88,6 +98,7 @@ int carr_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
   std::size_t current = 0;
   int new_free_rows = 0;
   std::size_t rr_cnt = 0;
+
   while (current < static_cast<std::size_t>(n_free_rows)) {
     int i0;
     int j1, j2;
@@ -100,8 +111,10 @@ int carr_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
     v1 = cost[free_i][0] - v[0];
     j2 = -1;
     v2 = kLarge;
+
     for (std::size_t j = 1; j < n; j++) {
       const cost_t c = cost[free_i][j] - v[j];
+
       if (c < v2) {
         if (c >= v1) {
           v2 = c;
@@ -114,9 +127,11 @@ int carr_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
         }
       }
     }
+
     i0 = y[j1];
     v1_new = v[j1] - (v2 - v1);
     v1_lowers = v1_new < v[j1];
+
     if (rr_cnt < current * n) {
       if (v1_lowers) {
         v[j1] = v1_new;
@@ -124,6 +139,7 @@ int carr_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
         j1 = j2;
         i0 = y[j2];
       }
+
       if (i0 >= 0) {
         if (v1_lowers) {
           free_rows[--current] = i0;
@@ -136,9 +152,11 @@ int carr_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
         free_rows[new_free_rows++] = i0;
       }
     }
+
     x[free_i] = j1;
     y[j1] = free_i;
   }
+
   return new_free_rows;
 }
 
@@ -149,17 +167,21 @@ std::size_t find_dense(std::size_t n, std::size_t lo, std::vector<double> &d,
   (void)y;
   std::size_t hi = lo + 1;
   cost_t mind = d[cols[lo]];
+
   for (std::size_t k = hi; k < n; k++) {
     int j = cols[k];
+
     if (d[j] <= mind) {
       if (d[j] < mind) {
         hi = lo;
         mind = d[j];
       }
+
       cols[k] = cols[hi];
       cols[hi++] = j;
     }
   }
+
   return hi;
 }
 
@@ -178,23 +200,28 @@ int scan_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
     const int i = y[j];
     const cost_t mind = d[j];
     h = cost[i][j] - v[j] - mind;
+
     // For all columns in TODO
     for (std::size_t k = hi; k < n; k++) {
       j = cols[k];
       cred_ij = cost[i][j] - v[j] - h;
+
       if (cred_ij < d[j]) {
         d[j] = cred_ij;
         pred[j] = i;
+
         if (cred_ij == mind) {
           if (y[j] < 0) {
             return j;
           }
+
           cols[k] = cols[hi];
           cols[hi++] = j;
         }
       }
     }
   }
+
   *plo = lo;
   *phi = hi;
   return -1;
@@ -223,13 +250,16 @@ int find_path_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
     if (lo == hi) {
       n_ready = lo;
       hi = find_dense(n, lo, d, cols, y);
+
       for (std::size_t k = lo; k < hi; k++) {
         const int j = cols[k];
+
         if (y[j] < 0) {
           final_j = j;
         }
       }
     }
+
     if (final_j == -1) {
       final_j = scan_dense(n, cost, &lo, &hi, d, cols, pred, y, v);
     }
@@ -237,6 +267,7 @@ int find_path_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
 
   {
     const cost_t mind = d[cols[lo]];
+
     for (std::size_t k = 0; k < n_ready; k++) {
       const int j = cols[k];
       v[j] += d[j] - mind;
@@ -258,6 +289,7 @@ int ca_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
     std::size_t k = 0;
 
     j = find_path_dense(n, cost, *pfree_i, y, v, pred);
+
     while (i != *pfree_i) {
       i = pred[j];
       y[j] = i;
@@ -265,12 +297,14 @@ int ca_dense(std::size_t n, const std::vector<std::vector<double>> &cost,
       x[i] = j;
       j = old_j; // SWAP_INDICES(j, x[i])
       k++;
+
       if (k >= n) {
         // unreachable in practice for valid cost matrices
         return -1;
       }
     }
   }
+
   return 0;
 }
 
@@ -285,13 +319,16 @@ int lapjv_internal(std::size_t n, const std::vector<std::vector<double>> &cost,
 
   int ret = ccrrt_dense(n, cost, free_rows, rowsol, colsol, v);
   int i = 0;
+
   while (ret > 0 && i < 2) {
     ret = carr_dense(n, cost, ret, free_rows, rowsol, colsol, v);
     i++;
   }
+
   if (ret > 0) {
     ret = ca_dense(n, cost, ret, free_rows, rowsol, colsol, v);
   }
+
   return ret;
 }
 

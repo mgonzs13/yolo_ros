@@ -48,8 +48,10 @@ struct CudaOptionsDeleter {
 
 std::vector<Provider> available_providers() {
   std::vector<Provider> providers;
+
   for (const std::string &name : Ort::GetAvailableProviders()) {
     const std::string lower = yolo_ros::utils::to_lower(name);
+
     if (lower == "cudaexecutionprovider") {
       providers.push_back(Provider::Cuda);
     } else if (lower == "tensorrtexecutionprovider") {
@@ -58,6 +60,7 @@ std::vector<Provider> available_providers() {
       providers.push_back(Provider::Cpu);
     }
   }
+
   return providers;
 }
 
@@ -66,6 +69,7 @@ std::vector<Provider> provider_chain(const std::string &requested,
   const std::string key =
       yolo_ros::utils::to_lower(requested.empty() ? "auto" : requested);
   std::vector<Provider> base;
+
   if (key == "cpu") {
     base = {Provider::Cpu};
   } else if (key == "tensorrt" || key == "trt") {
@@ -76,11 +80,13 @@ std::vector<Provider> provider_chain(const std::string &requested,
   }
 
   std::vector<Provider> chain;
+
   for (const Provider provider : base) {
     if (provider == Provider::Cpu || contains(available, provider)) {
       chain.push_back(provider);
     }
   }
+
   return chain;
 }
 
@@ -93,6 +99,7 @@ const char *provider_name(Provider provider) {
   case Provider::TensorRt:
     return "tensorrt";
   }
+
   return "unknown";
 }
 
@@ -105,9 +112,11 @@ int parse_device_id(const std::string &device) {
   const char *begin = ordinal.data();
   const char *end = begin + ordinal.size();
   const auto result = std::from_chars(begin, end, id);
+
   if (result.ec != std::errc() || result.ptr != end || id < 0) {
     return 0;
   }
+
   return id;
 }
 
@@ -116,15 +125,15 @@ const char *device_provider_name(const std::string &device) {
   const std::size_t colon = value.find(':');
   const std::string prefix =
       colon == std::string::npos ? value : value.substr(0, colon);
+
   if (prefix == "cuda") {
     return "cuda";
-  }
-  if (prefix == "tensorrt" || prefix == "trt") {
+  } else if (prefix == "tensorrt" || prefix == "trt") {
     return "tensorrt";
-  }
-  if (prefix == "cpu") {
+  } else if (prefix == "cpu") {
     return "cpu";
   }
+
   return "";
 }
 
@@ -150,10 +159,12 @@ Ort::SessionOptions build_session_options(Provider primary,
                                       "trt_engine_cache_enable"};
     std::vector<const char *> values = {device_id.c_str(), fp16.c_str(),
                                         cache_enable.c_str()};
+
     if (cache_enabled) {
       keys.push_back("trt_engine_cache_path");
       values.push_back(config.trt_engine_cache_path.c_str());
     }
+
     Ort::ThrowOnError(Ort::GetApi().UpdateTensorRTProviderOptions(
         trt_options.get(), keys.data(), values.data(), keys.size()));
     options.AppendExecutionProvider_TensorRT_V2(*trt_options);
@@ -182,12 +193,15 @@ Ort::SessionOptions build_session_options(Provider primary,
 std::string engine_cache_dir(const std::string &base,
                              const std::string &model_path) {
   std::string root = base;
+
   if (root.empty()) {
     const char *home = std::getenv("HOME");
+
     if (home == nullptr) {
       YOLO_LOG_ERROR("Cannot resolve $HOME for the TensorRT engine cache.");
       return "";
     }
+
     root = std::string(home) + "/.cache/yolo_ros/trt_engines";
   }
 
@@ -195,11 +209,13 @@ std::string engine_cache_dir(const std::string &base,
       std::filesystem::path(root) / model_stem(model_path);
   std::error_code error;
   std::filesystem::create_directories(dir, error);
+
   if (error) {
     YOLO_LOG_ERROR("Cannot create the TensorRT engine cache directory %s: %s",
                    dir.string().c_str(), error.message().c_str());
     return "";
   }
+
   return dir.string();
 }
 

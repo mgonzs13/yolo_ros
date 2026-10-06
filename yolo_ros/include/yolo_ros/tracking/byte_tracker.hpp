@@ -31,7 +31,7 @@ namespace yolo_ros::tracking {
 /// `tracker_type` parameter and by create_tracker().
 struct ByteTrackParams : public TrackerParams {
   /// @brief Construct with `type = "bytetrack"` and the reference defaults.
-  ByteTrackParams() { type = "bytetrack"; }
+  ByteTrackParams() { this->type = "bytetrack"; }
   /// @brief First-stage (high-score) association threshold.
   double track_high_thresh = 0.25; // first-stage match threshold
   /// @brief Second-stage low-score detection threshold.
@@ -115,7 +115,7 @@ public:
 
   /// @brief Current internal frame counter.
   /// @return Number of frames processed since construction/reset().
-  int frame_id() const { return frame_id_; }
+  int frame_id() const { return this->frame_id_; }
 
 private:
   /// @brief Configuration copied at construction.

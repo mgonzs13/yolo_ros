@@ -69,11 +69,13 @@ YoloPose::postprocess(const cv::Size &original_image_size,
 
       std::vector<yolo_ros::yolo::utils::Keypoint> kpts(
           static_cast<size_t>(kNumKeypoints));
+
       for (int k = 0; k < kNumKeypoints; ++k) {
         kpts[static_cast<size_t>(k)].x = row[6 + k * kKeypointDims + 0];
         kpts[static_cast<size_t>(k)].y = row[6 + k * kKeypointDims + 1];
         kpts[static_cast<size_t>(k)].visible = row[6 + k * kKeypointDims + 2];
       }
+
       kpts = yolo_ros::yolo::utils::scale_keypoints(kpts, original_image_size,
                                                     resized_image_size);
 
@@ -106,6 +108,7 @@ YoloPose::postprocess(const cv::Size &original_image_size,
     }
 
     const float *raw = preds[0].GetTensorData<float>();
+
     for (size_t i = 0; i < num_detections; ++i) {
       const float center_x = raw[0 * num_detections + i];
       const float center_y = raw[1 * num_detections + i];
@@ -114,8 +117,10 @@ YoloPose::postprocess(const cv::Size &original_image_size,
 
       int class_id = -1;
       float max_score = -1.0f;
+
       for (int j = 0; j < num_classes; ++j) {
         const float score = raw[(4 + j) * num_detections + i];
+
         if (score > max_score) {
           max_score = score;
           class_id = j;
@@ -137,6 +142,7 @@ YoloPose::postprocess(const cv::Size &original_image_size,
       // (x, y, visible) triple.
       std::vector<yolo_ros::yolo::utils::Keypoint> kpts(
           static_cast<size_t>(kNumKeypoints));
+
       for (int k = 0; k < kNumKeypoints; ++k) {
         const size_t channel = 4 + static_cast<size_t>(num_classes) +
                                static_cast<size_t>(k) * kKeypointDims;
@@ -147,6 +153,7 @@ YoloPose::postprocess(const cv::Size &original_image_size,
         kpts[static_cast<size_t>(k)].visible =
             raw[(channel + 2) * num_detections + i];
       }
+
       kpts = yolo_ros::yolo::utils::scale_keypoints(kpts, original_image_size,
                                                     resized_image_size);
 
@@ -167,9 +174,11 @@ YoloPose::postprocess(const cv::Size &original_image_size,
         boxes_with_kpts, this->iou_threshold, this->conf_threshold);
     std::vector<yolo_ros::yolo::utils::BoxWithKeypoints> filtered;
     filtered.reserve(indices.size());
+
     for (size_t i = 0; i < indices.size(); ++i) {
       filtered.push_back(boxes_with_kpts[static_cast<size_t>(indices[i])]);
     }
+
     boxes_with_kpts.swap(filtered);
   }
 
@@ -179,6 +188,7 @@ YoloPose::postprocess(const cv::Size &original_image_size,
     detection.score = b.score;
     detection.class_id = b.class_id;
     detection.id = "0";
+
     if (b.class_id < static_cast<int>(this->class_names.size())) {
       detection.class_name = this->class_names[b.class_id];
     } else {
@@ -190,9 +200,11 @@ YoloPose::postprocess(const cv::Size &original_image_size,
     // node's parse_keypoints()). Coordinates are in original-image pixels.
     for (int k = 0; k < kNumKeypoints; ++k) {
       const auto &kp = b.keypoints[static_cast<size_t>(k)];
+
       if (kp.visible < this->conf_threshold) {
         continue;
       }
+
       yolo_msgs::msg::KeyPoint2D kp_msg;
       kp_msg.id = k + 1;
       kp_msg.point.x = kp.x;

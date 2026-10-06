@@ -62,9 +62,9 @@ public:
   void update(const STrack &new_track, int frame_id);
 
   /// @brief Mark the track as lost.
-  void mark_lost() { state_ = TrackState::Lost; }
+  void mark_lost() { this->state_ = TrackState::Lost; }
   /// @brief Mark the track as removed.
-  void mark_removed() { state_ = TrackState::Removed; }
+  void mark_removed() { this->state_ = TrackState::Removed; }
 
   /// @brief Apply a camera-motion warp to the Kalman state (BoT-SORT CMC).
   ///
@@ -77,7 +77,7 @@ public:
 
   /// @brief Frame index at which the track last ended.
   /// @return The internal frame_id_.
-  int end_frame() const { return frame_id_; }
+  int end_frame() const { return this->frame_id_; }
 
   /// @brief Return and advance the global track-id counter.
   /// @return A fresh track id.
@@ -87,23 +87,23 @@ public:
 
   // --- accessors ----------------------------------------------------------
   /// @brief Stable track id. @return The id.
-  int track_id() const { return track_id_; }
+  int track_id() const { return this->track_id_; }
   /// @brief Current frame index. @return The frame id.
-  int frame_id() const { return frame_id_; }
+  int frame_id() const { return this->frame_id_; }
   /// @brief Frame at which the track started. @return The start frame.
-  int start_frame() const { return start_frame_; }
+  int start_frame() const { return this->start_frame_; }
   /// @brief Number of frames the tracklet has existed. @return The length.
-  int tracklet_len() const { return tracklet_len_; }
+  int tracklet_len() const { return this->tracklet_len_; }
   /// @brief Current lifecycle state. @return The state.
-  TrackState state() const { return state_; }
+  TrackState state() const { return this->state_; }
   /// @brief Whether the track is activated. @return True when activated.
-  bool is_activated() const { return is_activated_; }
+  bool is_activated() const { return this->is_activated_; }
   /// @brief Detection confidence. @return The score.
-  float score() const { return score_; }
+  float score() const { return this->score_; }
   /// @brief Zero-based class id. @return The class id.
-  int class_id() const { return class_id_; }
+  int class_id() const { return this->class_id_; }
   /// @brief Detection index in the current frame. @return The index.
-  int idx() const { return idx_; }
+  int idx() const { return this->idx_; }
 
   /// @brief L2-normalize @p feat, store it as the current feature and EMA it
   /// into the smooth feature used for appearance association (alpha = 0.9, the
@@ -111,12 +111,12 @@ public:
   void update_features(const std::vector<float> &feat);
   /// @brief Whether an appearance feature has been set.
   /// @return True once update_features() has received a non-empty feature.
-  bool has_feature() const { return !curr_feat_.empty(); }
+  bool has_feature() const { return !this->curr_feat_.empty(); }
   /// @brief Last detection feature. @return The (possibly empty) feature.
-  const std::vector<float> &curr_feat() const { return curr_feat_; }
+  const std::vector<float> &curr_feat() const { return this->curr_feat_; }
   /// @brief Exponentially-smoothed feature. @return The (possibly empty)
   /// feature.
-  const std::vector<float> &smooth_feat() const { return smooth_feat_; }
+  const std::vector<float> &smooth_feat() const { return this->smooth_feat_; }
 
   /// @brief Current box in (min-x, min-y, max-x, max-y) pixel format.
   /// @return The xyxy corners.

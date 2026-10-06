@@ -37,20 +37,24 @@ inline void jpeg_error_exit_cb(j_common_ptr cinfo) {
 
 inline cv::Mat decode_jpeg(const std::string &path) {
   FILE *fp = std::fopen(path.c_str(), "rb");
+
   if (fp == nullptr) {
     return {};
   }
+
   auto cinfo = std::make_unique<jpeg_decompress_struct>();
   JpegErrorMgr jerr;
   cv::Mat image;
   std::vector<JSAMPLE> row;
   cinfo->err = jpeg_std_error(&jerr.pub);
   jerr.pub.error_exit = jpeg_error_exit_cb;
+
   if (setjmp(jerr.setjmp_buffer)) {
     jpeg_destroy_decompress(cinfo.get());
     std::fclose(fp);
     return {};
   }
+
   jpeg_create_decompress(cinfo.get());
   jpeg_stdio_src(cinfo.get(), fp);
   jpeg_read_header(cinfo.get(), TRUE);
@@ -61,14 +65,17 @@ inline cv::Mat decode_jpeg(const std::string &path) {
   image.create(height, width, CV_8UC3);
   row.resize(static_cast<std::size_t>(width) * 3);
   JSAMPROW row_ptr = row.data();
+
   while (cinfo->output_scanline < cinfo->output_height) {
     const int y = static_cast<int>(cinfo->output_scanline);
     jpeg_read_scanlines(cinfo.get(), &row_ptr, 1);
+
     for (int x = 0; x < width; ++x) {
       image.at<cv::Vec3b>(y, x) =
           cv::Vec3b(row[x * 3 + 2], row[x * 3 + 1], row[x * 3 + 0]);
     }
   }
+
   jpeg_finish_decompress(cinfo.get());
   jpeg_destroy_decompress(cinfo.get());
   std::fclose(fp);
@@ -80,13 +87,17 @@ inline cv::Mat decode_jpeg(const std::string &path) {
 inline std::string download_model(const std::string &repo,
                                   const std::string &filename) {
   const char *dir = std::getenv("YOLO_ROS_TEST_MODEL_DIR");
+
   if (dir != nullptr) {
     const std::string local = std::string(dir) + "/" + filename;
+
     if (access(local.c_str(), R_OK) == 0) {
       return local;
     }
+
     return std::string();
   }
+
   const auto result =
       huggingface_hub::hf_hub_download_with_shards(repo, filename);
   return result.success ? result.path : std::string();
@@ -95,26 +106,34 @@ inline std::string download_model(const std::string &repo,
 inline cv::Mat download_image(const std::string &url,
                               const char *override_env) {
   const char *override_path = std::getenv(override_env);
+
   if (override_path != nullptr) {
     return detail::decode_jpeg(override_path);
   }
+
   CURL *curl = curl_easy_init();
+
   if (curl == nullptr) {
     return {};
   }
+
   char path_template[] = "/tmp/yolo_ros_test_image_XXXXXX";
   const int fd = mkstemp(path_template);
+
   if (fd < 0) {
     curl_easy_cleanup(curl);
     return {};
   }
+
   FILE *fp = fdopen(fd, "wb");
+
   if (fp == nullptr) {
     close(fd);
     std::remove(path_template);
     curl_easy_cleanup(curl);
     return {};
   }
+
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -125,9 +144,11 @@ inline cv::Mat download_image(const std::string &url,
   std::fclose(fp);
   curl_easy_cleanup(curl);
   cv::Mat image;
+
   if (rc == CURLE_OK) {
     image = detail::decode_jpeg(path_template);
   }
+
   std::remove(path_template);
   return image;
 }

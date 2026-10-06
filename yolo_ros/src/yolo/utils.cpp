@@ -87,12 +87,14 @@ std::vector<Keypoint> scale_keypoints(const std::vector<Keypoint> &keypoints,
       (resized_image_size.height - original_image_size.height * gain) / 2;
 
   std::vector<Keypoint> scaled = keypoints;
+
   for (auto &kp : scaled) {
     kp.x = std::clamp((kp.x - pad_x) / gain, 0.0f,
                       static_cast<float>(original_image_size.width));
     kp.y = std::clamp((kp.y - pad_y) / gain, 0.0f,
                       static_cast<float>(original_image_size.height));
   }
+
   return scaled;
 }
 
@@ -110,12 +112,14 @@ get_boxes(const std::vector<Ort::Value> &preds,
       preds[0].GetTensorTypeAndShapeInfo().GetShape()[2];
 
   const float *ptr = raw_output;
+
   for (size_t i = 0; i < num_detections; ++i) {
     int class_id = -1;
     float max_score = -1.0f;
 
     for (int j = 0; j < num_classes; ++j) {
       const float score = ptr[(4 + j) * num_detections + i];
+
       if (score > max_score) {
         max_score = score;
         class_id = j;
