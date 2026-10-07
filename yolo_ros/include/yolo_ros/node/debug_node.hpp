@@ -121,7 +121,7 @@ private:
   /// @brief Callback on the 3D detection stream: rebuild the RViz markers.
   /// @param[in] msg_detections Incoming 3D-enriched detections.
   void markers_callback(
-      const yolo_msgs::msg::DetectionArray::ConstSharedPtr &msg_detections);
+      yolo_msgs::msg::DetectionArray::ConstSharedPtr msg_detections);
 
   /// @brief Return the cached color for @p class_name, assigning one on first
   /// use.

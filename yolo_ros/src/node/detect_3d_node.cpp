@@ -5,6 +5,7 @@
 #include "yolo_ros/node/detect_3d_node.hpp"
 
 #include "yolo_ros/3d/depth_utils.hpp"
+#include "yolo_ros/utils/qos_compat.hpp"
 
 namespace yolo_ros::node {
 
@@ -36,20 +37,12 @@ Detect3DNode::on_configure(const rclcpp_lifecycle::State &) {
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 Detect3DNode::on_activate(const rclcpp_lifecycle::State &) {
-  auto reliability_to_policy = [](int r) {
-    if (r == 0) {
-      return rclcpp::ReliabilityPolicy::SystemDefault;
-    } else if (r == 1) {
-      return rclcpp::ReliabilityPolicy::Reliable;
-    }
-
-    return rclcpp::ReliabilityPolicy::BestEffort;
-  };
-
-  rclcpp::QoS depth_image_qos = rclcpp::QoS(1).reliability(
-      reliability_to_policy(this->depth_image_reliability_));
-  rclcpp::QoS depth_info_qos = rclcpp::QoS(1).reliability(
-      reliability_to_policy(this->depth_info_reliability_));
+  rclcpp::QoS depth_image_qos =
+      rclcpp::QoS(1).reliability(yolo_ros::utils::reliability_policy_from_int(
+          this->depth_image_reliability_));
+  rclcpp::QoS depth_info_qos =
+      rclcpp::QoS(1).reliability(yolo_ros::utils::reliability_policy_from_int(
+          this->depth_info_reliability_));
 
   this->depth_image_subscription_.subscribe(
       this->shared_from_this(), this->depth_image_topic_, depth_image_qos);

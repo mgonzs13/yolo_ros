@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.8)
 project(yolo_ros)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -27,17 +29,34 @@ find_package(ament_index_cpp REQUIRED)
 # Some dependencies renamed headers or changed their C++ API across distros.
 # ROS_DISTRO is exported by the sourced ROS environment; pick the variant with a
 # compile definition, mirroring the CV_BRIDGE_H handling in llama_ros.
-if("$ENV{ROS_DISTRO}" STREQUAL "humble")
-  # cv_bridge 3.x (Humble) ships cv_bridge/cv_bridge.h; 4.x (Iron and newer)
-  # renamed it to cv_bridge/cv_bridge.hpp.
+if("$ENV{ROS_DISTRO}" STREQUAL "foxy" OR "$ENV{ROS_DISTRO}" STREQUAL "galactic" OR "$ENV{ROS_DISTRO}" STREQUAL "humble")
+  # cv_bridge < 4.x (Foxy..Humble) ships cv_bridge/cv_bridge.h; 4.x (Iron and
+  # newer) renamed it to cv_bridge/cv_bridge.hpp.
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCV_BRIDGE_H")
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCV_BRIDGE_HPP")
 endif()
-if("$ENV{ROS_DISTRO}" STREQUAL "humble" OR "$ENV{ROS_DISTRO}" STREQUAL "iron" OR "$ENV{ROS_DISTRO}" STREQUAL "jazzy" OR "$ENV{ROS_DISTRO}" STREQUAL "kilted")
-  # Humble..Kilted take the node type as a second Subscriber template argument
-  # and subscribe() expects an rmw_qos_profile_t.
+if("$ENV{ROS_DISTRO}" STREQUAL "foxy" OR "$ENV{ROS_DISTRO}" STREQUAL "galactic" OR "$ENV{ROS_DISTRO}" STREQUAL "humble" OR "$ENV{ROS_DISTRO}" STREQUAL "iron" OR "$ENV{ROS_DISTRO}" STREQUAL "jazzy" OR "$ENV{ROS_DISTRO}" STREQUAL "kilted")
+  # Foxy..Kilted ship the .h headers and subscribe() expects an
+  # rmw_qos_profile_t.
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMESSAGE_FILTERS_OLD_API")
+endif()
+
+if("$ENV{ROS_DISTRO}" STREQUAL "foxy" OR "$ENV{ROS_DISTRO}" STREQUAL "galactic")
+  # Foxy and Galactic predate the NodeType template argument in
+  # message_filters::Subscriber and only accept rclcpp::Node instances.
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMESSAGE_FILTERS_LEGACY_API")
+  # cv_bridge only exports the cv_bridge::cv_bridge imported target since
+  # Humble; Foxy and Galactic export the legacy ${cv_bridge_LIBRARIES} variable.
+  set(CV_BRIDGE_TARGET ${cv_bridge_LIBRARIES})
+  include_directories(${cv_bridge_INCLUDE_DIRS})
+else()
+  set(CV_BRIDGE_TARGET cv_bridge::cv_bridge)
+endif()
+if("$ENV{ROS_DISTRO}" STREQUAL "foxy")
+  # Foxy's rclcpp::QoS::reliability() only accepts
+  # rmw_qos_reliability_policy_t; rclcpp::ReliabilityPolicy landed in Galactic.
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DRCLCPP_LEGACY_QOS")
 endif()
 
 include_directories(
@@ -75,7 +94,7 @@ target_link_libraries(yolo_node
   rclcpp_lifecycle::rclcpp_lifecycle
   ${sensor_msgs_TARGETS}
   ${std_srvs_TARGETS}
-  cv_bridge::cv_bridge
+  ${CV_BRIDGE_TARGET}
   ament_index_cpp::ament_index_cpp
   ${yolo_msgs_TARGETS}
   ${yolo_onnxruntime_vendor_LIBRARIES}
@@ -98,7 +117,7 @@ target_link_libraries(debug_node
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
   ${sensor_msgs_TARGETS}
-  cv_bridge::cv_bridge
+  ${CV_BRIDGE_TARGET}
   ${visualization_msgs_TARGETS}
   message_filters::message_filters
   ${yolo_msgs_TARGETS}
@@ -134,7 +153,7 @@ target_link_libraries(tracking_node
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
   ${sensor_msgs_TARGETS}
-  cv_bridge::cv_bridge
+  ${CV_BRIDGE_TARGET}
   message_filters::message_filters
   ${yolo_msgs_TARGETS}
   ${yolo_onnxruntime_vendor_LIBRARIES}
@@ -157,7 +176,7 @@ target_link_libraries(detect_3d_node
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
   ${sensor_msgs_TARGETS}
-  cv_bridge::cv_bridge
+  ${CV_BRIDGE_TARGET}
   message_filters::message_filters
   tf2_ros::tf2_ros
   ${geometry_msgs_TARGETS}
@@ -194,7 +213,7 @@ target_link_libraries(yolo_batch_node
   rclcpp_lifecycle::rclcpp_lifecycle
   ${sensor_msgs_TARGETS}
   ${std_srvs_TARGETS}
-  cv_bridge::cv_bridge
+  ${CV_BRIDGE_TARGET}
   ament_index_cpp::ament_index_cpp
   ${yolo_msgs_TARGETS}
   ${yolo_onnxruntime_vendor_LIBRARIES}
@@ -312,7 +331,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_yolo26n
     rclcpp::rclcpp
     ${sensor_msgs_TARGETS}
-    cv_bridge::cv_bridge
+    ${CV_BRIDGE_TARGET}
     ament_index_cpp::ament_index_cpp
     ${yolo_msgs_TARGETS}
     ${yolo_onnxruntime_vendor_LIBRARIES}
@@ -338,7 +357,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_batch
     rclcpp::rclcpp
     ${sensor_msgs_TARGETS}
-    cv_bridge::cv_bridge
+    ${CV_BRIDGE_TARGET}
     ament_index_cpp::ament_index_cpp
     ${yolo_msgs_TARGETS}
     ${yolo_onnxruntime_vendor_LIBRARIES}
@@ -365,7 +384,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_model_factory
     ${yolo_msgs_TARGETS}
     ${yolo_onnxruntime_vendor_LIBRARIES}
-    cv_bridge::cv_bridge
+    ${CV_BRIDGE_TARGET}
   )
 endif()
 

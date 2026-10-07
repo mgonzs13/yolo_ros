@@ -9,6 +9,7 @@
 
 #include "huggingface_hub.h"
 #include "rclcpp/qos.hpp"
+#include "yolo_ros/utils/qos_compat.hpp"
 #include "yolo_ros/yolo/model_factory.hpp"
 
 namespace yolo_ros::node {
@@ -31,18 +32,9 @@ YoloNode::on_configure(const rclcpp_lifecycle::State &) {
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 YoloNode::on_activate(const rclcpp_lifecycle::State &) {
-  int image_reliability = this->yolo_params.image_reliability;
-  rclcpp::ReliabilityPolicy qos_reliability_policy;
-
-  if (image_reliability == 0) {
-    qos_reliability_policy = rclcpp::ReliabilityPolicy::SystemDefault;
-  } else if (image_reliability == 1) {
-    qos_reliability_policy = rclcpp::ReliabilityPolicy::Reliable;
-  } else {
-    qos_reliability_policy = rclcpp::ReliabilityPolicy::BestEffort;
-  }
-
-  auto img_sub_qos = rclcpp::QoS(1).reliability(qos_reliability_policy);
+  auto img_sub_qos =
+      rclcpp::QoS(1).reliability(yolo_ros::utils::reliability_policy_from_int(
+          this->yolo_params.image_reliability));
 
   this->detection_publisher =
       this->create_publisher<yolo_msgs::msg::DetectionArray>("detections",

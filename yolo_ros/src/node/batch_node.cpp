@@ -17,22 +17,10 @@
 #endif
 
 #include "huggingface_hub.h"
+#include "yolo_ros/utils/qos_compat.hpp"
 #include "yolo_ros/yolo/model_factory.hpp"
 
 namespace yolo_ros::node {
-namespace {
-
-rclcpp::ReliabilityPolicy reliability_from(int value) {
-  if (value == 0) {
-    return rclcpp::ReliabilityPolicy::SystemDefault;
-  } else if (value == 1) {
-    return rclcpp::ReliabilityPolicy::Reliable;
-  }
-
-  return rclcpp::ReliabilityPolicy::BestEffort;
-}
-
-} // namespace
 
 BatchNode::BatchNode() : rclcpp_lifecycle::LifecycleNode("yolo_batch_node") {}
 
@@ -61,8 +49,9 @@ BatchNode::on_activate(const rclcpp_lifecycle::State &) {
   this->yolo_model_ = yolo_ros::yolo::create_model(this->yolo_params_);
   this->enable_inference_.store(this->yolo_params_.enable);
 
-  const auto image_qos = rclcpp::QoS(1).reliability(
-      reliability_from(this->yolo_params_.image_reliability));
+  const auto image_qos =
+      rclcpp::QoS(1).reliability(yolo_ros::utils::reliability_policy_from_int(
+          this->yolo_params_.image_reliability));
 
   this->image_subscriptions_.clear();
   this->detection_publishers_.clear();

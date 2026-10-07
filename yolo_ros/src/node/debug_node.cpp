@@ -21,6 +21,8 @@
 
 #include <opencv2/imgproc.hpp>
 
+#include "yolo_ros/utils/qos_compat.hpp"
+
 namespace yolo_ros::node {
 
 namespace {
@@ -94,21 +96,12 @@ DebugNode::on_configure(const rclcpp_lifecycle::State &) {
   this->markers_topic_ = this->get_parameter("markers_topic").as_string();
   this->marker_lifetime_ = this->get_parameter("marker_lifetime").as_double();
 
-  int image_reliability = this->get_parameter("image_reliability").as_int();
-  rclcpp::ReliabilityPolicy qos_reliability_policy;
-
-  if (image_reliability == 0) {
-    qos_reliability_policy = rclcpp::ReliabilityPolicy::SystemDefault;
-  } else if (image_reliability == 1) {
-    qos_reliability_policy = rclcpp::ReliabilityPolicy::Reliable;
-  } else {
-    qos_reliability_policy = rclcpp::ReliabilityPolicy::BestEffort;
-  }
-
-  this->image_qos_profile = rclcpp::QoS(1)
-                                .reliability(qos_reliability_policy)
-                                .durability_volatile()
-                                .keep_last(1);
+  this->image_qos_profile =
+      rclcpp::QoS(1)
+          .reliability(yolo_ros::utils::reliability_policy_from_int(
+              this->get_parameter("image_reliability").as_int()))
+          .durability_volatile()
+          .keep_last(1);
 
   this->debug_publisher =
       this->create_publisher<sensor_msgs::msg::Image>("debug_image", 10);
@@ -254,7 +247,7 @@ void DebugNode::recieve_callback(
 // stream's rate (min(debug image, 3D detections)) and does not throttle the
 // debug image.
 void DebugNode::markers_callback(
-    const yolo_msgs::msg::DetectionArray::ConstSharedPtr &msg_detections) {
+    yolo_msgs::msg::DetectionArray::ConstSharedPtr msg_detections) {
   visualization_msgs::msg::MarkerArray bb_marker_array;
   visualization_msgs::msg::MarkerArray kp_marker_array;
 

@@ -4,12 +4,15 @@
 /// @file
 /// @brief message_filters compatibility helpers across distros.
 ///
-/// Humble..Kilted define MESSAGE_FILTERS_OLD_API (set in CMakeLists.txt): there
+/// Foxy and Galactic define MESSAGE_FILTERS_LEGACY_API (set in CMakeLists.txt):
+/// there message_filters::Subscriber takes only the message type and
+/// subscribe() accepts an rclcpp::Node (or shared pointer) plus an
+/// rmw_qos_profile_t. Humble..Kilted define MESSAGE_FILTERS_OLD_API: there
 /// message_filters::Subscriber takes the node type as a second template
 /// argument and subscribe() expects an rmw_qos_profile_t. Lyrical and newer
 /// reduce Subscriber to the message type and make subscribe() take an
-/// rclcpp::QoS. MessageFilterSubscriber normalises both so call sites stay
-/// identical.
+/// rclcpp::QoS. MessageFilterSubscriber normalises all of them so call sites
+/// stay identical.
 
 #ifndef YOLO_ROS__UTILS__MESSAGE_FILTERS_COMPAT_HPP_
 #define YOLO_ROS__UTILS__MESSAGE_FILTERS_COMPAT_HPP_
@@ -17,7 +20,8 @@
 #include "rclcpp/qos.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
-#ifdef MESSAGE_FILTERS_OLD_API
+#if defined(MESSAGE_FILTERS_LEGACY_API) || defined(MESSAGE_FILTERS_OLD_API)
+#include "message_filters/simple_filter.h"
 #include "message_filters/subscriber.h"
 #include "message_filters/sync_policies/approximate_time.h"
 #include "message_filters/synchronizer.h"
@@ -37,7 +41,35 @@ namespace yolo_ros::utils {
 /// look the same regardless of the installed message_filters API:
 ///   yolo_ros::utils::MessageFilterSubscriber<MsgType> subscription_;
 ///   subscription_.subscribe(shared_from_this(), topic, qos);
-#ifdef MESSAGE_FILTERS_OLD_API
+#if defined(MESSAGE_FILTERS_LEGACY_API)
+template <typename MessageT>
+class MessageFilterSubscriber : public message_filters::SimpleFilter<MessageT> {
+public:
+  /// @brief Subscribe to a topic.
+  /// @param node Node used to create the subscription.
+  /// @param topic Topic name to subscribe to.
+  /// @param qos QoS profile for the subscription.
+  template <typename NodeT>
+  void subscribe(NodeT node, const std::string &topic, const rclcpp::QoS &qos) {
+    this->subscription_ = node->template create_subscription<MessageT>(
+        topic, qos, [this](const std::shared_ptr<const MessageT> msg) {
+          this->signalMessage(msg);
+        });
+  }
+
+  /// @brief Force immediate unsubscription from the topic.
+  void unsubscribe() { this->subscription_.reset(); }
+
+  /// @brief Returns the internal rclcpp::Subscription<MessageT>::SharedPtr.
+  const typename rclcpp::Subscription<MessageT>::SharedPtr
+  getSubscriber() const {
+    return this->subscription_;
+  }
+
+private:
+  typename rclcpp::Subscription<MessageT>::SharedPtr subscription_;
+};
+#elif defined(MESSAGE_FILTERS_OLD_API)
 template <typename MessageT>
 class MessageFilterSubscriber
     : public message_filters::Subscriber<MessageT,

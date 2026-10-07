@@ -18,6 +18,7 @@
 #include "rclcpp/exceptions.hpp"
 #include "yolo_ros/tracking/bot_sort.hpp"
 #include "yolo_ros/tracking/byte_tracker.hpp"
+#include "yolo_ros/utils/qos_compat.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
 
 namespace yolo_ros::node {
@@ -36,20 +37,13 @@ TrackingNode::on_configure(const rclcpp_lifecycle::State &) {
   this->image_topic_ = this->get_parameter("image_topic").as_string();
 
   int image_reliability = this->get_parameter("image_reliability").as_int();
-  rclcpp::ReliabilityPolicy qos_reliability_policy;
 
-  if (image_reliability == 0) {
-    qos_reliability_policy = rclcpp::ReliabilityPolicy::SystemDefault;
-  } else if (image_reliability == 1) {
-    qos_reliability_policy = rclcpp::ReliabilityPolicy::Reliable;
-  } else {
-    qos_reliability_policy = rclcpp::ReliabilityPolicy::BestEffort;
-  }
-
-  this->image_qos_profile_ = rclcpp::QoS(1)
-                                 .reliability(qos_reliability_policy)
-                                 .durability_volatile()
-                                 .keep_last(1);
+  this->image_qos_profile_ =
+      rclcpp::QoS(1)
+          .reliability(
+              yolo_ros::utils::reliability_policy_from_int(image_reliability))
+          .durability_volatile()
+          .keep_last(1);
 
   this->tracking_publisher_ =
       this->create_publisher<yolo_msgs::msg::DetectionArray>("tracking", 10);
