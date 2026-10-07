@@ -13,7 +13,7 @@ find_package(CURL REQUIRED)
 FetchContent_Declare(
   yolo_hfhub
   GIT_REPOSITORY https://github.com/agonzc34/huggingface-hub-cpp
-  GIT_TAG        1.1.4
+  GIT_TAG        1.1.5
   GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(yolo_hfhub)

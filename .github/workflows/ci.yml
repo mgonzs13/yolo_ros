@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ros_distro: [humble, iron, jazzy, kilted, lyrical]
+        ros_distro: [foxy, galactic, humble, iron, jazzy, kilted, lyrical]
     uses: ./.github/workflows/docker-build-test.yml
     with:
       ros_distro: ${{ matrix.ros_distro }}
@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ros_distro: [humble, iron, jazzy, kilted, lyrical]
+        ros_distro: [foxy, galactic, humble, iron, jazzy, kilted, lyrical]
     uses: ./.github/workflows/docker-push.yml
     with:
       ros_distro: ${{ matrix.ros_distro }}
