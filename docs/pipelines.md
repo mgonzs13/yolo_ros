@@ -42,7 +42,7 @@ The whole pipeline lives in a single params file: the node-level `cameras` list 
     detection3d:
       plugin: yolo_ros/Detect3DPlugin
       cameras: ["cam0"] # every camera here must have depth
-      target_frame: camera_link
+      target_frame: base_link
     debug:
       plugin: yolo_ros/DebugPlugin
       cameras: ["cam0"]
