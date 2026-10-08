@@ -21,7 +21,7 @@ namespace yolo_ros {
 void DetectionPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
                                      const std::string &prefix) {
   node.declare_parameter<std::string>(prefix + "model_type", "auto");
-  node.declare_parameter<std::string>(prefix + "model", "yolo11m_segment.onnx");
+  node.declare_parameter<std::string>(prefix + "model_path", "");
   node.declare_parameter<std::string>(prefix + "model_repo", "");
   node.declare_parameter<std::string>(prefix + "model_filename", "");
   node.declare_parameter<std::string>(prefix + "cache_dir",
@@ -44,7 +44,7 @@ void DetectionPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
 void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
                                  const std::string &prefix) {
   node.get_parameter(prefix + "model_type", this->yolo_params_.model_type);
-  node.get_parameter(prefix + "model", this->yolo_params_.model_path);
+  node.get_parameter(prefix + "model_path", this->yolo_params_.model_path);
   node.get_parameter(prefix + "model_repo", this->yolo_params_.model_repo);
   node.get_parameter(prefix + "model_filename",
                      this->yolo_params_.model_filename);

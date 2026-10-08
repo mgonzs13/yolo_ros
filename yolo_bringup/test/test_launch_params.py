@@ -55,21 +55,21 @@ REMOVED_PARAMS = {
 def test_types_are_converted():
     context = FakeContext(
         {
-            "model": "/x.onnx",
+            "model_path": "/x.onnx",
             "threshold": "0.5",
             "max_det": "300",
             "force_download": "false",
         }
     )
     overrides = build_overrides(context, DET)
-    assert overrides["detection.model"] == "/x.onnx"
+    assert overrides["detection.model_path"] == "/x.onnx"
     assert overrides["detection.threshold"] == pytest.approx(0.5)
     assert overrides["detection.max_det"] == 300
     assert overrides["detection.force_download"] is False
 
 
 def test_empty_values_are_omitted():
-    context = FakeContext({"model": "", "threshold": "", "iou": ""})
+    context = FakeContext({"model_path": "", "threshold": "", "iou": ""})
     assert build_overrides(context, DET) == {}
 
 
@@ -178,7 +178,7 @@ def test_arg_names_are_unique():
     assert names == sorted(set(names))
     assert names.count("provider") == 1
     assert names.count("device") == 1
-    assert "model" in names
+    assert "model_path" in names
     assert "tracker_type" in names
     assert "marker_lifetime" in names
     assert "input_image_topic" not in names

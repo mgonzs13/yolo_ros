@@ -282,5 +282,5 @@ This bundle ${REDUCED_OPS_NOTE}.
          -DFETCHCONTENT_SOURCE_DIR_YOLO_HFHUB=\$HOME/${BUNDLE_NAME}/huggingface-hub-cpp
      source install/setup.bash
      ros2 launch yolo_bringup yolo.launch.py \\
-         model:=\$HOME/${BUNDLE_NAME}/models/yolo26m.onnx
+         model_path:=\$HOME/${BUNDLE_NAME}/models/yolo26m.onnx
 EOF

@@ -169,7 +169,7 @@ Each camera declares its `rgb_topic` and optionally the `depth_topic` + `depth_i
 
 > **YAML note (Jazzy)**: never write an empty sequence in the params file — `cameras: []`, `plugins: []`. rcl's YAML parser produces no value for `[]` on Jazzy, so the node fails to start. Omit the key instead: an omitted plugin `cameras` key means "all defined cameras" (or list every camera explicitly).
 
-Pick the model with `model_filename:=` (a file in the Hugging Face mirror set by `model_repo`) or `model:=` (a local path). The task is inferred from the file name (`model_type: auto`): `-seg`/`segment` → segmentation, `-pose`/`pose` → pose, `-obb`/`obb` → OBB, `-cls`/`classify` → classification, anything else detection. Each task also ships a preset params file (`config/yolo_segment.yaml`, `yolo_pose.yaml`, `yolo_obb.yaml`, `yolo_classify.yaml`) that pins `model_type` and task-specific tuning — pass it with `params_file:=`:
+Pick the model with `model_filename:=` (a file in the Hugging Face mirror set by `model_repo`) or `model_path:=` (a local path). The task is inferred from the file name (`model_type: auto`): `-seg`/`segment` → segmentation, `-pose`/`pose` → pose, `-obb`/`obb` → OBB, `-cls`/`classify` → classification, anything else detection. Each task also ships a preset params file (`config/yolo_segment.yaml`, `yolo_pose.yaml`, `yolo_obb.yaml`, `yolo_classify.yaml`) that pins `model_type` and task-specific tuning — pass it with `params_file:=`:
 
 ```shell
 ros2 launch yolo_bringup yolo.launch.py params_file:=$(ros2 pkg prefix yolo_bringup)/share/yolo_bringup/config/yolo_segment.yaml
@@ -259,7 +259,7 @@ There are no runtime services. Runtime enable/disable and class filtering were r
 Configuration is file-driven: `yolo.launch.py` declares `params_file` (default `config/yolo.yaml`) and `namespace` (default `yolo`) and passes the YAML params file plus any command-line overrides as `parameters=[params_file, overrides]` (with no topic remaps). The default is `config/yolo.yaml`; the per-task presets (`config/yolo_segment.yaml`, `yolo_pose.yaml`, `yolo_obb.yaml`, `yolo_classify.yaml`) are selected with `params_file:=`. The YAML holds the node-level `cameras` list with the per-camera fields (`<cam>.rgb_topic`, ...), the ordered `plugins` chain, each plugin's `cameras` list and the plugin parameters grouped by instance (`detection.*`, `tracking.*`, `detection3d.*`, `debug.*`); each instance also sets its `<instance>.plugin` class. In addition, **every scalar parameter can be overridden from the command line**; an argument left unset keeps the YAML value. Array parameters (the node `cameras` list and every plugin `cameras` list) and the per-camera blocks are **YAML-only** and cannot be passed as command-line overrides:
 
 ```bash
-ros2 launch yolo_bringup yolo.launch.py model:=/path/model.onnx threshold:=0.5
+ros2 launch yolo_bringup yolo.launch.py model_path:=/path/model.onnx threshold:=0.5
 ros2 launch yolo_bringup yolo.launch.py model_filename:=yolo26l-seg.onnx threshold:=0.6
 ```
 
@@ -301,8 +301,8 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 #### Detection plugin (`detection.*`, `yolo_ros/DetectionPlugin`)
 
 - **model_type**: Pipeline to run: `YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify` or `auto` (default: `auto`, which infers the task from the model file name: `-seg`/`segment`, `-pose`/`pose`, `-obb`/`obb`, `-cls`/`classify`).
-- **model**: Path to the ONNX model (default: machine-specific).
-- **model_repo** / **model_filename** / **force_download** / **cache_dir**: Hugging Face Hub download (used instead of `model` when set). The shipped configs default to the `unileon-robotics/YOLO26-ONNX` mirror; clear `model_repo` to fall back to the local `model` path.
+- **model_path**: Path to the ONNX model (default: machine-specific).
+- **model_repo** / **model_filename** / **force_download** / **cache_dir**: Hugging Face Hub download (used instead of `model_path` when set). The shipped configs default to the `unileon-robotics/YOLO26-ONNX` mirror; clear `model_repo` to fall back to the local `model_path`.
 - **provider**: Execution provider: `auto` (CUDA → CPU fallback chain), or force `tensorrt`/`trt` (TensorRT → CUDA → CPU), `cuda` (CUDA → CPU), `cpu` (default: `auto`).
 - **device**: CUDA/TensorRT device ordinal, e.g. `cuda:0`, `trt:1`, `1` (default: `cuda:0`). The `cuda:`/`trt:` prefix is accepted but `provider` selects the execution provider.
 - **trt_fp16_enable**: TensorRT FP16 precision (default: `true`).

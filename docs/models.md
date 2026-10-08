@@ -29,7 +29,7 @@ yolo export model=yolo26m.pt format=onnx imgsz=640 opset=12
 Notes:
 
 - The exported `.onnx` is self-contained: Ultralytics writes the class vocabulary into the ONNX graph metadata (`names` key), which `Model::load_class_names()` reads at startup. The `coco.names` fallback is only used when a model has no metadata.
-- Keep the exported file outside the repository and pass `model:=<path>` on every launch.
+- Keep the exported file outside the repository and pass `model_path:=<path>` on every launch.
 - `model_type` selects the pipeline (`YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify`, case-insensitive). `auto` (the default) falls back to a filename heuristic: a path containing `segment` selects segmentation, `pose` selects pose, `obb` selects OBB, `cls`/`classify` selects classification, otherwise detection. Ultralytics names segmentation exports `*-seg.onnx` (not `-segment`), so the segment config sets `model_type: Segment` explicitly.
 - The input size is fixed by the ONNX tensor (logged at startup), so the Python-only knobs `imgsz_height` / `imgsz_width` and `half` / `augment` / `agnostic_nms` / `retina_masks` were removed from the C++ node and its configs: NMS is baked at export and the pipeline runs FP32 with no test-time augmentation.
 - OBB models have no baked-NMS export (rotated NMS cannot be exported into the graph), so the C++ postprocessor performs its own per-class rotated NMS and `iou` re-tunes it. The rotation angle is published in `BoundingBox2D.center.theta` (radians) with `size` holding the rotated `w`/`h`.
@@ -85,7 +85,7 @@ onnx.save(m, "/home/agonzc34/models/yolo26n-batch.onnx")
 
 ## Download a model from the Hugging Face Hub
 
-Instead of a local path, the node can fetch the model from the Hub at startup via the `yolo_hfhub_vendor` package. Set `model_repo` + `model_filename` in the matching `config/yolo*.yaml` section (or on the command line); the `model` path is then ignored. The file is cached under `~/.cache/huggingface/hub` by default (override with the optional `cache_dir` param) and reused unless `force_download: true`:
+Instead of a local path, the node can fetch the model from the Hub at startup via the `yolo_hfhub_vendor` package. Set `model_repo` + `model_filename` in the matching `config/yolo*.yaml` section (or on the command line); the `model_path` is then ignored. The file is cached under `~/.cache/huggingface/hub` by default (override with the optional `cache_dir` param) and reused unless `force_download: true`:
 
 ```yaml
 /yolo/yolo_node:
@@ -103,7 +103,7 @@ Instead of a local path, the node can fetch the model from the Hub at startup vi
 
 Or on the command line: `ros2 launch yolo_bringup yolo.launch.py model_repo:=unileon-robotics/YOLO26-ONNX model_filename:=yolo26s.onnx`. Requires the libcurl dev headers listed in the [README](../README.md#installation); only used when `model_repo`/`model_filename` are set. The node logs the model source as `[huggingface]` (with repo/filename) or `[local]` (with the path) so the two are easy to tell apart.
 
-The shipped `config/yolo*.yaml` files already default to the [`unileon-robotics/YOLO26-ONNX`](https://huggingface.co/unileon-robotics/YOLO26-ONNX) mirror — ONNX exports of the [`Ultralytics/YOLO26`](https://huggingface.co/Ultralytics/YOLO26) checkpoints (25 files: `yolo26{n,s,m,l,x}` for detect / `-seg` / `-pose` / `-obb` / `-cls`, exported with `imgsz=640 opset=12`). The same 25 models are also available batch-only dynamic under `dynamic/`, used by multi-camera pipelines whose detector `cameras` list selects several cameras. The first launch per model downloads it (so it needs network access) and caches it; clear `model_repo` to fall back to the local `model` path, or pass `model:=<path>` for a local file.
+The shipped `config/yolo*.yaml` files already default to the [`unileon-robotics/YOLO26-ONNX`](https://huggingface.co/unileon-robotics/YOLO26-ONNX) mirror — ONNX exports of the [`Ultralytics/YOLO26`](https://huggingface.co/Ultralytics/YOLO26) checkpoints (25 files: `yolo26{n,s,m,l,x}` for detect / `-seg` / `-pose` / `-obb` / `-cls`, exported with `imgsz=640 opset=12`). The same 25 models are also available batch-only dynamic under `dynamic/`, used by multi-camera pipelines whose detector `cameras` list selects several cameras. The first launch per model downloads it (so it needs network access) and caches it; clear `model_repo` to fall back to the local `model_path`, or pass `model_path:=<path>` for a local file.
 
 ## ReID encoder for BoT-SORT-ReID
 

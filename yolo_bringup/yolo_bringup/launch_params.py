@@ -62,7 +62,7 @@ PLUGINS = {
 PLUGIN_PARAMS = {
     "yolo_ros/DetectionPlugin": (
         ParamSpec("model_type", str),
-        ParamSpec("model", str),
+        ParamSpec("model_path", str),
         ParamSpec("model_repo", str),
         ParamSpec("model_filename", str),
         ParamSpec("cache_dir", str),
