@@ -57,6 +57,8 @@ if("$ENV{ROS_DISTRO}" STREQUAL "foxy")
   # Foxy's rclcpp::QoS::reliability() only accepts
   # rmw_qos_reliability_policy_t; rclcpp::ReliabilityPolicy landed in Galactic.
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DRCLCPP_LEGACY_QOS")
+  # Foxy's pluginlib/class_loader.hpp includes boost/shared_ptr.hpp.
+  find_package(Boost REQUIRED)
 endif()
 
 include_directories(
@@ -119,6 +121,12 @@ target_link_libraries(yolo_ros_core
   ${yolo_hfhub_vendor_TARGETS}
   ${OpenCV_LIBS}
 )
+
+if("$ENV{ROS_DISTRO}" STREQUAL "foxy")
+  # Boost headers pulled in by Foxy's pluginlib; propagate to the plugins and
+  # test targets that link yolo_ros_core.
+  target_link_libraries(yolo_ros_core Boost::boost)
+endif()
 
 # Plugin implementations loaded by the single YoloNode.
 add_library(yolo_ros_plugins SHARED

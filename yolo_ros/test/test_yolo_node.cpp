@@ -63,7 +63,7 @@ TEST_F(YoloNodeTest, LifecycleRunsPlugins) {
        rclcpp::Parameter("p.plugin", "yolo_ros/DetectionPlugin")});
   auto log = std::make_shared<yolo_ros::test::FakePluginLog>();
 
-  yolo_ros::node::YoloNode node(
+  auto node = std::make_shared<yolo_ros::node::YoloNode>(
       options, [log](const std::string &type, std::string &error) {
         if (type != "yolo_ros/DetectionPlugin") {
           error = "unknown plugin " + type;
@@ -73,9 +73,9 @@ TEST_F(YoloNodeTest, LifecycleRunsPlugins) {
             std::make_shared<yolo_ros::test::FakePlugin>(log, "a"));
       });
 
-  EXPECT_EQ(node.configure().id(),
+  EXPECT_EQ(node->configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  EXPECT_EQ(node.activate().id(),
+  EXPECT_EQ(node->activate().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
   const auto deadline =
       std::chrono::steady_clock::now() + std::chrono::seconds(2);
@@ -84,10 +84,10 @@ TEST_F(YoloNodeTest, LifecycleRunsPlugins) {
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
   EXPECT_TRUE(log->contains("run:a"));
-  EXPECT_EQ(node.deactivate().id(),
+  EXPECT_EQ(node->deactivate().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_TRUE(log->contains("deactivate:a"));
-  EXPECT_EQ(node.cleanup().id(),
+  EXPECT_EQ(node->cleanup().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
 }
 
@@ -96,12 +96,12 @@ TEST_F(YoloNodeTest, EmptyPluginListConfigures) {
   options.arguments({"--ros-args", "-r", "__node:=test_empty_plugins"});
   options.parameter_overrides(
       {rclcpp::Parameter("plugins", std::vector<std::string>{})});
-  yolo_ros::node::YoloNode node(options);
-  EXPECT_EQ(node.configure().id(),
+  auto node = std::make_shared<yolo_ros::node::YoloNode>(options);
+  EXPECT_EQ(node->configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  EXPECT_EQ(node.deactivate().id(),
+  EXPECT_EQ(node->deactivate().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  EXPECT_EQ(node.cleanup().id(),
+  EXPECT_EQ(node->cleanup().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
 }
 
@@ -111,28 +111,28 @@ TEST_F(YoloNodeTest, FailedActivateTearsDownAndCanReconfigure) {
   options.parameter_overrides(
       {rclcpp::Parameter("plugins", std::vector<std::string>{"p"}),
        rclcpp::Parameter("p.plugin", "yolo_ros/DetectionPlugin")});
-  yolo_ros::node::YoloNode node(
+  auto node = std::make_shared<yolo_ros::node::YoloNode>(
       options, [](const std::string &, std::string &) {
         return std::static_pointer_cast<yolo_ros::Plugin>(
             std::make_shared<FailingActivatePlugin>());
       });
 
-  EXPECT_EQ(node.configure().id(),
+  EXPECT_EQ(node->configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  ASSERT_NE(node.host(), nullptr);
+  ASSERT_NE(node->host(), nullptr);
 
   // Jazzy maps a failed on_activate back to inactive (it does NOT go to
   // unconfigured), so assert the actual state; on_activate must nevertheless
   // tear the node down itself, leaving no stale host for the next configure().
-  EXPECT_EQ(node.activate().id(),
+  EXPECT_EQ(node->activate().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  EXPECT_EQ(node.host(), nullptr);
+  EXPECT_EQ(node->host(), nullptr);
 
-  EXPECT_EQ(node.cleanup().id(),
+  EXPECT_EQ(node->cleanup().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
-  EXPECT_EQ(node.configure().id(),
+  EXPECT_EQ(node->configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  EXPECT_EQ(node.cleanup().id(),
+  EXPECT_EQ(node->cleanup().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
 }
 
@@ -146,7 +146,7 @@ TEST_F(YoloNodeTest, ReconfigureAfterFailedConfigureSucceeds) {
   auto working_log = std::make_shared<yolo_ros::test::FakePluginLog>();
   int created = 0;
 
-  yolo_ros::node::YoloNode node(
+  auto node = std::make_shared<yolo_ros::node::YoloNode>(
       options,
       [&created, failing_log, working_log](const std::string &, std::string &) {
         if (created++ == 0) {
@@ -157,15 +157,15 @@ TEST_F(YoloNodeTest, ReconfigureAfterFailedConfigureSucceeds) {
             std::make_shared<yolo_ros::test::FakePlugin>(working_log, "a"));
       });
 
-  EXPECT_EQ(node.configure().id(),
+  EXPECT_EQ(node->configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
-  EXPECT_EQ(node.host(), nullptr);
+  EXPECT_EQ(node->host(), nullptr);
 
-  EXPECT_EQ(node.configure().id(),
+  EXPECT_EQ(node->configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  ASSERT_NE(node.host(), nullptr);
+  ASSERT_NE(node->host(), nullptr);
   EXPECT_TRUE(working_log->contains("setup:a"));
-  EXPECT_EQ(node.cleanup().id(),
+  EXPECT_EQ(node->cleanup().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
 }
 
@@ -175,8 +175,8 @@ TEST_F(YoloNodeTest, UnknownPluginFailsConfigure) {
   options.parameter_overrides(
       {rclcpp::Parameter("plugins", std::vector<std::string>{"p"}),
        rclcpp::Parameter("p.plugin", "yolo_ros/DoesNotExist")});
-  yolo_ros::node::YoloNode node(options);
-  EXPECT_EQ(node.configure().id(),
+  auto node = std::make_shared<yolo_ros::node::YoloNode>(options);
+  EXPECT_EQ(node->configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
 }
 
@@ -185,7 +185,7 @@ TEST_F(YoloNodeTest, MissingPluginFieldFailsConfigure) {
   options.arguments({"--ros-args", "-r", "__node:=test_missing_plugin_field"});
   options.parameter_overrides(
       {rclcpp::Parameter("plugins", std::vector<std::string>{"p"})});
-  yolo_ros::node::YoloNode node(options);
-  EXPECT_EQ(node.configure().id(),
+  auto node = std::make_shared<yolo_ros::node::YoloNode>(options);
+  EXPECT_EQ(node->configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
 }

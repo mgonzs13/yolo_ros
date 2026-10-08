@@ -42,11 +42,11 @@ YoloNode::on_configure(const rclcpp_lifecycle::State &) {
   // Attach the listener to this node and let the node's own executor spin its
   // /tf subscriptions. Do NOT use the default spin_thread dedicated-thread
   // listener: its teardown joins a spinning executor and can race/deadlock on
-  // rapid configure/cleanup cycles (hit by the gtests).
+  // rapid configure/cleanup cycles (hit by the gtests). The node-template
+  // constructor exists on every supported distro (the node-interfaces overload
+  // was only added after Foxy).
   this->tf_listener_ = std::make_shared<tf2_ros::TransformListener>(
-      this->tf_buffer_, this->get_node_base_interface(),
-      this->get_node_logging_interface(), this->get_node_parameters_interface(),
-      this->get_node_topics_interface(), false);
+      this->tf_buffer_, this->shared_from_this(), false);
 
   const auto specs = this->get_parameter("plugins").as_string_array();
   const auto cameras = this->get_parameter("cameras").as_string_array();

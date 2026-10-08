@@ -29,6 +29,9 @@
   <depend>yolo_onnxruntime_vendor</depend>
   <depend>yolo_hfhub_vendor</depend>
 
+  <!-- Foxy's pluginlib/class_loader.hpp includes boost/shared_ptr.hpp. -->
+  <depend condition="$ROS_DISTRO == 'foxy'">libboost-dev</depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>
