@@ -237,8 +237,11 @@ TEST_F(PluginHostTest, WiresChainInOrder) {
   const auto &contexts = log->cameras;
   ASSERT_EQ(contexts.at("det").size(), 1u);
   EXPECT_EQ(contexts.at("det")[0].input_channel, "cam0");
+  EXPECT_TRUE(contexts.at("det")[0].upstream_channels.empty());
   ASSERT_EQ(contexts.at("dbg").size(), 1u);
   EXPECT_EQ(contexts.at("dbg")[0].input_channel, "cam0/fake");
+  ASSERT_EQ(contexts.at("dbg")[0].upstream_channels.size(), 1u);
+  EXPECT_EQ(contexts.at("dbg")[0].upstream_channels[0], "cam0/fake");
 }
 
 TEST_F(PluginHostTest, RejectsUnknownCamera) {

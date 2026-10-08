@@ -350,7 +350,7 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 - **cameras**: Cameras to render; omit the list to select every defined camera (never write `cameras: []`) and every selected camera must also be selected by the previous plugin. Debug is terminal, so the plugin must be last in the chain.
 - **marker_lifetime**: RViz marker lifetime in seconds (default: `0.5`).
 
-The plugin syncs each camera frame with the previous plugin's detections and publishes `<cam>/debug_image`; the RViz markers `<cam>/debug_bb_markers` and `<cam>/debug_kp_markers` are built whenever those detections carry `bbox3d`/`keypoints3d` data (i.e. when `detection3d` precedes debug in the chain).
+The plugin syncs each camera frame with the freshest non-3D upstream in the chain (the tracking/detection stream before `detection3d`) and publishes `<cam>/debug_image`, so the image is not gated by the slower 3D stream. The RViz markers `<cam>/debug_bb_markers` and `<cam>/debug_kp_markers` are built independently from the chain input whenever those detections carry `bbox3d`/`keypoints3d` data (i.e. when `detection3d` precedes debug in the chain).
 
 ### Writing a plugin
 

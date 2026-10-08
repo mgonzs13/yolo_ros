@@ -73,7 +73,7 @@ For plugin _i_, the input of camera `cam` is the channel `output_channel(cam)` p
 | `yolo_ros/Detect3DPlugin`  | `CameraFrame` (with depth) + previous detections | `<cam>/detections_3d`                       |
 | `yolo_ros/DebugPlugin`     | `CameraFrame` + previous detections              | `<cam>/debug_image` + the two marker arrays |
 
-The 3D plugin must come after the detections it should lift (tracking, or detection when tracking is omitted); debug is terminal and draws whatever the previous plugin published, adding RViz markers when those detections carry `bbox3d`/`keypoints3d` data (i.e. when `detection3d` precedes it).
+The 3D plugin must come after the detections it should lift (tracking, or detection when tracking is omitted); debug is terminal and draws `<cam>/debug_image` from the freshest non-3D upstream in the chain (so the image is not gated by the 3D rate), while its RViz markers come from the chain input when it carries `bbox3d`/`keypoints3d` (i.e. when `detection3d` precedes it).
 
 ## Per-camera outputs
 

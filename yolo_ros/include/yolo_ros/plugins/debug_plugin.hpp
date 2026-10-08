@@ -27,12 +27,16 @@
 namespace yolo_ros {
 
 /// @brief Renders the debug image per camera from synchronized (frame,
-/// detections) and rebuilds the 3D RViz markers from the same detections.
+/// detections) and rebuilds the 3D RViz markers from the chain input.
 ///
 /// Publishes the per-camera output channels/topics `<cam>/debug_image`,
-/// `<cam>/debug_bb_markers` and `<cam>/debug_kp_markers`. The markers are
-/// emitted only when the upstream detections carry `bbox3d`/`keypoints3d` data,
-/// so no separate markers input is needed.
+/// `<cam>/debug_bb_markers` and `<cam>/debug_kp_markers`.
+///
+/// `debug_image` is drawn from the camera frame synchronized with the freshest
+/// non-3D upstream (the stream before the 3D plugin when it is in the chain),
+/// so it is not gated by the slower 3D stream. Markers come from the chain
+/// input (the previous plugin's output) and are emitted whenever those
+/// detections carry `bbox3d`/`keypoints3d` data, on their own rate.
 class DebugPlugin : public Plugin {
 public:
   /// @brief Declare the marker lifetime parameter.
@@ -72,13 +76,21 @@ private:
     std::string name;
     /// @brief Annotated image channel/topic (`<cam>/debug_image`).
     std::string image_channel;
+    /// @brief Detection stream synchronized with the frame for drawing
+    /// (freshest non-3D upstream).
+    std::string image_input_channel;
+    /// @brief Chain input channel carrying the 3D-enriched detections used for
+    /// the RViz markers.
+    std::string markers_channel;
     /// @brief 3D box markers channel/topic (`<cam>/debug_bb_markers`).
     std::string bb_markers_channel;
     /// @brief 3D keypoint markers channel/topic (`<cam>/debug_kp_markers`).
     std::string kp_markers_channel;
-    /// @brief Sync over the camera frame and the upstream detections.
+    /// @brief Sync over the camera frame and the 2D detections.
     std::unique_ptr<ChannelSync<CameraFrame, yolo_msgs::msg::DetectionArray>>
         sync;
+    /// @brief Independent reader of the chain input for the 3D markers.
+    ChannelReader<yolo_msgs::msg::DetectionArray> markers_reader;
   };
 
   /// @brief Publish the RViz markers of one camera for a 3D detection array.

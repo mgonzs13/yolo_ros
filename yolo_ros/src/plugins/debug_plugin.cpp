@@ -101,11 +101,28 @@ bool DebugPlugin::setup(PluginContext &ctx) {
     stream.bb_markers_channel = camera.name + "/debug_bb_markers";
     stream.kp_markers_channel = camera.name + "/debug_kp_markers";
 
+    // Draw from the freshest non-3D upstream so debug_image is not gated by
+    // the slower 3D stream; markers keep using the chain input.
+    std::string image_input = camera.input_channel;
+
+    for (auto it = camera.upstream_channels.rbegin();
+         it != camera.upstream_channels.rend(); ++it) {
+      if (*it != camera.input_channel) {
+        image_input = *it;
+        break;
+      }
+    }
+
+    stream.image_input_channel = image_input;
+    stream.markers_channel = camera.input_channel;
+
     stream.sync = std::make_unique<
         ChannelSync<CameraFrame, yolo_msgs::msg::DetectionArray>>(
         ctx.blackboard,
-        std::vector<std::string>{camera.frame_channel, camera.input_channel},
-        10);
+        std::vector<std::string>{camera.frame_channel, image_input}, 10);
+    stream.markers_reader =
+        ctx.blackboard.subscribe<yolo_msgs::msg::DetectionArray>(
+            camera.input_channel, 10);
 
     ctx.blackboard.declare_channel<sensor_msgs::msg::Image>(
         stream.image_channel);
@@ -132,6 +149,26 @@ void DebugPlugin::run(const std::atomic<bool> &stop) {
     bool processed_any = false;
 
     for (auto &camera : this->cameras_) {
+      // Markers run on the chain input (3D) rate, independently of the debug
+      // image.
+      std::shared_ptr<const yolo_msgs::msg::DetectionArray> markers;
+
+      while (camera.markers_reader.try_pop(markers)) {
+        bool has_3d = false;
+
+        for (const auto &detection : markers->detections) {
+          if (!detection.bbox3d.frame_id.empty() ||
+              !detection.keypoints3d.frame_id.empty()) {
+            has_3d = true;
+            break;
+          }
+        }
+
+        if (has_3d) {
+          this->publish_markers(camera, *markers);
+        }
+      }
+
       ChannelSync<CameraFrame, yolo_msgs::msg::DetectionArray>::Result matched;
 
       // Non-blocking single drain per camera: blocking here would add the
@@ -211,20 +248,6 @@ void DebugPlugin::run(const std::atomic<bool> &stop) {
               .toImageMsg();
       this->context_->blackboard.publish<sensor_msgs::msg::Image>(
           camera.image_channel, output);
-
-      bool has_3d = false;
-
-      for (const auto &detection : detections->detections) {
-        if (!detection.bbox3d.frame_id.empty() ||
-            !detection.keypoints3d.frame_id.empty()) {
-          has_3d = true;
-          break;
-        }
-      }
-
-      if (has_3d) {
-        this->publish_markers(camera, *detections);
-      }
     }
 
     // One idle wait per full sweep keeps the latency independent of the

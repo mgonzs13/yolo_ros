@@ -194,3 +194,88 @@ TEST_F(DebugPluginTest, DrawsCameraFrameAndMarkers) {
   EXPECT_TRUE(has_keypoint);
   EXPECT_TRUE(has_limb);
 }
+
+TEST_F(DebugPluginTest, DrawsFreshestUpstreamWhileMarkersUseChainInput) {
+  auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("debug_test");
+  yolo_ros::Blackboard blackboard;
+  yolo_ros::TopicRegistry topics;
+
+  yolo_ros::DebugPlugin plugin;
+  plugin.declare_params(*node, "dbg.");
+  plugin.get_params(*node, "dbg.");
+
+  // Chain: detection -> tracking -> detection3d -> debug. The chain input is
+  // cam0/detections_3d; the freshest non-3D upstream is cam0/tracking.
+  yolo_ros::PluginContext context{
+      blackboard,
+      topics,
+      node->get_logger(),
+      node->get_clock(),
+      nullptr,
+      "dbg",
+      {{"cam0",
+        "cam0",
+        "cam0/detections_3d",
+        true,
+        {"cam0/detections", "cam0/tracking", "cam0/detections_3d"}}}};
+  ASSERT_TRUE(plugin.setup(context));
+
+  auto debug_reader =
+      blackboard.subscribe<sensor_msgs::msg::Image>("cam0/debug_image", 1);
+  auto bb_marker_reader =
+      blackboard.subscribe<visualization_msgs::msg::MarkerArray>(
+          "cam0/debug_bb_markers", 1);
+
+  std::atomic<bool> stop{false};
+  std::thread worker([&plugin, &stop] { plugin.run(stop); });
+  std::this_thread::sleep_for(20ms);
+
+  // 2D detections arrive on the tracking stream, not on the chain input:
+  // debug_image must still be drawn from them.
+  auto frame = make_black_frame();
+  auto detections = std::make_shared<yolo_msgs::msg::DetectionArray>();
+  detections->header = frame->header;
+  yolo_msgs::msg::Detection detection;
+  detection.class_name = "person";
+  detection.score = 0.9;
+  detection.bbox.center.position.x = 4.0;
+  detection.bbox.center.position.y = 4.0;
+  detection.bbox.size.x = 4.0;
+  detection.bbox.size.y = 4.0;
+  detections->detections.push_back(detection);
+
+  blackboard.publish<yolo_ros::CameraFrame>("cam0", frame);
+  blackboard.publish<yolo_msgs::msg::DetectionArray>("cam0/tracking",
+                                                     detections);
+
+  std::shared_ptr<const sensor_msgs::msg::Image> out;
+  const bool image_received = debug_reader.wait(out, 1000ms);
+
+  // The 3D-enriched stream (the chain input) drives the markers.
+  auto detections_3d = std::make_shared<yolo_msgs::msg::DetectionArray>();
+  detections_3d->header = frame->header;
+  yolo_msgs::msg::Detection detection_3d;
+  detection_3d.class_name = "person";
+  detection_3d.bbox3d.frame_id = "camera";
+  detection_3d.bbox3d.center.position.z = 3.0;
+  detection_3d.bbox3d.center.orientation.w = 1.0;
+  detection_3d.bbox3d.size.x = 0.5;
+  detection_3d.bbox3d.size.y = 0.6;
+  detection_3d.bbox3d.size.z = 1.7;
+  detections_3d->detections.push_back(detection_3d);
+
+  blackboard.publish<yolo_msgs::msg::DetectionArray>("cam0/detections_3d",
+                                                     detections_3d);
+
+  std::shared_ptr<const visualization_msgs::msg::MarkerArray> bb_markers;
+  const bool bb_received = bb_marker_reader.wait(bb_markers, 1000ms);
+
+  stop = true;
+  blackboard.wake_all();
+  worker.join();
+
+  ASSERT_TRUE(image_received);
+  ASSERT_EQ(out->height, 8u);
+  ASSERT_TRUE(bb_received);
+  ASSERT_FALSE(bb_markers->markers.empty());
+}

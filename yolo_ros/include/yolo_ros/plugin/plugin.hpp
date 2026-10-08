@@ -32,6 +32,9 @@ struct CameraInput {
   std::string input_channel;
   /// @brief Whether the camera has a depth stream.
   bool has_depth = false;
+  /// @brief Output channels of every earlier plugin in the chain for this
+  /// camera, in chain order (empty for the first plugin).
+  std::vector<std::string> upstream_channels{};
 };
 
 /// @brief Services handed to a plugin during setup().

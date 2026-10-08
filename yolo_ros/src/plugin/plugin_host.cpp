@@ -270,6 +270,12 @@ bool PluginHost::resolve_cameras(std::size_t index,
         index == 0
             ? config->name
             : this->instances_[index - 1].plugin->output_channel(config->name);
+
+    for (std::size_t j = 0; j < index; ++j) {
+      input.upstream_channels.push_back(
+          this->instances_[j].plugin->output_channel(config->name));
+    }
+
     cameras.push_back(std::move(input));
   }
 
