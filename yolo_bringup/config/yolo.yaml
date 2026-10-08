@@ -19,9 +19,11 @@
     detection:
       plugin: yolo_ros/DetectionPlugin
       model_repo: unileon-robotics/YOLO26-ONNX
-      model_filename: yolo26s.onnx
+      model_filename: yolo26s-seg.onnx
       threshold: 0.7
       iou: 0.45
+      n_threads: -1
+      provider: cpu
       cameras: ["cam0"]
     tracking:
       plugin: yolo_ros/TrackingPlugin

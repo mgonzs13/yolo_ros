@@ -6,6 +6,7 @@
 #include "onnxruntime_cxx_api.h"
 
 #include "yolo_ros/engine/provider.hpp"
+#include "yolo_ros/utils/cpu_utils.hpp"
 #include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
 #include "yolo_ros/yolo/utils.hpp"
@@ -25,7 +26,6 @@
 #include <numeric>
 #include <regex>
 #include <stdexcept>
-#include <thread>
 
 namespace {
 
@@ -108,9 +108,11 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   this->iou_threshold = params.iou;
   std::string model_path = params.model_path;
 
-  if (n_threads == -1) {
-    n_threads = std::thread::hardware_concurrency();
+  if (n_threads <= 0) {
+    n_threads = yolo_ros::utils::num_math_threads();
   }
+
+  YOLO_LOG_INFO("Using %d threads for the ONNX Runtime session.", n_threads);
 
   // Resolve the availability-filtered provider fallback chain. "auto" prefers
   // CUDA, then CPU; an explicit provider forces its own chain.

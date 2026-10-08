@@ -89,6 +89,7 @@ add_library(yolo_ros_core SHARED
   src/engine/provider.cpp
   src/engine/model.cpp
   src/utils/logs.cpp
+  src/utils/cpu_utils.cpp
 
   src/3d/depth_utils.cpp
 
@@ -219,6 +220,13 @@ if(BUILD_TESTING)
     ${yolo_msgs_TARGETS}
   )
 
+  ament_add_gtest(test_cpu_utils
+    test/test_cpu_utils.cpp
+  )
+  target_link_libraries(test_cpu_utils
+    yolo_ros_core
+  )
+
   ament_add_gtest(test_camera_frame
     test/test_camera_frame.cpp
   )
@@ -325,6 +333,7 @@ if(BUILD_TESTING)
     test/test_provider.cpp
     src/engine/provider.cpp
     src/utils/logs.cpp
+  src/utils/cpu_utils.cpp
   )
   target_include_directories(test_provider PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -348,6 +357,7 @@ if(BUILD_TESTING)
     src/engine/reid_encoder.cpp
     src/engine/provider.cpp
     src/utils/logs.cpp
+  src/utils/cpu_utils.cpp
   )
   target_include_directories(test_tracking PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -386,6 +396,7 @@ if(BUILD_TESTING)
     src/engine/model.cpp
     src/engine/provider.cpp
     src/utils/logs.cpp
+  src/utils/cpu_utils.cpp
   )
   set_tests_properties(test_yolo26n PROPERTIES TIMEOUT 300)
   target_include_directories(test_yolo26n PUBLIC
@@ -413,6 +424,7 @@ if(BUILD_TESTING)
     src/engine/model.cpp
     src/engine/provider.cpp
     src/utils/logs.cpp
+  src/utils/cpu_utils.cpp
   )
   target_include_directories(test_batch PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

@@ -318,7 +318,7 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 - **max_det**: Maximum number of detections per image (default: `300`).
 - **cameras**: Cameras to run inference on; omit the list to select every defined camera (never write `cameras: []`). Detection is first in the chain, so it can select any defined camera. One camera uses the direct path, several run the dynamic-batch path.
 - **max_batch_size**: Maximum batch size for the multi-camera path (default: `8`).
-- **n_threads**: CPU execution-provider threads; `-1` = auto (default: `-1`).
+- **n_threads**: CPU execution-provider threads; `-1` (or any value <= 0) = auto: performance cores on hybrid CPUs, otherwise physical cores (default: `-1`).
 - **max_fps**: Cap the inference/publish rate in Hz; `0` = unlimited (default: `0`).
 - **top_k**: Classification only — number of top classes to publish (default: `5`).
 
