@@ -14,16 +14,16 @@ TEST(CpuUtils, AvailableCpusAtLeastOne) {
 
 TEST(CpuUtils, PhysicalCoresAreBounded) {
   const int physical = yolo_ros::utils::num_physical_cores();
-  const int logical = static_cast<int>(
-      std::max(1u, std::thread::hardware_concurrency()));
+  const int logical =
+      static_cast<int>(std::max(1u, std::thread::hardware_concurrency()));
   EXPECT_GE(physical, 1);
   EXPECT_LE(physical, logical);
 }
 
 TEST(CpuUtils, MathThreadsAreBounded) {
   const int math = yolo_ros::utils::num_math_threads();
-  const int logical = static_cast<int>(
-      std::max(1u, std::thread::hardware_concurrency()));
+  const int logical =
+      static_cast<int>(std::max(1u, std::thread::hardware_concurrency()));
   EXPECT_GE(math, 1);
   EXPECT_LE(math, logical);
 }
