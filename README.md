@@ -61,14 +61,18 @@ source install/setup.bash
 ### CUDA / TensorRT (x64)
 
 ```shell
-# cuDNN 9 for the CUDA 12 series (required by the ONNX Runtime 1.20 GPU build)
+# The vendor package detects the CUDA major and picks the matching prebuilt:
+#   CUDA 11 -> ONNX Runtime 1.18.0 + cuDNN 8
+#   CUDA 12 -> ONNX Runtime 1.20.0 + cuDNN 9
+#   CUDA 13 -> ONNX Runtime 1.28.0 + cuDNN 9
+# Install the cuDNN runtime matching your CUDA series, e.g. for CUDA 12:
 sudo apt install libcudnn9-cuda-12
 
 colcon build --symlink-install --cmake-args -DONNX_GPU=ON
 source install/setup.bash
 ```
 
-`-DONNX_GPU=ON` fetches the ONNX Runtime GPU build, which links against the CUDA 12 series at run time, so the host also needs an NVIDIA driver and a CUDA 12.x toolkit. TensorRT is opt-in: the default `provider: auto` runs on the CUDA execution provider and falls back to CPU; set `provider: tensorrt` to prefer the TensorRT EP (TensorRT → CUDA → CPU) when it is installed. `provider` and `device` are chosen at runtime — see [Parameters](#parameters). The prebuilt GPU tarball is x64-only; for CUDA/TensorRT on aarch64 and for custom ONNX Runtime builds see the [build guide](docs/build.md).
+`-DONNX_GPU=ON` detects the CUDA major (`CUDA_VERSION` env, `$CUDA_HOME/version.json`, `/usr/local/cuda*/version.json`, then `nvcc`) and downloads the matching ONNX Runtime GPU build with its cuDNN major; the host also needs an NVIDIA driver and the same CUDA series at run time. Override the selection with `-DONNX_CUDA_MAJOR=11|12|13`, `-DONNXRUNTIME_VERSION=...`, `-DONNX_GPU_SUFFIX=...` or a full `-DONNXRUNTIME_URL=...`. TensorRT is opt-in: the default `provider: auto` runs on the CUDA execution provider and falls back to CPU; set `provider: tensorrt` to prefer the TensorRT EP (TensorRT → CUDA → CPU) when it is installed. `provider` and `device` are chosen at runtime — see [Parameters](#parameters). The prebuilt GPU tarballs are x64-only and cover only the table above; on aarch64 or for any other CUDA/cuDNN combination build from source (see the [build guide](docs/build.md)).
 
 Launch from the workspace root so relative source paths resolve.
 
