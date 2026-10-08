@@ -37,9 +37,6 @@ The node builds as a standard ROS 2 `colcon` workspace. ONNX Runtime 1.20.0 is d
 Prerequisites and checkout, common to every backend:
 
 ```shell
-# libcurl/OpenSSL headers, for the Hugging Face Hub model download
-sudo apt install libcurl4-openssl-dev libssl-dev
-
 # Clone this repo
 cd ~/ros2_ws/src
 git clone https://github.com/mgonzs13/yolo_ros.git
@@ -119,14 +116,12 @@ See the [Docker guide](docs/docker.md) for the GPU details, the TensorRT engine 
 
 The C++ pipeline runs any Ultralytics-exported **ONNX** model whose output matches one of the YOLO layouts below. The compatible model families are:
 
-- [YOLOv3](https://docs.ultralytics.com/models/yolov3/) (`yolov3u`, Ultralytics' updated anchor-free head)
-- [YOLOv5](https://docs.ultralytics.com/models/yolov5/) (`yolov5u`)
 - [YOLOv8](https://docs.ultralytics.com/models/yolov8/)
 - [YOLOv9](https://docs.ultralytics.com/models/yolov9/)
 - [YOLOv10](https://docs.ultralytics.com/models/yolov10/)
-- [YOLOv11](https://docs.ultralytics.com/models/yolo11/)
-- [YOLOv12](https://docs.ultralytics.com/models/yolo12/)
-- [YOLOv26](https://docs.ultralytics.com/models/yolo26/)
+- [YOLO11](https://docs.ultralytics.com/models/yolo11/)
+- [YOLO12](https://docs.ultralytics.com/models/yolo12/)
+- [YOLO26](https://docs.ultralytics.com/models/yolo26/)
 
 Models are exported for one task — **detection** (`detect`), **instance segmentation** (`segment`), **human pose** (`pose`), **oriented bounding box** (`obb`) or **image classification** (`classify`). See the [model export guide](docs/models.md) for how to export a `.pt` checkpoint to ONNX with the `ultralytics` package, the export notes and the Hugging Face Hub download.
 
