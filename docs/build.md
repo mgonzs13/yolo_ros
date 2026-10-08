@@ -2,6 +2,104 @@
 
 [Installation](../README.md#installation) covers CPU everywhere and CUDA/TensorRT on x64. Use this guide when you need a different ONNX Runtime build or CUDA/TensorRT on aarch64.
 
+## Prebuilt GPU selection
+
+With `-DONNX_GPU=ON` the vendor package detects the CUDA major version — `CUDA_VERSION` in the environment (NVIDIA container images export it), `$CUDA_HOME/version.json`, `/usr/local/cuda*/version.json`, then `nvcc` — and downloads the matching prebuilt:
+
+| CUDA major | ONNX Runtime | Tarball suffix | cuDNN |
+| ---------- | ------------ | -------------- | ----- |
+| 11         | 1.18.0       | `-gpu`         | 8     |
+| 12         | 1.20.0       | `-gpu`         | 9     |
+| 13         | 1.28.0       | `-gpu_cuda13`  | 9     |
+
+The suffix is not uniform across ONNX Runtime releases (`-gpu`, `-cuda12`, `-gpu-cuda12`, `-gpu_cuda12`, `-gpu_cuda13`), so the table above is curated per CUDA major. CUDA minor-version compatibility is forward-only within a major, and cuDNN 8 and 9 are not interchangeable: install the exact CUDA runtime series and cuDNN major shown.
+
+Overrides (all as `colcon build --cmake-args`):
+
+- **`ONNX_CUDA_MAJOR=11|12|13`** — skip detection and pick the row explicitly.
+- **`ONNXRUNTIME_VERSION=...`** — override the ONNX Runtime version (keep `ONNX_GPU_SUFFIX` consistent, or pass a full URL).
+- **`ONNX_GPU_SUFFIX=...`** — override the tarball suffix for versions outside the table.
+- **`ONNXRUNTIME_URL=...`** — full tarball URL; skips version/suffix selection entirely.
+- **`ONNXRUNTIME_ROOT=...`** — a locally built ONNX Runtime prefix (takes precedence over any download).
+
+### cuDNN runtime
+
+The ONNX Runtime CUDA execution provider loads cuDNN dynamically (it `dlopen`s `libcudnn.so`), so the host needs the cuDNN **major** matching the selected release — see the table above — from a directory on the loader path:
+
+| CUDA major | apt package (Ubuntu)      |
+| ---------- | ------------------------- |
+| 11         | `libcudnn8-dev` (cuDNN 8) |
+| 12         | `libcudnn9-dev-cuda-12`   |
+| 13         | `libcudnn9-dev-cuda-13`   |
+
+The `-dev` packages are the reliable choice: besides the headers they install the unversioned `libcudnn.so` symlink, which is the name ONNX Runtime asks for; the runtime-only packages ship just `libcudnn.so.9`.
+
+The helper script detects the CUDA major (or takes `--cuda-major`), detects the Ubuntu release, installs the matching package, adds the NVIDIA repository when apt does not know the package, runs `ldconfig` and verifies the result (`--tensorrt` also installs TensorRT, `--dry-run` previews):
+
+```shell
+sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh
+sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --cuda-major 12
+sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --tensorrt
+```
+
+Equivalent manual installs:
+
+```shell
+# CUDA 11 (Ubuntu 20.04 / 22.04: ORT 1.18.0, cuDNN 8)
+sudo apt-get install libcudnn8-dev
+# CUDA 12 (Ubuntu 20.04 / 22.04 / 24.04: ORT 1.20.0, cuDNN 9)
+sudo apt-get install libcudnn9-dev-cuda-12
+# CUDA 13 (Ubuntu 22.04 / 24.04: ORT 1.28.0, cuDNN 9)
+sudo apt-get install libcudnn9-dev-cuda-13
+```
+
+For the manual path, if `apt` does not know `libcudnn9-*` (for example a machine set up from a local `cuda-repo-*-local` archive), add the NVIDIA network repository first, using the URL for the Ubuntu release (`ubuntu2004`, `ubuntu2204`, `ubuntu2404`):
+
+```shell
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update
+sudo apt-get install libcudnn9-dev-cuda-13
+sudo ldconfig
+ldconfig -p | grep cudnn   # libcudnn.so.9 and libcudnn.so
+```
+
+Without apt, extract the cuDNN 9 tarball for the right CUDA major, register it and add the symlink if the archive lacks it:
+
+```shell
+sudo sh -c 'echo /opt/cudnn/lib > /etc/ld.so.conf.d/cudnn.conf'
+sudo ldconfig
+sudo ln -sf /opt/cudnn/lib/libcudnn.so.9 /opt/cudnn/lib/libcudnn.so
+```
+
+Symptoms of a missing/mismatched cuDNN: the node log falls back to `Using execution provider: cpu`, or the CUDA provider fails on the first convolution with
+`cuDNN is unavailable or disabled for CUDA Execution Provider: dlopen failed for libcudnn.so`.
+TensorRT is unrelated to this error (it is only used by `provider: tensorrt`).
+
+### TensorRT 10 runtime
+
+The ONNX Runtime TensorRT EP is built against TensorRT 10 for all the releases the vendor selects (`libnvinfer.so.10` / `libnvonnxparser.so.10`):
+
+| ORT              | TensorRT |
+| ---------------- | -------- |
+| 1.18.0 (CUDA 11) | 10.0     |
+| 1.20.0 (CUDA 12) | 10.4     |
+| 1.28.0 (CUDA 13) | 10.x     |
+
+Install the versioned runtime packages, pinning the build tagged for the CUDA major when several are offered (`apt-cache madison libnvinfer10`); the helper script does this automatically:
+
+```shell
+# CUDA 13 example; substitute cuda12/cuda11 for the other majors
+sudo apt-get install libnvinfer10=10.16.1.11-1+cuda13.2 \
+                     libnvonnxparsers10=10.16.1.11-1+cuda13.2
+sudo ldconfig
+ldconfig -p | grep libnvinfer.so.10
+```
+
+Or use the script: `sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --tensorrt`. Do **not** install the `tensorrt` meta package: it may point at a newer major (TensorRT 11), which does not satisfy the `libnvinfer.so.10` soname. A missing runtime logs `Failed to load library .../libonnxruntime_providers_tensorrt.so ... libnvinfer.so.10: cannot open shared object file` and `provider: tensorrt` falls back to CUDA.
+
+CUDA 11 has no C++ GPU tarball after ONNX Runtime 1.18, CUDA 13 starts at 1.28, and the prebuilt GPU tarballs are x64-only. For those cases, a custom ONNX Runtime, or offline installs, use the source build below.
+
 ## Custom ONNX Runtime
 
 `yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh` builds ONNX Runtime from source on x86_64 or aarch64 and packages it in the flat `lib/` + `include/` layout the vendor expects. Select the execution provider with `--ep` (`cpu`, or `cuda`, which also builds TensorRT), then point the colcon build at the resulting prefix with `-DONNXRUNTIME_ROOT=<prefix>` — it takes precedence over the prebuilt download. The node still selects CPU/CUDA/TensorRT at run time via the `provider` parameter (see [Parameters](../README.md#parameters)).

@@ -15,7 +15,7 @@ docker build -t yolo_ros .
 
 ## GPU image (CUDA / TensorRT)
 
-The GPU build compiles against the prebuilt `onnxruntime-*-gpu` tarball (downloaded by `yolo_onnxruntime_vendor` at configure time) and installs the TensorRT 10 runtime libraries the provider needs at run time. Build it with:
+The GPU build compiles against the prebuilt `onnxruntime-*-gpu` tarball (downloaded by `yolo_onnxruntime_vendor` at configure time; the vendor auto-selects the release from the image's CUDA 12 base, i.e. ONNX Runtime 1.20.0 with cuDNN 9) and installs the TensorRT 10 runtime libraries the provider needs at run time. Build it with:
 
 ```shell
 docker build -f Dockerfile.gpu -t yolo_ros:gpu .
@@ -39,13 +39,13 @@ Note the cache is mounted under `~/.cache/yolo_ros/container`, not `~/.cache/yol
 
 The image fixes the run-time stack so a build is reproducible and its TensorRT engine cache is portable:
 
-| Component | Version |
-| :-- | :-- |
+| Component         | Version                                                 |
+| :---------------- | :------------------------------------------------------ |
 | CUDA (base image) | 12.6.3 (`nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04`) |
-| cuDNN | 9 (from the base image) |
-| TensorRT | 10.13.2 (`libnvinfer10=10.13.2.6-1+cuda12.9`, held) |
-| ONNX Runtime | 1.20.0 (`onnxruntime-linux-x64-gpu-1.20.0.tgz`) |
-| ROS 2 | Humble (`ros-humble-ros-core`) |
+| cuDNN             | 9 (from the base image)                                 |
+| TensorRT          | 10.13.2 (`libnvinfer10=10.13.2.6-1+cuda12.9`, held)     |
+| ONNX Runtime      | 1.20.0 (`onnxruntime-linux-x64-gpu-1.20.0.tgz`)         |
+| ROS 2             | Humble (`ros-humble-ros-core`)                          |
 
 TensorRT is pinned to 10.13.2 to match the development host, and the three `libnvinfer*` packages are held with `apt-mark` so the image's `apt upgrade` does not bump them to the newest `+cuda13.x` build. The `+cuda12.9` TensorRT build runs on the CUDA 12.6 base through CUDA minor-version compatibility — the same combination used on the host (CUDA 12.6 + TensorRT 10.13.2).
 

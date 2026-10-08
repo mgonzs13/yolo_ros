@@ -46,12 +46,19 @@ task (`""`/`-seg`/`-pose`/`-obb`/`-cls`), exported batch-only dynamic. Point
 ```yaml
 /yolo/yolo_node:
   ros__parameters:
-    model_repo: unileon-robotics/YOLO26-ONNX
-    model_filename: dynamic/yolo26m.onnx
+    cameras: ["cam0"]
+    cam0:
+      rgb_topic: /camera/rgb/image_raw
+    detection:
+      plugin: yolo_ros/DetectionPlugin
+      cameras: ["cam0"]
+      model_repo: unileon-robotics/YOLO26-ONNX
+      model_filename: dynamic/yolo26m.onnx
 ```
 
 To export your own instead, Ultralytics' ONNX exporter is batch-1 by default.
-For the multi-camera `yolo_batch_node`, re-export with `dynamic=True`:
+For a multi-camera pipeline (a `DetectionPlugin` whose `cameras` list selects
+several cameras), re-export with `dynamic=True`:
 
 ```bash
 cp yolo26n.pt /tmp/yolo26n-dyn.pt
@@ -83,18 +90,25 @@ Instead of a local path, the node can fetch the model from the Hub at startup vi
 ```yaml
 /yolo/yolo_node:
   ros__parameters:
-    model_repo: unileon-robotics/YOLO26-ONNX # HF repo id
-    model_filename: yolo26s.onnx # file inside that repo
-    force_download: false
+    cameras: ["cam0"]
+    cam0:
+      rgb_topic: /camera/rgb/image_raw
+    detection:
+      plugin: yolo_ros/DetectionPlugin
+      cameras: ["cam0"]
+      model_repo: unileon-robotics/YOLO26-ONNX # HF repo id
+      model_filename: yolo26s.onnx # file inside that repo
+      force_download: false
 ```
 
 Or on the command line: `ros2 launch yolo_bringup yolo.launch.py model_repo:=unileon-robotics/YOLO26-ONNX model_filename:=yolo26s.onnx`. Requires the libcurl dev headers listed in the [README](../README.md#installation); only used when `model_repo`/`model_filename` are set. The node logs the model source as `[huggingface]` (with repo/filename) or `[local]` (with the path) so the two are easy to tell apart.
 
-The shipped `config/yolo*.yaml` files already default to the [`unileon-robotics/YOLO26-ONNX`](https://huggingface.co/unileon-robotics/YOLO26-ONNX) mirror — ONNX exports of the [`Ultralytics/YOLO26`](https://huggingface.co/Ultralytics/YOLO26) checkpoints (25 files: `yolo26{n,s,m,l,x}` for detect / `-seg` / `-pose` / `-obb` / `-cls`, exported with `imgsz=640 opset=12`). The same 25 models are also available batch-only dynamic under `dynamic/` (used by `config/pipelines.yaml` for the multi-camera `yolo_batch_node`). The first launch per model downloads it (so it needs network access) and caches it; clear `model_repo` to fall back to the local `model` path, or pass `model:=<path>` for a local file.
+The shipped `config/yolo*.yaml` files already default to the [`unileon-robotics/YOLO26-ONNX`](https://huggingface.co/unileon-robotics/YOLO26-ONNX) mirror — ONNX exports of the [`Ultralytics/YOLO26`](https://huggingface.co/Ultralytics/YOLO26) checkpoints (25 files: `yolo26{n,s,m,l,x}` for detect / `-seg` / `-pose` / `-obb` / `-cls`, exported with `imgsz=640 opset=12`). The same 25 models are also available batch-only dynamic under `dynamic/`, used by multi-camera pipelines whose detector `cameras` list selects several cameras. The first launch per model downloads it (so it needs network access) and caches it; clear `model_repo` to fall back to the local `model` path, or pass `model:=<path>` for a local file.
 
 ## ReID encoder for BoT-SORT-ReID
 
-The BoT-SORT-ReID config (`config/botsort_reid.yaml`) needs a second ONNX model
+The BoT-SORT-ReID tracker (`tracking.tracker_type: botsort` with
+`tracking.with_reid: true`) needs a second ONNX model
 that turns a person crop into an appearance embedding. The C++ encoder
 (`engine::ReIDEncoder`) is model-agnostic; it only requires this contract:
 
@@ -137,7 +151,7 @@ torch.onnx.export(
 ```
 
 Weights: `kaiyangzhou/osnet` on the Hugging Face Hub (MIT). Then set
-`reid_model` in `config/botsort_reid.yaml`.
+`tracking.reid_model` in the pipeline YAML.
 
 ### FastReID SBS-S50 (Apache-2.0 code, MIT weights via BoT-SORT)
 
