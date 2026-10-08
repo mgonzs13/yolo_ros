@@ -72,7 +72,7 @@ add_library(yolo_ros_core SHARED
   src/camera/camera_streams.cpp
   src/plugin/topic_registry.cpp
   src/plugin/plugin_host.cpp
-  src/yolo_node.cpp
+  src/node/yolo_node.cpp
 
   src/tracking/tracker.cpp
   src/tracking/byte_tracker.cpp

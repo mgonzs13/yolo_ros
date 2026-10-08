@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Miguel Ángel González Santamarta
 // SPDX-License-Identifier: MIT
 
-#include "yolo_ros/yolo_node.hpp"
+#include "yolo_ros/node/yolo_node.hpp"
 
 #include <exception>
 #include <string>
@@ -11,7 +11,7 @@
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "rclcpp/logging.hpp"
 
-namespace yolo_ros {
+namespace yolo_ros::node {
 
 YoloNode::YoloNode(const rclcpp::NodeOptions &options,
                    PluginHost::Factory factory)
@@ -199,4 +199,4 @@ YoloNode::on_shutdown(const rclcpp_lifecycle::State &) {
       CallbackReturn::SUCCESS;
 }
 
-} // namespace yolo_ros
+} // namespace yolo_ros::node

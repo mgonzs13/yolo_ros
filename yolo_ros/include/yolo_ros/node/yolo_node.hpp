@@ -5,8 +5,8 @@
 /// @file
 /// @brief The single lifecycle node hosting every pipeline plugin.
 
-#ifndef YOLO_ROS__YOLO_NODE_HPP_
-#define YOLO_ROS__YOLO_NODE_HPP_
+#ifndef YOLO_ROS__NODE__YOLO_NODE_HPP_
+#define YOLO_ROS__NODE__YOLO_NODE_HPP_
 
 #include <memory>
 #include <string>
@@ -20,7 +20,7 @@
 #include "yolo_ros/plugin/plugin_host.hpp"
 #include "yolo_ros/plugin/topic_registry.hpp"
 
-namespace yolo_ros {
+namespace yolo_ros::node {
 
 /// @brief Loads plugin instances listed in the `plugins` parameter and drives
 /// their lifecycle.
@@ -108,6 +108,6 @@ private:
   bool active_ = false;
 };
 
-} // namespace yolo_ros
+} // namespace yolo_ros::node
 
-#endif // YOLO_ROS__YOLO_NODE_HPP_
+#endif // YOLO_ROS__NODE__YOLO_NODE_HPP_

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Miguel Ángel González Santamarta
 // SPDX-License-Identifier: MIT
 
-#include "yolo_ros/yolo_node.hpp"
+#include "yolo_ros/node/yolo_node.hpp"
 
 #include <gtest/gtest.h>
 
@@ -63,7 +63,7 @@ TEST_F(YoloNodeTest, LifecycleRunsPlugins) {
        rclcpp::Parameter("p.plugin", "yolo_ros/DetectionPlugin")});
   auto log = std::make_shared<yolo_ros::test::FakePluginLog>();
 
-  yolo_ros::YoloNode node(
+  yolo_ros::node::YoloNode node(
       options, [log](const std::string &type, std::string &error) {
         if (type != "yolo_ros/DetectionPlugin") {
           error = "unknown plugin " + type;
@@ -96,7 +96,7 @@ TEST_F(YoloNodeTest, EmptyPluginListConfigures) {
   options.arguments({"--ros-args", "-r", "__node:=test_empty_plugins"});
   options.parameter_overrides(
       {rclcpp::Parameter("plugins", std::vector<std::string>{})});
-  yolo_ros::YoloNode node(options);
+  yolo_ros::node::YoloNode node(options);
   EXPECT_EQ(node.configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_EQ(node.deactivate().id(),
@@ -111,10 +111,11 @@ TEST_F(YoloNodeTest, FailedActivateTearsDownAndCanReconfigure) {
   options.parameter_overrides(
       {rclcpp::Parameter("plugins", std::vector<std::string>{"p"}),
        rclcpp::Parameter("p.plugin", "yolo_ros/DetectionPlugin")});
-  yolo_ros::YoloNode node(options, [](const std::string &, std::string &) {
-    return std::static_pointer_cast<yolo_ros::Plugin>(
-        std::make_shared<FailingActivatePlugin>());
-  });
+  yolo_ros::node::YoloNode node(
+      options, [](const std::string &, std::string &) {
+        return std::static_pointer_cast<yolo_ros::Plugin>(
+            std::make_shared<FailingActivatePlugin>());
+      });
 
   EXPECT_EQ(node.configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
@@ -145,15 +146,16 @@ TEST_F(YoloNodeTest, ReconfigureAfterFailedConfigureSucceeds) {
   auto working_log = std::make_shared<yolo_ros::test::FakePluginLog>();
   int created = 0;
 
-  yolo_ros::YoloNode node(options, [&created, failing_log, working_log](
-                                       const std::string &, std::string &) {
-    if (created++ == 0) {
-      return std::static_pointer_cast<yolo_ros::Plugin>(
-          std::make_shared<FailingSetupPlugin>(failing_log));
-    }
-    return std::static_pointer_cast<yolo_ros::Plugin>(
-        std::make_shared<yolo_ros::test::FakePlugin>(working_log, "a"));
-  });
+  yolo_ros::node::YoloNode node(
+      options,
+      [&created, failing_log, working_log](const std::string &, std::string &) {
+        if (created++ == 0) {
+          return std::static_pointer_cast<yolo_ros::Plugin>(
+              std::make_shared<FailingSetupPlugin>(failing_log));
+        }
+        return std::static_pointer_cast<yolo_ros::Plugin>(
+            std::make_shared<yolo_ros::test::FakePlugin>(working_log, "a"));
+      });
 
   EXPECT_EQ(node.configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
@@ -173,7 +175,7 @@ TEST_F(YoloNodeTest, UnknownPluginFailsConfigure) {
   options.parameter_overrides(
       {rclcpp::Parameter("plugins", std::vector<std::string>{"p"}),
        rclcpp::Parameter("p.plugin", "yolo_ros/DoesNotExist")});
-  yolo_ros::YoloNode node(options);
+  yolo_ros::node::YoloNode node(options);
   EXPECT_EQ(node.configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
 }
@@ -183,7 +185,7 @@ TEST_F(YoloNodeTest, MissingPluginFieldFailsConfigure) {
   options.arguments({"--ros-args", "-r", "__node:=test_missing_plugin_field"});
   options.parameter_overrides(
       {rclcpp::Parameter("plugins", std::vector<std::string>{"p"})});
-  yolo_ros::YoloNode node(options);
+  yolo_ros::node::YoloNode node(options);
   EXPECT_EQ(node.configure().id(),
             lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
 }

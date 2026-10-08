@@ -11,13 +11,13 @@
 #include "lifecycle_msgs/msg/state.hpp"
 #include "rclcpp/executors/single_threaded_executor.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "yolo_ros/yolo_node.hpp"
+#include "yolo_ros/node/yolo_node.hpp"
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
 
   try {
-    auto node = std::make_shared<yolo_ros::YoloNode>();
+    auto node = std::make_shared<yolo_ros::node::YoloNode>();
     const auto configured = node->configure();
 
     if (configured.id() != lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE) {
