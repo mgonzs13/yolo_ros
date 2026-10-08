@@ -19,8 +19,9 @@
   <depend>ament_index_cpp</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>pluginlib</depend>
   <depend>sensor_msgs</depend>
-  <depend>std_srvs</depend>
   <depend>message_filters</depend>
   <depend>visualization_msgs</depend>
   <depend>tf2_ros</depend>

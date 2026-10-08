@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Alejandro González Cantón
+// Copyright (c) 2026 Miguel Ángel González Santamarta
 // Portions Copyright (c) 2021 Yifu Zhang
 // Portions Copyright (c) 2022 Nir Aharon
 // SPDX-License-Identifier: MIT
@@ -79,46 +80,96 @@ struct BotSortParams : public TrackerParams {
 // layer stays free of rclcpp includes.
 
 /// @brief Declare the BoT-SORT parameters on @p node with their defaults.
-/// @tparam NodeT Node type providing declare_parameter().
+///
+/// Declarations are skipped for parameters that already exist, so calling this
+/// again after a cleanup/configure cycle is safe and keeps the declared values.
+/// @tparam NodeT Node type providing declare_parameter() and has_parameter().
 /// @param[in,out] node Node on which the parameters are declared.
-template <typename NodeT> void declare_bot_sort_params(NodeT &node) {
-  node.template declare_parameter<double>("track_high_thresh", 0.25);
-  node.template declare_parameter<double>("track_low_thresh", 0.1);
-  node.template declare_parameter<double>("new_track_thresh", 0.25);
-  node.template declare_parameter<int>("track_buffer", 30);
-  node.template declare_parameter<double>("match_thresh", 0.8);
-  node.template declare_parameter<bool>("fuse_score", true);
-  node.template declare_parameter<std::string>("gmc_method", "none");
-  node.template declare_parameter<int>("gmc_downscale", 2);
-  node.template declare_parameter<bool>("with_reid", false);
-  node.template declare_parameter<std::string>("reid_model", "");
-  node.template declare_parameter<double>("proximity_thresh", 0.5);
-  node.template declare_parameter<double>("appearance_thresh", 0.25);
-  node.template declare_parameter<std::string>("provider", "auto");
-  node.template declare_parameter<std::string>("device", "cuda:0");
+/// @param[in] prefix Prefix prepended to every parameter name; already includes
+/// the trailing dot (e.g. "track."). Empty declares the bare parameter names.
+template <typename NodeT>
+void declare_bot_sort_params(NodeT &node, const std::string &prefix = "") {
+  if (!node.has_parameter(prefix + "track_high_thresh")) {
+    node.template declare_parameter<double>(prefix + "track_high_thresh", 0.25);
+  }
+
+  if (!node.has_parameter(prefix + "track_low_thresh")) {
+    node.template declare_parameter<double>(prefix + "track_low_thresh", 0.1);
+  }
+
+  if (!node.has_parameter(prefix + "new_track_thresh")) {
+    node.template declare_parameter<double>(prefix + "new_track_thresh", 0.25);
+  }
+
+  if (!node.has_parameter(prefix + "track_buffer")) {
+    node.template declare_parameter<int>(prefix + "track_buffer", 30);
+  }
+
+  if (!node.has_parameter(prefix + "match_thresh")) {
+    node.template declare_parameter<double>(prefix + "match_thresh", 0.8);
+  }
+
+  if (!node.has_parameter(prefix + "fuse_score")) {
+    node.template declare_parameter<bool>(prefix + "fuse_score", true);
+  }
+
+  if (!node.has_parameter(prefix + "gmc_method")) {
+    node.template declare_parameter<std::string>(prefix + "gmc_method", "none");
+  }
+
+  if (!node.has_parameter(prefix + "gmc_downscale")) {
+    node.template declare_parameter<int>(prefix + "gmc_downscale", 2);
+  }
+
+  if (!node.has_parameter(prefix + "with_reid")) {
+    node.template declare_parameter<bool>(prefix + "with_reid", false);
+  }
+
+  if (!node.has_parameter(prefix + "reid_model")) {
+    node.template declare_parameter<std::string>(prefix + "reid_model", "");
+  }
+
+  if (!node.has_parameter(prefix + "proximity_thresh")) {
+    node.template declare_parameter<double>(prefix + "proximity_thresh", 0.5);
+  }
+
+  if (!node.has_parameter(prefix + "appearance_thresh")) {
+    node.template declare_parameter<double>(prefix + "appearance_thresh", 0.25);
+  }
+
+  if (!node.has_parameter(prefix + "provider")) {
+    node.template declare_parameter<std::string>(prefix + "provider", "auto");
+  }
+
+  if (!node.has_parameter(prefix + "device")) {
+    node.template declare_parameter<std::string>(prefix + "device", "cuda:0");
+  }
 }
 
 /// @brief Read the already-declared BoT-SORT parameters from @p node.
 /// @tparam NodeT Node type providing get_parameter().
 /// @param[in] node Node whose parameters are read.
+/// @param[in] prefix Prefix prepended to every parameter name; already includes
+/// the trailing dot (e.g. "track.") and must match the declaration prefix.
 /// @return The params struct ready for create_tracker().
 template <typename NodeT>
-BotSortParams load_bot_sort_params(const NodeT &node) {
+BotSortParams load_bot_sort_params(const NodeT &node,
+                                   const std::string &prefix = "") {
   BotSortParams params;
-  node.get_parameter("track_high_thresh", params.track_high_thresh);
-  node.get_parameter("track_low_thresh", params.track_low_thresh);
-  node.get_parameter("new_track_thresh", params.new_track_thresh);
-  node.get_parameter("track_buffer", params.track_buffer);
-  node.get_parameter("match_thresh", params.match_thresh);
-  node.get_parameter("fuse_score", params.fuse_score);
-  node.get_parameter("gmc_method", params.gmc_method);
-  node.get_parameter("gmc_downscale", params.gmc_downscale);
-  node.get_parameter("with_reid", params.with_reid);
-  node.get_parameter("reid_model", params.reid_model);
-  node.get_parameter("proximity_thresh", params.proximity_thresh);
-  node.get_parameter("appearance_thresh", params.appearance_thresh);
-  node.get_parameter("provider", params.provider);
-  node.get_parameter("device", params.device);
+  node.get_parameter(prefix + "track_high_thresh", params.track_high_thresh);
+  node.get_parameter(prefix + "track_low_thresh", params.track_low_thresh);
+  node.get_parameter(prefix + "new_track_thresh", params.new_track_thresh);
+  node.get_parameter(prefix + "track_buffer", params.track_buffer);
+  node.get_parameter(prefix + "match_thresh", params.match_thresh);
+  node.get_parameter(prefix + "fuse_score", params.fuse_score);
+  node.get_parameter(prefix + "gmc_method", params.gmc_method);
+  node.get_parameter(prefix + "gmc_downscale", params.gmc_downscale);
+  node.get_parameter(prefix + "with_reid", params.with_reid);
+  node.get_parameter(prefix + "reid_model", params.reid_model);
+  node.get_parameter(prefix + "proximity_thresh", params.proximity_thresh);
+  node.get_parameter(prefix + "appearance_thresh", params.appearance_thresh);
+  node.get_parameter(prefix + "provider", params.provider);
+  node.get_parameter(prefix + "device", params.device);
   return params;
 }
 

@@ -1,8 +1,7 @@
-// Copyright (c) 2025 Alejandro González Cantón
-// Portions Copyright (c) 2023-2025 Miguel Ángel González Santamarta
+// Copyright (c) 2026 Miguel Ángel González Santamarta
 // SPDX-License-Identifier: MIT
 
-#include "yolo_ros/node/debug_node.hpp"
+#include "yolo_ros/plugins/debug_plugin.hpp"
 
 #if defined(CV_BRIDGE_H)
 #include <cv_bridge/cv_bridge.h>
@@ -12,18 +11,22 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <iomanip>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include <opencv2/imgproc.hpp>
 
-#include "yolo_ros/utils/qos_compat.hpp"
+#include "pluginlib/class_list_macros.hpp"
+#include "rclcpp/qos.hpp"
 
-namespace yolo_ros::node {
+namespace yolo_ros {
 
 namespace {
 /// @brief Inset (px) between a label box and the top-left corner it is anchored
@@ -49,9 +52,9 @@ cv::Scalar vivid_bgr(int hue) {
 /// @brief Number of limbs in @ref kSkeleton.
 constexpr int kNumSkeletonLimbs = 19;
 
-/// @brief COCO human pose skeleton, using the 1-based keypoint ids published by
-/// yolo_node. Shared by the 2D debug image and the 3D RViz keypoint markers so
-/// both draw the same skeleton.
+/// @brief COCO human pose skeleton, using the 1-based keypoint ids carried by
+/// the detections. Shared by the 2D debug image and the 3D RViz keypoint
+/// markers so both draw the same skeleton.
 constexpr int kSkeleton[kNumSkeletonLimbs][2] = {
     {16, 14}, {14, 12}, {17, 15}, {15, 13}, {12, 13}, {6, 12}, {7, 13},
     {6, 7},   {6, 8},   {7, 9},   {8, 10},  {9, 11},  {2, 3},  {1, 2},
@@ -77,193 +80,182 @@ builtin_interfaces::msg::Duration duration_from_seconds(double seconds) {
 }
 } // namespace
 
-DebugNode::DebugNode()
-    : rclcpp_lifecycle::LifecycleNode("yolo_node"), image_qos_profile(1),
-      class_to_color() {
-  this->declare_parameter("image_reliability", 2);
-  this->declare_parameter("image_topic", "image");
-  this->declare_parameter("detections_topic", "detections");
-  this->declare_parameter("markers_topic", "detections_3d");
-  this->declare_parameter<double>("marker_lifetime", 0.5);
+void DebugPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
+                                 const std::string &prefix) {
+  node.declare_parameter<double>(prefix + "marker_lifetime", 0.5);
 }
 
-rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-DebugNode::on_configure(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(this->get_logger(), "[%s] Configuring...", this->get_name());
-
-  this->image_topic_ = this->get_parameter("image_topic").as_string();
-  this->detections_topic_ = this->get_parameter("detections_topic").as_string();
-  this->markers_topic_ = this->get_parameter("markers_topic").as_string();
-  this->marker_lifetime_ = this->get_parameter("marker_lifetime").as_double();
-
-  this->image_qos_profile =
-      rclcpp::QoS(1)
-          .reliability(yolo_ros::utils::reliability_policy_from_int(
-              this->get_parameter("image_reliability").as_int()))
-          .durability_volatile()
-          .keep_last(1);
-
-  this->debug_publisher =
-      this->create_publisher<sensor_msgs::msg::Image>("debug_image", 10);
-
-  this->bb_markers_publisher =
-      this->create_publisher<visualization_msgs::msg::MarkerArray>(
-          "debug_bb_markers", 10);
-
-  this->kp_markers_publisher =
-      this->create_publisher<visualization_msgs::msg::MarkerArray>(
-          "debug_kp_markers", 10);
-
-  RCLCPP_INFO(this->get_logger(), "[%s] Configured", this->get_name());
-  return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-      CallbackReturn::SUCCESS;
+void DebugPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
+                             const std::string &prefix) {
+  node.get_parameter(prefix + "marker_lifetime", this->marker_lifetime_);
 }
 
-rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-DebugNode::on_activate(const rclcpp_lifecycle::State &) {
-  this->image_subscription.subscribe(
-      this->shared_from_this(), this->image_topic_, this->image_qos_profile);
-  this->detection_subscription.subscribe(this->shared_from_this(),
-                                         this->detections_topic_,
-                                         this->image_qos_profile);
+bool DebugPlugin::setup(PluginContext &ctx) {
+  this->context_ = std::make_unique<PluginContext>(PluginContext{ctx});
+  this->cameras_.clear();
 
-  uint32_t queue_size = 10;
+  for (const auto &camera : ctx.cameras) {
+    CameraStream stream;
+    stream.name = camera.name;
+    stream.image_channel = this->output_channel(camera.name);
+    stream.bb_markers_channel = camera.name + "/debug_bb_markers";
+    stream.kp_markers_channel = camera.name + "/debug_kp_markers";
 
-  this->synchronizer =
-      std::make_shared<message_filters::Synchronizer<ApproximateSyncPolicy>>(
-          queue_size);
-  this->synchronizer->connectInput(this->image_subscription,
-                                   this->detection_subscription);
-  this->synchronizer->registerCallback(std::bind(&DebugNode::recieve_callback,
-                                                 this, std::placeholders::_1,
-                                                 std::placeholders::_2));
+    stream.sync = std::make_unique<
+        ChannelSync<CameraFrame, yolo_msgs::msg::DetectionArray>>(
+        ctx.blackboard,
+        std::vector<std::string>{camera.frame_channel, camera.input_channel},
+        10);
 
-  // Separate subscription to the 3D-enriched stream purely for the RViz
-  // markers. It is NOT part of the image sync, so a slow 3D/depth stream only
-  // throttles the markers, never the debug image.
-  this->markers_subscription_ =
-      this->create_subscription<yolo_msgs::msg::DetectionArray>(
-          this->markers_topic_, rclcpp::QoS(1),
-          std::bind(&DebugNode::markers_callback, this, std::placeholders::_1));
-
-  RCLCPP_INFO(this->get_logger(), "[%s] Activated", this->get_name());
-  return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-      CallbackReturn::SUCCESS;
-}
-
-rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-DebugNode::on_deactivate(const rclcpp_lifecycle::State &) {
-  this->markers_subscription_.reset();
-  RCLCPP_INFO(this->get_logger(), "[%s] Deactivated", this->get_name());
-  return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-      CallbackReturn::SUCCESS;
-}
-
-rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-DebugNode::on_cleanup(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(this->get_logger(), "[%s] Cleaned up", this->get_name());
-  return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-      CallbackReturn::SUCCESS;
-}
-
-rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-DebugNode::on_shutdown(const rclcpp_lifecycle::State &) {
-  RCLCPP_INFO(this->get_logger(), "[%s] Shutting down", this->get_name());
-  return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-      CallbackReturn::SUCCESS;
-}
-
-void DebugNode::recieve_callback(
-    const sensor_msgs::msg::Image::ConstSharedPtr &msg_image,
-    const yolo_msgs::msg::DetectionArray::ConstSharedPtr &msg_detections) {
-  cv_bridge::CvImagePtr cv_ptr;
-
-  try {
-    cv_ptr = cv_bridge::toCvCopy(msg_image, sensor_msgs::image_encodings::BGR8);
-  } catch (cv_bridge::Exception &e) {
-    RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
-    return;
+    ctx.blackboard.declare_channel<sensor_msgs::msg::Image>(
+        stream.image_channel);
+    ctx.topics.expose<sensor_msgs::msg::Image>(
+        stream.image_channel, stream.image_channel, rclcpp::QoS(10), ctx.name);
+    ctx.blackboard.declare_channel<visualization_msgs::msg::MarkerArray>(
+        stream.bb_markers_channel);
+    ctx.topics.expose<visualization_msgs::msg::MarkerArray>(
+        stream.bb_markers_channel, stream.bb_markers_channel, rclcpp::QoS(10),
+        ctx.name);
+    ctx.blackboard.declare_channel<visualization_msgs::msg::MarkerArray>(
+        stream.kp_markers_channel);
+    ctx.topics.expose<visualization_msgs::msg::MarkerArray>(
+        stream.kp_markers_channel, stream.kp_markers_channel, rclcpp::QoS(10),
+        ctx.name);
+    this->cameras_.push_back(std::move(stream));
   }
 
-  cv::Mat image = cv_ptr->image;
+  return !this->cameras_.empty();
+}
 
-  // Draw ALL detections onto one image, then publish ONCE (not per-detection).
-  // Masks are drawn onto a single overlay layer and blended once, avoiding a
-  // full image.clone() per detection.
-  cv::Mat overlay = image.clone();
-  // Image-level (classification) detections carry an empty bbox: draw them as
-  // one vertical list, sorted by descending score (top-1 first) so the best
-  // class sits at the top of the stack. Spatial detections (non-empty bbox)
-  // keep their per-box anchors and are drawn below.
-  std::vector<const yolo_msgs::msg::Detection *> image_level;
+void DebugPlugin::run(const std::atomic<bool> &stop) {
+  while (!stop.load()) {
+    bool processed_any = false;
 
-  for (const auto &detection : msg_detections->detections) {
-    if (detection.bbox.size.x <= 0.0 && detection.bbox.size.y <= 0.0) {
-      image_level.push_back(&detection);
+    for (auto &camera : this->cameras_) {
+      ChannelSync<CameraFrame, yolo_msgs::msg::DetectionArray>::Result matched;
+
+      // Non-blocking single drain per camera: blocking here would add the
+      // per-camera timeout to every sweep (N cameras x ~10 ms).
+      if (!camera.sync->next(matched, std::chrono::milliseconds(0))) {
+        continue;
+      }
+
+      processed_any = true;
+      const auto &frame = std::get<0>(matched);
+      const auto &detections = std::get<1>(matched);
+      const cv::Mat view = frame->bgr8();
+
+      if (view.empty()) {
+        RCLCPP_ERROR(this->context_->logger,
+                     "cv_bridge exception: empty image");
+        continue;
+      }
+
+      // bgr8() may return a cached view over the immutable camera message, so
+      // draw on a private copy.
+      cv::Mat image = view.clone();
+
+      // Draw ALL detections onto one image, then publish ONCE (not per-
+      // detection). Masks are drawn onto a single overlay layer and blended
+      // once, avoiding a full image.clone() per detection.
+      cv::Mat overlay = image.clone();
+      // Image-level (classification) detections carry an empty bbox: draw them
+      // as one vertical list, sorted by descending score (top-1 first) so the
+      // best class sits at the top of the stack. Spatial detections (non-empty
+      // bbox) keep their per-box anchors and are drawn below.
+      std::vector<const yolo_msgs::msg::Detection *> image_level;
+
+      for (const auto &detection : detections->detections) {
+        if (detection.bbox.size.x <= 0.0 && detection.bbox.size.y <= 0.0) {
+          image_level.push_back(&detection);
+        }
+      }
+
+      std::sort(image_level.begin(), image_level.end(),
+                [](const yolo_msgs::msg::Detection *a,
+                   const yolo_msgs::msg::Detection *b) {
+                  return a->score > b->score;
+                });
+      int image_label_y = 0;
+
+      for (const auto *detection : image_level) {
+        const auto color = this->color_for_class(detection->class_name);
+        image_label_y += this->draw_label(
+            image, this->label_text(*detection),
+            cv::Point(kLabelInset, kLabelInset + image_label_y), color);
+      }
+
+      for (const auto &detection : detections->detections) {
+        if (detection.bbox.size.x <= 0.0 && detection.bbox.size.y <= 0.0) {
+          continue; // image-level label already drawn above
+        }
+
+        auto color = this->color_for_class(detection.class_name);
+
+        image = this->draw_box(image, detection, color);
+        this->draw_mask(overlay, image, detection, color);
+        image = this->draw_keypoints(image, detection);
+      }
+
+      cv::addWeighted(overlay, 0.4, image, 0.6, 0, image);
+
+      // The debug image is only gated by the frame<->2D-detections sync, so it
+      // publishes at the full 2D detection rate regardless of the 3D stream.
+      // The Mat is always BGR8 (bgr8() forced BGR8 and OpenCV draws in BGR),
+      // so advertise BGR8 — reusing the *original* encoding here mislabels
+      // e.g. an rgb8 camera stream as rgb8 while the pixels are BGR, which
+      // makes RViz swap red/blue and the image look blue-tainted.
+      auto output =
+          cv_bridge::CvImage(frame->header, sensor_msgs::image_encodings::BGR8,
+                             image)
+              .toImageMsg();
+      this->context_->blackboard.publish<sensor_msgs::msg::Image>(
+          camera.image_channel, output);
+
+      bool has_3d = false;
+
+      for (const auto &detection : detections->detections) {
+        if (!detection.bbox3d.frame_id.empty() ||
+            !detection.keypoints3d.frame_id.empty()) {
+          has_3d = true;
+          break;
+        }
+      }
+
+      if (has_3d) {
+        this->publish_markers(camera, *detections);
+      }
+    }
+
+    // One idle wait per full sweep keeps the latency independent of the
+    // camera count; a sweep that matched skips it to drain the backlog.
+    if (!processed_any) {
+      this->context_->blackboard.wait_for_activity(
+          std::chrono::milliseconds(10));
     }
   }
-
-  std::sort(
-      image_level.begin(), image_level.end(),
-      [](const yolo_msgs::msg::Detection *a,
-         const yolo_msgs::msg::Detection *b) { return a->score > b->score; });
-  int image_label_y = 0;
-
-  for (const auto *detection : image_level) {
-    const auto color = this->color_for_class(detection->class_name);
-    image_label_y += this->draw_label(
-        image, this->label_text(*detection),
-        cv::Point(kLabelInset, kLabelInset + image_label_y), color);
-  }
-
-  for (const auto &detection : msg_detections->detections) {
-    if (detection.bbox.size.x <= 0.0 && detection.bbox.size.y <= 0.0) {
-      continue; // image-level label already drawn above
-    }
-
-    auto color = this->color_for_class(detection.class_name);
-    image = this->draw_box(image, detection, color);
-    this->draw_mask(overlay, image, detection, color);
-    image = this->draw_keypoints(image, detection);
-  }
-
-  cv::addWeighted(overlay, 0.4, image, 0.6, 0, image);
-
-  // The debug image is only gated by the image<->2D-detections sync, so it
-  // publishes at the full 2D detection rate regardless of the 3D stream.
-  // The Mat is always BGR8 (toCvCopy above forced BGR8 and OpenCV draws in
-  // BGR), so advertise BGR8 — reusing the *original* encoding here mislabels
-  // e.g. an rgb8 camera stream as rgb8 while the pixels are BGR, which makes
-  // RViz swap red/blue and the image look blue-tainted.
-  auto return_image =
-      cv_bridge::CvImage(msg_image->header, sensor_msgs::image_encodings::BGR8,
-                         image)
-          .toImageMsg();
-  this->debug_publisher->publish(*return_image.get());
 }
 
-// Drives the RViz 3D box / keypoint markers from the 3D-enriched stream. This
-// runs on its OWN subscription (markers_topic_), so its publish rate is the 3D
-// stream's rate (min(debug image, 3D detections)) and does not throttle the
-// debug image.
-void DebugNode::markers_callback(
-    yolo_msgs::msg::DetectionArray::ConstSharedPtr msg_detections) {
+void DebugPlugin::publish_markers(
+    const CameraStream &camera,
+    const yolo_msgs::msg::DetectionArray &detections) {
   visualization_msgs::msg::MarkerArray bb_marker_array;
   visualization_msgs::msg::MarkerArray kp_marker_array;
 
-  for (const auto &detection : msg_detections->detections) {
+  for (const auto &detection : detections.detections) {
     auto color = this->color_for_class(detection.class_name);
 
-    // RViz markers for the 3D boxes (emitted only when a detect_3d node has
-    // enriched the stream with bbox3d).
+    // RViz markers for the 3D boxes (emitted only when the detect_3d plugin
+    // has enriched the stream with bbox3d).
     if (!detection.bbox3d.frame_id.empty()) {
       auto marker = this->create_bb_marker(detection, color);
-      marker.header.stamp = msg_detections->header.stamp;
+      marker.header.stamp = detections.header.stamp;
       marker.id = bb_marker_array.markers.size();
       bb_marker_array.markers.push_back(marker);
     }
 
-    // RViz markers for the 3D keypoints (pose output from a detect_3d node).
+    // RViz markers for the 3D keypoints (pose output from the detect_3d
+    // plugin).
     if (!detection.keypoints3d.frame_id.empty()) {
       std::map<int, const yolo_msgs::msg::KeyPoint3D *> points;
 
@@ -272,7 +264,7 @@ void DebugNode::markers_callback(
 
         auto marker = this->create_kp_marker(keypoint);
         marker.header.frame_id = detection.keypoints3d.frame_id;
-        marker.header.stamp = msg_detections->header.stamp;
+        marker.header.stamp = detections.header.stamp;
         marker.id = kp_marker_array.markers.size();
         kp_marker_array.markers.push_back(marker);
       }
@@ -291,21 +283,25 @@ void DebugNode::markers_callback(
         auto marker = this->create_limb_marker(*it1->second, *it2->second,
                                                indexed_color(i + 32));
         marker.header.frame_id = detection.keypoints3d.frame_id;
-        marker.header.stamp = msg_detections->header.stamp;
+        marker.header.stamp = detections.header.stamp;
         marker.id = kp_marker_array.markers.size();
         kp_marker_array.markers.push_back(marker);
       }
     }
   }
 
-  this->bb_markers_publisher->publish(bb_marker_array);
-  this->kp_markers_publisher->publish(kp_marker_array);
+  this->context_->blackboard.publish<visualization_msgs::msg::MarkerArray>(
+      camera.bb_markers_channel,
+      std::make_shared<visualization_msgs::msg::MarkerArray>(bb_marker_array));
+  this->context_->blackboard.publish<visualization_msgs::msg::MarkerArray>(
+      camera.kp_markers_channel,
+      std::make_shared<visualization_msgs::msg::MarkerArray>(kp_marker_array));
 }
 
-cv::Scalar DebugNode::color_for_class(const std::string &class_name) {
-  auto color_it = this->class_to_color.find(class_name);
+cv::Scalar DebugPlugin::color_for_class(const std::string &class_name) {
+  auto color_it = this->class_to_color_.find(class_name);
 
-  if (color_it == this->class_to_color.end()) {
+  if (color_it == this->class_to_color_.end()) {
     // Deterministic FNV-1a hash of the class name so the same class always
     // gets the same color across runs (rand() made colors change every run).
     uint32_t hash = 2166136261u;
@@ -315,19 +311,18 @@ cv::Scalar DebugNode::color_for_class(const std::string &class_name) {
       hash *= 16777619u;
     }
 
-    this->class_to_color[class_name] = vivid_bgr(static_cast<int>(hash % 180));
-    color_it = this->class_to_color.find(class_name);
+    this->class_to_color_[class_name] = vivid_bgr(static_cast<int>(hash % 180));
+    color_it = this->class_to_color_.find(class_name);
   }
 
   return color_it->second;
 }
 
 std::string
-DebugNode::label_text(const yolo_msgs::msg::Detection &detection) const {
-
+DebugPlugin::label_text(const yolo_msgs::msg::Detection &detection) const {
   std::string text = detection.class_name;
 
-  if (detection.id != "") {
+  if (!detection.id.empty()) {
     text += " " + detection.id;
   }
 
@@ -338,10 +333,9 @@ DebugNode::label_text(const yolo_msgs::msg::Detection &detection) const {
   return text;
 }
 
-cv::Mat DebugNode::draw_box(const cv::Mat &image,
-                            const yolo_msgs::msg::Detection &detection,
-                            const cv::Scalar &color) {
-
+cv::Mat DebugPlugin::draw_box(const cv::Mat &image,
+                              const yolo_msgs::msg::Detection &detection,
+                              const cv::Scalar &color) {
   const auto &center = detection.bbox.center.position;
   const double theta = detection.bbox.center.theta;
 
@@ -378,7 +372,6 @@ cv::Mat DebugNode::draw_box(const cv::Mat &image,
     cv::polylines(image, quad, true, color, 2, cv::LINE_AA);
     label_anchor =
         cv::Point(cvRound(min_x) + kLabelInset, cvRound(min_y) + kLabelInset);
-
   } else {
     cv::Rect box(center.x - detection.bbox.size.x / 2,
                  center.y - detection.bbox.size.y / 2, detection.bbox.size.x,
@@ -393,9 +386,10 @@ cv::Mat DebugNode::draw_box(const cv::Mat &image,
   return image;
 }
 
-int DebugNode::draw_label(const cv::Mat &image, const std::string &text,
-                          const cv::Point &anchor, const cv::Scalar &background,
-                          double font_scale, int thickness) {
+int DebugPlugin::draw_label(const cv::Mat &image, const std::string &text,
+                            const cv::Point &anchor,
+                            const cv::Scalar &background, double font_scale,
+                            int thickness) {
   constexpr int font = cv::FONT_HERSHEY_SIMPLEX;
   constexpr int pad = 3;
 
@@ -455,9 +449,9 @@ int DebugNode::draw_label(const cv::Mat &image, const std::string &text,
   return label_h;
 }
 
-void DebugNode::draw_mask(cv::Mat &overlay, cv::Mat &image,
-                          const yolo_msgs::msg::Detection &detection,
-                          const cv::Scalar &color) {
+void DebugPlugin::draw_mask(cv::Mat &overlay, cv::Mat &image,
+                            const yolo_msgs::msg::Detection &detection,
+                            const cv::Scalar &color) {
   if (detection.mask.data.size() == 0) {
     return;
   }
@@ -476,8 +470,9 @@ void DebugNode::draw_mask(cv::Mat &overlay, cv::Mat &image,
   cv::polylines(image, contours, true, color, 2, cv::LINE_AA);
 }
 
-cv::Mat DebugNode::draw_keypoints(const cv::Mat &image,
-                                  const yolo_msgs::msg::Detection &detection) {
+cv::Mat
+DebugPlugin::draw_keypoints(const cv::Mat &image,
+                            const yolo_msgs::msg::Detection &detection) {
   if (detection.keypoints.data.size() == 0) {
     return image;
   }
@@ -509,8 +504,8 @@ cv::Mat DebugNode::draw_keypoints(const cv::Mat &image,
 }
 
 visualization_msgs::msg::Marker
-DebugNode::create_bb_marker(const yolo_msgs::msg::Detection &detection,
-                            const cv::Scalar &color) {
+DebugPlugin::create_bb_marker(const yolo_msgs::msg::Detection &detection,
+                              const cv::Scalar &color) {
   visualization_msgs::msg::Marker marker;
 
   marker.header.frame_id = detection.bbox3d.frame_id;
@@ -550,7 +545,7 @@ DebugNode::create_bb_marker(const yolo_msgs::msg::Detection &detection,
 }
 
 visualization_msgs::msg::Marker
-DebugNode::create_kp_marker(const yolo_msgs::msg::KeyPoint3D &keypoint) {
+DebugPlugin::create_kp_marker(const yolo_msgs::msg::KeyPoint3D &keypoint) {
   visualization_msgs::msg::Marker marker;
 
   marker.ns = "yolo_3d";
@@ -582,9 +577,9 @@ DebugNode::create_kp_marker(const yolo_msgs::msg::KeyPoint3D &keypoint) {
 }
 
 visualization_msgs::msg::Marker
-DebugNode::create_limb_marker(const yolo_msgs::msg::KeyPoint3D &from,
-                              const yolo_msgs::msg::KeyPoint3D &to,
-                              const cv::Scalar &color) {
+DebugPlugin::create_limb_marker(const yolo_msgs::msg::KeyPoint3D &from,
+                                const yolo_msgs::msg::KeyPoint3D &to,
+                                const cv::Scalar &color) {
   visualization_msgs::msg::Marker marker;
 
   marker.ns = "yolo_3d_limbs";
@@ -621,4 +616,6 @@ DebugNode::create_limb_marker(const yolo_msgs::msg::KeyPoint3D &from,
   return marker;
 }
 
-} // namespace yolo_ros::node
+} // namespace yolo_ros
+
+PLUGINLIB_EXPORT_CLASS(yolo_ros::DebugPlugin, yolo_ros::Plugin)

@@ -170,9 +170,7 @@ inline yolo_ros::yolo::utils::YoloParams make_params(std::string model_path) {
   params.model_path = std::move(model_path);
   params.threshold = 0.25f;
   params.iou = 0.45f;
-  params.enable = true;
   params.max_det = 300;
-  params.image_reliability = 2;
   params.max_fps = 0;
   params.n_threads = 1;
   params.top_k = 5;

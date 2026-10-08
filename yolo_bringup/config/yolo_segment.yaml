@@ -1,58 +1,38 @@
+# Segmentation preset: same layout as yolo.yaml, the `detection` block selects
+# a segmentation ONNX export.
 /yolo/yolo_node:
   ros__parameters:
-    model_type: Segment # force segmentation (auto also works if the path contains "segment")
-    model: /home/agonzc34/models/yolo11n-segment.onnx
-    # The default sources the model from the Hugging Face Hub instead of the
-    # local path above (model is ignored when model_repo is set). The file is
-    # cached under ~/.cache/huggingface/hub and reused unless force_download.
-    # Defaults to the YOLO26 ONNX mirror
-    # (https://huggingface.co/unileon-robotics/YOLO26-ONNX); clear model_repo to
-    # fall back to the local `model` path.
-    model_repo: unileon-robotics/YOLO26-ONNX # HF repo id ("" -> use local `model`)
-    model_filename: yolo26l-seg.onnx # file inside that repo
-    force_download: false
-    device: cuda:0 # device ordinal for the CUDA/TensorRT EPs
-    provider: trt # auto = CUDA -> CPU; or tensorrt/trt/cuda/cpu
-    trt_fp16_enable: false # TensorRT FP16 (provider: tensorrt/auto)
-    trt_engine_cache_enable: true # persist built TensorRT engines
-    trt_engine_cache_path: "" # empty -> ~/.cache/yolo_ros/trt_engines/<model>
-    threshold: 0.7
-    iou: 0.45
-    max_det: 300
-    enable: true
-    image_reliability: 1 # 0=SystemDefault, 1=Reliable, 2=BestEffort
-    image_topic: /camera/rgb/image_raw
-    n_threads: -1 # -1 = auto (only used by the CPU EP)
-    max_fps: 0 # 0 = unlimited (process every frame); >0 caps inference/publish rate in Hz
-
-/yolo/tracking_node:
-  ros__parameters:
-    # `tracker` selects the config/trackers/<tracker>.yaml file that yolo.launch.py
-    # layers over this one (bytetrack | botsort | botsort_reid). That file defines
-    # the real `tracker_type` (the C++ implementation). Override from the CLI with
-    # `tracker:=<name|path>`.
-    tracker: bytetrack
-    image_reliability: 1 # 0=SystemDefault, 1=Reliable, 2=BestEffort
-    image_topic: /camera/rgb/image_raw
-
-/yolo/detect_3d_node:
-  ros__parameters:
-    target_frame: base_link
-    depth_image_units_divisor: 1000 # raw depth units -> meters
-    depth_image_reliability: 2 # 0=SystemDefault, 1=Reliable, 2=BestEffort
-    depth_info_reliability: 2
-    depth_image_topic: /camera/depth/image_raw
-    depth_info_topic: /camera/depth/camera_info
-    detections_topic: tracking # lift the tracked stream; use "detections" if tracking is off
-    # Estimate and publish the orientation of the 3D bounding boxes (OBB via
-    # PCA on a strided depth sample). Default off.
-    enable_orientation: false
-    min_seg_points_for_orientation: 20
-
-/yolo/debug_node:
-  ros__parameters:
-    image_reliability: 1 # 0=SystemDefault, 1=Reliable, 2=BestEffort
-    image_topic: /camera/rgb/image_raw
-    # "tracking" (tracked ids), "detections" (raw YOLO output) or
-    # "detections_3d" (3D-enriched, populates the RViz markers).
-    detections_topic: tracking
+    plugins: ["detection", "tracking", "detection3d", "debug"]
+    cameras: ["cam0"]
+    cam0:
+      rgb_topic: /camera/rgb/image_raw
+      depth_topic: /camera/depth/image_raw
+      depth_info_topic: /camera/depth/camera_info
+      image_reliability: 2
+      depth_reliability: 2
+    detection:
+      plugin: yolo_ros/DetectionPlugin
+      model_type: segment
+      model_repo: unileon-robotics/YOLO26-ONNX
+      model_filename: yolo26s-seg.onnx
+      threshold: 0.7
+      iou: 0.45
+      cameras: ["cam0"]
+    tracking:
+      plugin: yolo_ros/TrackingPlugin
+      cameras: ["cam0"]
+      tracker_type: bytetrack
+      track_high_thresh: 0.25
+      track_low_thresh: 0.1
+      new_track_thresh: 0.25
+      track_buffer: 30
+      match_thresh: 0.8
+      fuse_score: true
+    detection3d:
+      plugin: yolo_ros/Detect3DPlugin
+      cameras: ["cam0"]
+      target_frame: camera_link
+    debug:
+      plugin: yolo_ros/DebugPlugin
+      cameras: ["cam0"]
+      marker_lifetime: 0.5

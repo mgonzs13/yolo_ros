@@ -12,7 +12,6 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(std_srvs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(yolo_msgs REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
@@ -25,6 +24,7 @@ find_package(message_filters REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(pluginlib REQUIRED)
 
 # Some dependencies renamed headers or changed their C++ API across distros.
 # ROS_DISTRO is exported by the sourced ROS environment; pick the variant with a
@@ -65,75 +65,19 @@ include_directories(
   ${yolo_onnxruntime_vendor_INCLUDE_DIRS}
 )
 
-# Install yolo_ros
-add_executable(yolo_node
-  src/node/yolo_node.cpp
-  src/yolo_main.cpp
-
-  src/yolo/segment.cpp
-  src/yolo/detect.cpp
-  src/yolo/pose.cpp
-  src/yolo/classify.cpp
-  src/yolo/obb.cpp
-  src/yolo/utils.cpp
-  src/yolo/model_task.cpp
-  src/yolo/model_factory.cpp
-
-  src/engine/model.cpp
-  src/engine/provider.cpp
-  src/utils/logs.cpp
-)
-
-target_include_directories(yolo_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(yolo_node
-  rclcpp::rclcpp
-  rclcpp_lifecycle::rclcpp_lifecycle
-  ${sensor_msgs_TARGETS}
-  ${std_srvs_TARGETS}
-  ${CV_BRIDGE_TARGET}
-  ament_index_cpp::ament_index_cpp
-  ${yolo_msgs_TARGETS}
-  ${yolo_onnxruntime_vendor_LIBRARIES}
-  ${yolo_hfhub_vendor_TARGETS}
-  ${OpenCV_LIBS}
-)
-
-# Install debug node
-add_executable(debug_node
-  src/debug_main.cpp
-  src/node/debug_node.cpp
-)
-
-target_include_directories(debug_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(debug_node
-  rclcpp::rclcpp
-  rclcpp_lifecycle::rclcpp_lifecycle
-  ${sensor_msgs_TARGETS}
-  ${CV_BRIDGE_TARGET}
-  ${visualization_msgs_TARGETS}
-  message_filters::message_filters
-  ${yolo_msgs_TARGETS}
-  ${OpenCV_LIBS}
-)
-
-# Install tracking node
-add_executable(tracking_node
-  src/node/tracking_node.cpp
-  src/tracking_main.cpp
+# Shared library with the framework and the engine/task/tracking/3D sources.
+add_library(yolo_ros_core SHARED
+  src/blackboard/blackboard.cpp
+  src/camera/camera_frame.cpp
+  src/camera/camera_streams.cpp
+  src/plugin/topic_registry.cpp
+  src/plugin/plugin_host.cpp
+  src/yolo_node.cpp
 
   src/tracking/tracker.cpp
   src/tracking/byte_tracker.cpp
   src/tracking/bot_sort.cpp
   src/tracking/strack.cpp
-
   src/tracking/utils/kalman_filter.cpp
   src/tracking/utils/camera_motion.cpp
   src/tracking/utils/lapjv.cpp
@@ -141,89 +85,98 @@ add_executable(tracking_node
 
   src/engine/reid_encoder.cpp
   src/engine/provider.cpp
+  src/engine/model.cpp
   src/utils/logs.cpp
-)
 
-target_include_directories(tracking_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(tracking_node
-  rclcpp::rclcpp
-  rclcpp_lifecycle::rclcpp_lifecycle
-  ${sensor_msgs_TARGETS}
-  ${CV_BRIDGE_TARGET}
-  message_filters::message_filters
-  ${yolo_msgs_TARGETS}
-  ${yolo_onnxruntime_vendor_LIBRARIES}
-  ${OpenCV_LIBS}
-)
-
-# Install 3D detection node
-add_executable(detect_3d_node
-  src/node/detect_3d_node.cpp
-  src/detect_3d_main.cpp
   src/3d/depth_utils.cpp
-)
 
-target_include_directories(detect_3d_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(detect_3d_node
-  rclcpp::rclcpp
-  rclcpp_lifecycle::rclcpp_lifecycle
-  ${sensor_msgs_TARGETS}
-  ${CV_BRIDGE_TARGET}
-  message_filters::message_filters
-  tf2_ros::tf2_ros
-  ${geometry_msgs_TARGETS}
-  ${yolo_msgs_TARGETS}
-  ${OpenCV_LIBS}
-)
-
-# Install multi-camera batched inference node
-add_executable(yolo_batch_node
-  src/node/batch_node.cpp
-  src/batch_main.cpp
-
-  src/yolo/model_factory.cpp
-  src/yolo/model_task.cpp
   src/yolo/segment.cpp
   src/yolo/detect.cpp
   src/yolo/pose.cpp
   src/yolo/classify.cpp
   src/yolo/obb.cpp
   src/yolo/utils.cpp
-
-  src/engine/model.cpp
-  src/engine/provider.cpp
-  src/utils/logs.cpp
+  src/yolo/model_task.cpp
+  src/yolo/model_factory.cpp
 )
 
-target_include_directories(yolo_batch_node PUBLIC
+target_include_directories(yolo_ros_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(yolo_batch_node
+target_link_libraries(yolo_ros_core
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
+  pluginlib::pluginlib
+  tf2_ros::tf2_ros
+  message_filters::message_filters
   ${sensor_msgs_TARGETS}
-  ${std_srvs_TARGETS}
+  ${yolo_msgs_TARGETS}
   ${CV_BRIDGE_TARGET}
   ament_index_cpp::ament_index_cpp
-  ${yolo_msgs_TARGETS}
   ${yolo_onnxruntime_vendor_LIBRARIES}
   ${yolo_hfhub_vendor_TARGETS}
   ${OpenCV_LIBS}
 )
 
+# Plugin implementations loaded by the single YoloNode.
+add_library(yolo_ros_plugins SHARED
+  src/plugins/debug_plugin.cpp
+  src/plugins/tracking_plugin.cpp
+  src/plugins/detect_3d_plugin.cpp
+  src/plugins/detection_plugin.cpp
+)
+
+target_include_directories(yolo_ros_plugins PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+target_link_libraries(yolo_ros_plugins
+  yolo_ros_core
+  ${sensor_msgs_TARGETS}
+  ${visualization_msgs_TARGETS}
+  message_filters::message_filters
+  ${yolo_msgs_TARGETS}
+  ${CV_BRIDGE_TARGET}
+  ${yolo_onnxruntime_vendor_LIBRARIES}
+  ${yolo_hfhub_vendor_TARGETS}
+  ament_index_cpp::ament_index_cpp
+  ${OpenCV_LIBS}
+)
+
+pluginlib_export_plugin_description_file(yolo_ros plugins.xml)
+
+add_executable(yolo_node src/yolo_main.cpp)
+target_link_libraries(yolo_node yolo_ros_core)
+
 install(TARGETS
-  yolo_node debug_node tracking_node detect_3d_node yolo_batch_node
-  DESTINATION lib/${PROJECT_NAME}
+  yolo_ros_core
+  yolo_ros_plugins
+  yolo_node
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY include/
+  DESTINATION include
+)
+
+ament_export_include_directories(include)
+ament_export_libraries(yolo_ros_core)
+ament_export_dependencies(
+  rclcpp
+  rclcpp_lifecycle
+  pluginlib
+  sensor_msgs
+  visualization_msgs
+  message_filters
+  tf2_ros
+  geometry_msgs
+  yolo_msgs
+  ament_index_cpp
 )
 
 install(FILES
@@ -240,6 +193,110 @@ install(DIRECTORY conf
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+
+  ament_add_gtest(test_blackboard
+    test/test_blackboard.cpp
+  )
+  target_link_libraries(test_blackboard
+    yolo_ros_core
+  )
+
+  ament_add_gtest(test_channel_sync
+    test/test_channel_sync.cpp
+  )
+  target_link_libraries(test_channel_sync
+    yolo_ros_core
+    message_filters::message_filters
+    ${sensor_msgs_TARGETS}
+    ${yolo_msgs_TARGETS}
+  )
+
+  ament_add_gtest(test_camera_frame
+    test/test_camera_frame.cpp
+  )
+  target_link_libraries(test_camera_frame
+    yolo_ros_core
+    ${sensor_msgs_TARGETS}
+    ${yolo_msgs_TARGETS}
+    message_filters::message_filters
+  )
+
+  ament_add_gtest(test_camera_streams
+    test/test_camera_streams.cpp
+  )
+  target_link_libraries(test_camera_streams
+    yolo_ros_core
+    message_filters::message_filters
+    ${sensor_msgs_TARGETS}
+    ${yolo_msgs_TARGETS}
+  )
+
+  ament_add_gtest(test_topic_registry
+    test/test_topic_registry.cpp
+  )
+  target_link_libraries(test_topic_registry
+    yolo_ros_core
+    ${sensor_msgs_TARGETS}
+    ${yolo_msgs_TARGETS}
+  )
+
+  ament_add_gtest(test_plugin_host
+    test/test_plugin_host.cpp
+  )
+  target_include_directories(test_plugin_host PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/test
+  )
+  target_link_libraries(test_plugin_host
+    yolo_ros_core
+  )
+
+  ament_add_gtest(test_yolo_node
+    test/test_yolo_node.cpp
+  )
+  target_include_directories(test_yolo_node PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/test
+  )
+  target_link_libraries(test_yolo_node
+    yolo_ros_core
+    tf2_ros::tf2_ros
+  )
+
+  ament_add_gtest(test_debug_plugin
+    test/test_debug_plugin.cpp
+  )
+  target_link_libraries(test_debug_plugin
+    yolo_ros_plugins
+    ${sensor_msgs_TARGETS}
+    ${yolo_msgs_TARGETS}
+  )
+
+  ament_add_gtest(test_tracking_plugin
+    test/test_tracking_plugin.cpp
+  )
+  target_link_libraries(test_tracking_plugin
+    yolo_ros_plugins
+    ${sensor_msgs_TARGETS}
+    ${yolo_msgs_TARGETS}
+  )
+
+  ament_add_gtest(test_detect_3d_plugin
+    test/test_detect_3d_plugin.cpp
+  )
+  target_link_libraries(test_detect_3d_plugin
+    yolo_ros_plugins
+    tf2_ros::tf2_ros
+    ${geometry_msgs_TARGETS}
+    ${sensor_msgs_TARGETS}
+    ${yolo_msgs_TARGETS}
+  )
+
+  ament_add_gtest(test_detection_plugin
+    test/test_detection_plugin.cpp
+  )
+  target_link_libraries(test_detection_plugin
+    yolo_ros_plugins
+    ${yolo_msgs_TARGETS}
+  )
 
   ament_add_gtest(test_utils
     test/test_utils.cpp

@@ -51,7 +51,7 @@ MODELS_DIR="${MODELS_DIR:-${HOME}/models}"
 MODELS="${MODELS:-yolo26m.onnx}"
 ORT_GIT_URL="https://github.com/microsoft/onnxruntime"
 HFHUB_GIT_URL="https://github.com/agonzc34/huggingface-hub-cpp"
-HFHUB_TAG="1.1.4"
+HFHUB_TAG="1.1.5"
 # Kitware prebuilt aarch64 CMake bundled for the robot (needs only glibc 2.17).
 CMAKE_VERSION="${CMAKE_VERSION:-3.26.6}"
 

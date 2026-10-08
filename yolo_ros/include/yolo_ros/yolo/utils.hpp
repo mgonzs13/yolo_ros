@@ -1,4 +1,5 @@
 // Copyright (c) 2025 Alejandro González Cantón
+// Copyright (c) 2026 Miguel Ángel González Santamarta
 // SPDX-License-Identifier: MIT
 
 /// @file
@@ -140,14 +141,8 @@ struct YoloParams {
   float threshold;
   /// @brief IoU threshold for the C++ NMS.
   float iou;
-  /// @brief Gate inference, matching the Python node's `enable` parameter.
-  bool enable; // gate inference (matches the Python node's `enable`)
   /// @brief Cap on the number of detections published per image.
   int max_det; // cap on the number of detections published per image
-  /// @brief Image subscription reliability (QoS) policy.
-  int image_reliability;
-  /// @brief Image topic to subscribe to.
-  std::string image_topic;
   /// @brief Number of intra-op threads used by ONNX Runtime.
   int n_threads;
   /// @brief Cap on the inference/publish rate in Hz; 0 = unlimited. Frames are
