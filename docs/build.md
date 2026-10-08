@@ -24,21 +24,24 @@ Overrides (all as `colcon build --cmake-args`):
 
 ### cuDNN runtime
 
-The ONNX Runtime CUDA execution provider loads cuDNN dynamically (it `dlopen`s `libcudnn.so`), so the host needs the cuDNN **major** matching the selected release — see the table above — from a directory on the loader path:
+The ONNX Runtime CUDA execution provider loads cuDNN dynamically (it `dlopen`s `libcudnn.so`), so the host needs the cuDNN **major** matching the selected release — see the table above — from a directory on the loader path. The cuDNN **version** must also support the GPU architecture: cuDNN 9.11+ binaries no longer ship pre-Turing kernels (compute capability < 7.5; their precompiled engines start at sm_75), so a GTX 1060 fails on the first convolution with `CUDNN_STATUS_EXECUTION_FAILED` when a 9.11+ cuDNN is installed. 9.10.x is the newest usable release for those GPUs, and CUDA 13 does not target CC < 7.5 at all.
 
-| CUDA major | apt package (Ubuntu)      |
-| ---------- | ------------------------- |
-| 11         | `libcudnn8-dev` (cuDNN 8) |
-| 12         | `libcudnn9-dev-cuda-12`   |
-| 13         | `libcudnn9-dev-cuda-13`   |
+| CUDA major | GPU                   | apt package (Ubuntu)                                          |
+| ---------- | --------------------- | ------------------------------------------------------------- |
+| 11         | any                   | `libcudnn8-dev` (cuDNN 8)                                     |
+| 12         | pre-Turing (CC < 7.5)  | `libcudnn9-{cuda-12,dev-cuda-12,headers-cuda-12}` at `9.10.x` |
+| 12         | Turing+ (CC >= 7.5)   | `libcudnn9-dev-cuda-12` (latest 9.x)                          |
+| 13         | pre-Turing             | not supported; use CUDA 12 + cuDNN 9.10.x or CUDA 11 + 8      |
+| 13         | Turing+ (CC >= 7.5)   | `libcudnn9-dev-cuda-13` (latest 9.x)                          |
 
 The `-dev` packages are the reliable choice: besides the headers they install the unversioned `libcudnn.so` symlink, which is the name ONNX Runtime asks for; the runtime-only packages ship just `libcudnn.so.9`.
 
-The helper script detects the CUDA major (or takes `--cuda-major`), detects the Ubuntu release, installs the matching package, adds the NVIDIA repository when apt does not know the package, runs `ldconfig` and verifies the result (`--tensorrt` also installs TensorRT, `--dry-run` previews):
+The helper script detects the CUDA major (or takes `--cuda-major`), the GPU compute capability (`--gpu-arch NN`, `$GPU_ARCH`, or `nvidia-smi`, taking the lowest capability across GPUs) and the Ubuntu release, installs the matching packages, adds the NVIDIA repository when apt does not know them, pins and `apt-mark hold`s the cuDNN 9.10.x packages for pre-Turing GPUs on CUDA 12, runs `ldconfig` and verifies the result. `--tensorrt` also installs TensorRT (skipped on pre-Turing GPUs, see below) and `--dry-run` previews without touching the system. When no GPU is visible (build host, container) it installs the latest cuDNN and warns; pass `--gpu-arch` when provisioning for a known GPU.
 
 ```shell
 sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh
 sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --cuda-major 12
+sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --cuda-major 12 --gpu-arch 61
 sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --tensorrt
 ```
 
@@ -49,7 +52,16 @@ Equivalent manual installs:
 sudo apt-get install libcudnn8-dev
 # CUDA 12 (Ubuntu 20.04 / 22.04 / 24.04: ORT 1.20.0, cuDNN 9)
 sudo apt-get install libcudnn9-dev-cuda-12
-# CUDA 13 (Ubuntu 22.04 / 24.04: ORT 1.28.0, cuDNN 9)
+# CUDA 12 on a pre-Turing GPU (Pascal/Volta, CC < 7.5): pin the newest compatible
+# cuDNN (9.10.2.21-1 is what Ubuntu 22.04 serves; check yours with
+# `apt-cache madison libcudnn9-cuda-12 | grep 9.10`; the helper script resolves it).
+# --allow-downgrades is required when a newer cuDNN (e.g. 9.27) is already installed
+sudo apt-get install --allow-downgrades libcudnn9-cuda-12=9.10.2.21-1 \
+                     libcudnn9-dev-cuda-12=9.10.2.21-1 \
+                     libcudnn9-headers-cuda-12=9.10.2.21-1
+sudo apt-mark hold libcudnn9-cuda-12 libcudnn9-dev-cuda-12 libcudnn9-headers-cuda-12
+# Undo the hold with: sudo apt-mark unhold libcudnn9-cuda-12 libcudnn9-dev-cuda-12 libcudnn9-headers-cuda-12
+# CUDA 13 (Ubuntu 22.04 / 24.04: ORT 1.28.0, cuDNN 9; Turing+ only)
 sudo apt-get install libcudnn9-dev-cuda-13
 ```
 
@@ -74,6 +86,7 @@ sudo ln -sf /opt/cudnn/lib/libcudnn.so.9 /opt/cudnn/lib/libcudnn.so
 
 Symptoms of a missing/mismatched cuDNN: the node log falls back to `Using execution provider: cpu`, or the CUDA provider fails on the first convolution with
 `cuDNN is unavailable or disabled for CUDA Execution Provider: dlopen failed for libcudnn.so`.
+A cuDNN that no longer supports the GPU architecture fails differently: loading succeeds and the first `Conv` node fails with `CUDNN_STATUS_EXECUTION_FAILED` (e.g. cuDNN 9.11+ on a GTX 1060), which is fixed by pinning 9.10.x as above.
 TensorRT is unrelated to this error (it is only used by `provider: tensorrt`).
 
 ### TensorRT 10 runtime
@@ -95,6 +108,8 @@ sudo apt-get install libnvinfer10=10.16.1.11-1+cuda13.2 \
 sudo ldconfig
 ldconfig -p | grep libnvinfer.so.10
 ```
+
+TensorRT 10 requires compute capability 7.5+ (Turing or newer); the helper script skips it on older GPUs, where the CUDA provider is the GPU option.
 
 Or use the script: `sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --tensorrt`. Do **not** install the `tensorrt` meta package: it may point at a newer major (TensorRT 11), which does not satisfy the `libnvinfer.so.10` soname. A missing runtime logs `Failed to load library .../libonnxruntime_providers_tensorrt.so ... libnvinfer.so.10: cannot open shared object file` and `provider: tensorrt` falls back to CUDA.
 
