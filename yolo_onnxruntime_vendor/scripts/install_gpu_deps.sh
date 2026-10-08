@@ -2,8 +2,8 @@
 # Copyright (c) 2026 Miguel Ángel González Santamarta
 # SPDX-License-Identifier: MIT
 #
-# Install the CUDA runtime libraries (cuDNN, optional TensorRT) required by the
-# ONNX Runtime GPU build that yolo_onnxruntime_vendor downloads.
+# Install the CUDA runtime libraries (cuDNN, optional TensorRT 10) required by
+# the ONNX Runtime GPU build that yolo_onnxruntime_vendor downloads.
 #
 # The CUDA major selects ONNX Runtime and cuDNN (see docs/build.md):
 #   CUDA 11 -> ONNX Runtime 1.18.0 + cuDNN 8
@@ -30,7 +30,7 @@ Usage:
 
 Options:
   --cuda-major M   CUDA major to install for (auto-detected when omitted)
-  --tensorrt       also install the TensorRT runtime (provider: tensorrt)
+  --tensorrt       also install the TensorRT 10 runtime for provider: tensorrt
   --ubuntu R       override the Ubuntu release detected from /etc/os-release
   --dry-run        print what would be done without touching the system
   -h, --help       show this help
@@ -163,12 +163,21 @@ case "$CUDA_MAJOR" in
   13) ORT_VERSION="1.28.0" ;;
 esac
 
+# TensorRT runtime for the ONNX Runtime TensorRT EP. The supported ONNX Runtime
+# builds load the TensorRT 10 soname (libnvinfer.so.10 / libnvonnxparser.so.10);
+# the "tensorrt" meta package may point at a newer major, so use the versioned
+# packages and prefer the build tagged for the detected CUDA major.
+trt_pinned_version() {
+  apt-cache madison libnvinfer10 2>/dev/null |
+    awk -v pat="+cuda${CUDA_MAJOR}." 'index($3, pat) { print $3; exit }'
+}
+
 TAG="ubuntu${UBUNTU}"
 KEYRING_URL="https://developer.download.nvidia.com/compute/cuda/repos/${TAG}/x86_64/cuda-keyring_1.1-1_all.deb"
 
 echo "CUDA ${CUDA_MAJOR} on ${TAG}: ${CUDNN_PKG} (ONNX Runtime ${ORT_VERSION})"
 if [ "$WITH_TENSORRT" -eq 1 ]; then
-  echo "TensorRT runtime requested"
+  echo "TensorRT 10 runtime requested (libnvinfer10, libnvonnxparsers10)"
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -176,7 +185,12 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "  install NVIDIA cuda-keyring for ${TAG} if ${CUDNN_PKG} is unknown"
   echo "  apt-get install -y ${CUDNN_PKG}"
   if [ "$WITH_TENSORRT" -eq 1 ]; then
-    echo "  apt-get install -y tensorrt"
+    trt_version="$(trt_pinned_version)"
+    if [ -n "$trt_version" ]; then
+      echo "  apt-get install -y libnvinfer10=${trt_version} libnvonnxparsers10=${trt_version}"
+    else
+      echo "  apt-get install -y libnvinfer10 libnvonnxparsers10"
+    fi
   fi
   echo "  ldconfig && ldconfig -p | grep cudnn"
   exit 0
@@ -191,7 +205,16 @@ if [ "$(id -u)" -ne 0 ]; then
   exec sudo "$0" "${reexec[@]}"
 fi
 
+need_keyring=0
 if ! apt-cache show "$CUDNN_PKG" >/dev/null 2>&1; then
+  need_keyring=1
+fi
+if [ "$WITH_TENSORRT" -eq 1 ] &&
+  ! apt-cache show libnvinfer10 >/dev/null 2>&1; then
+  need_keyring=1
+fi
+
+if [ "$need_keyring" -eq 1 ]; then
   echo "Adding the NVIDIA CUDA repository for ${TAG} ..."
   tmp_dir="$(mktemp -d)"
   trap 'rm -rf "${tmp_dir}"' EXIT
@@ -203,18 +226,32 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y "$CUDNN_PKG"
 if [ "$WITH_TENSORRT" -eq 1 ]; then
-  apt-get install -y tensorrt
+  trt_version="$(trt_pinned_version)"
+  if [ -n "$trt_version" ]; then
+    apt-get install -y "libnvinfer10=${trt_version}" \
+      "libnvonnxparsers10=${trt_version}" ||
+      apt-get install -y libnvinfer10 libnvonnxparsers10
+  else
+    apt-get install -y libnvinfer10 libnvonnxparsers10
+  fi
 fi
 ldconfig
 
 echo "--- installed:"
 dpkg-query -W -f='${Package} ${Version}\n' "$CUDNN_PKG" || true
 if [ "$WITH_TENSORRT" -eq 1 ]; then
-  dpkg-query -W -f='${Package} ${Version}\n' tensorrt || true
+  dpkg-query -W -f='${Package} ${Version}\n' libnvinfer10 \
+    libnvonnxparsers10 || true
 fi
 
 echo "--- loader check:"
 if ! ldconfig -p | grep -i cudnn; then
   echo "cuDNN is not visible to the dynamic loader" >&2
   exit 1
+fi
+if [ "$WITH_TENSORRT" -eq 1 ]; then
+  if ! ldconfig -p | grep -i "libnvinfer.so.10"; then
+    echo "TensorRT is not visible to the dynamic loader" >&2
+    exit 1
+  fi
 fi
