@@ -23,7 +23,11 @@
 #include "tf2/exceptions.h"
 #endif
 
+#if __has_include("tf2/time.hpp")
+#include "tf2/time.hpp"
+#else
 #include "tf2/time.h"
+#endif
 
 namespace yolo_ros {
 
