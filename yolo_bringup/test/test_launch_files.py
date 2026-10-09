@@ -1,4 +1,5 @@
 # Copyright (c) 2026 Alejandro González Cantón
+# Copyright (c) 2026 Miguel Ángel González Santamarta
 # SPDX-License-Identifier: MIT
 
 import importlib.util
@@ -8,13 +9,13 @@ import pytest
 import yaml
 from launch import LaunchContext, LaunchDescription, Substitution
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
+
+from yolo_bringup import launch_params
 
 LAUNCH_DIR = os.path.join(os.path.dirname(__file__), "..", "launch")
 LAUNCH_FILES = {
     "yolo": "yolo.launch.py",
-    "pipelines": "yolo_pipelines.launch.py",
 }
 
 
@@ -35,15 +36,40 @@ def _unsub(value):
         return {_unsub(key): _unsub(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         evaluated = [_unsub(item) for item in value]
-        if len(evaluated) == 1:
+        # A scalar string parameter normalizes to a 1-tuple of substitutions,
+        # while a one-element array is a 1-tuple holding a list, so only the
+        # former collapses here.
+        if len(evaluated) == 1 and isinstance(value[0], Substitution):
             return evaluated[0]
         return type(value)(evaluated)
     return value
 
 
+def _decoded(value):
+    """Decode launch_ros' yaml.dumped string parameter values, recursively."""
+    value = _unsub(value)
+    if isinstance(value, str):
+        return yaml.safe_load(value)
+    if isinstance(value, (list, tuple)):
+        return [_decoded(item) for item in value]
+    return value
+
+
+def _node_params(node):
+    """Merge the Node's parameter dictionaries into decoded {param: value}."""
+    merged = {}
+    for entry in node._Node__parameters:
+        if isinstance(entry, dict):
+            merged.update(_unsub(entry))
+    return {key: _decoded(value) for key, value in merged.items()}
+
+
 class _FakeContext:
     def __init__(self, configs):
         self.launch_configurations = configs
+
+    def perform_substitution(self, substitution):
+        return substitution.perform(self)
 
 
 def _description(name):
@@ -59,235 +85,88 @@ def _declared(name):
     }
 
 
+def _single_node(module, configs, params_file=None):
+    if params_file is None:
+        params_file = LaunchConfiguration("params_file")
+    nodes = module._launch_setup(
+        _FakeContext(configs),
+        params_file,
+        LaunchConfiguration("namespace"),
+    )
+    assert len(nodes) == 1
+    return nodes[0]
+
+
+@pytest.fixture
+def bringup_share(monkeypatch):
+    import ament_index_python.packages as ament
+
+    bringup_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    monkeypatch.setattr(ament, "get_package_share_directory", lambda _: bringup_dir)
+    return bringup_dir
+
+
 @pytest.mark.parametrize("name", sorted(LAUNCH_FILES))
-def test_launch_description_builds(name):
+def test_launch_description_builds(name, bringup_share):
     assert isinstance(_description(name), LaunchDescription)
 
 
-@pytest.mark.parametrize("name", ["yolo"])
-def test_catalogue_args_are_declared(name):
-    assert {
-        "model",
-        "model_type",
-        "threshold",
-        "input_image_topic",
-        "image_reliability",
-        "tracker",
-        "input_depth_topic",
-        "input_depth_info_topic",
-    } <= _declared(name)
+def test_declares_only_params_file_namespace_and_scalar_args(bringup_share):
+    expected = {"params_file", "namespace"} | set(
+        launch_params.param_arg_names(list(launch_params.PLUGINS))
+    )
+    assert _declared("yolo") == expected
 
 
-@pytest.mark.parametrize("name", ["yolo"])
-def test_base_flags_are_declared(name):
-    assert {
-        "params_file",
-        "namespace",
+def test_removed_args_are_not_declared(bringup_share):
+    declared = _declared("yolo")
+    for name in (
         "use_tracking",
         "use_3d",
         "use_debug",
-    } <= _declared(name)
+        "tracker",
+        "image_topic",
+        "depth_image_topic",
+        "depth_info_topic",
+        "input_image_topic",
+        "input_depth_topic",
+        "input_depth_info_topic",
+    ):
+        assert name not in declared
 
 
-def test_base_flag_defaults():
+def test_base_defaults(bringup_share):
     defaults = {
         entity.name: _unsub(entity.default_value)
         for entity in _description("yolo").entities
         if isinstance(entity, DeclareLaunchArgument)
     }
-    assert defaults["use_tracking"] == "True"
-    assert defaults["use_3d"] == "False"
-    assert defaults["use_debug"] == "True"
+    assert defaults["namespace"] == "yolo"
     assert "yolo.yaml" in str(defaults["params_file"])
 
 
-def test_launch_setup_layers_overrides_for_yolo_node():
-    module = _load("yolo")
-    context = _FakeContext(
-        {"model": "/x.onnx", "threshold": "0.5", "input_image_topic": "/cam"}
+def test_yolo_launch_setup_creates_single_node(bringup_share):
+    configs = {"namespace": "yolo"}
+    node = _single_node(_load("yolo"), configs)
+    assert node._Node__node_name == "yolo_node"
+    assert node._Node__node_executable == "yolo_node"
+    assert (
+        _FakeContext(configs).perform_substitution(node._Node__node_namespace) == "yolo"
     )
+    # No plugin classes are injected: the YAML is the source of truth.
+    assert _node_params(node) == {}
+
+
+def test_yolo_launch_layers_instance_prefixed_overrides(bringup_share):
+    configs = {"namespace": "yolo", "threshold": "0.5"}
     params_file = LaunchConfiguration("params_file")
-    nodes = module._launch_setup(
-        context,
-        params_file,
-        LaunchConfiguration("namespace"),
-        LaunchConfiguration("use_tracking"),
-        LaunchConfiguration("use_3d"),
-        LaunchConfiguration("use_debug"),
-    )
-    by_name = {node._Node__node_name: node for node in nodes}
-    params = by_name["yolo_node"]._Node__parameters
-    assert len(params) == 2
-    # normalize_parameters wraps the YAML substitution in a ParameterFile, so
-    # check it still wraps the exact params_file we handed to _launch_setup.
-    assert params[0].param_file[0] is params_file
-    # normalize_parameter_dict yaml.dumps string values (adds a trailing
-    # "...\n" document marker), so decode them back for the comparison.
-    overrides = {
-        key: yaml.safe_load(value) if isinstance(value, str) else value
-        for key, value in _unsub(params[1]).items()
-    }
-    assert overrides == {
-        "model": "/x.onnx",
-        "threshold": 0.5,
-        "image_topic": "/cam",
-    }
-    # The always-on inference node has no condition; the other three gate on
-    # their use_* flag.
-    assert by_name["yolo_node"].condition is None
-    for name in ("tracking_node", "detect_3d_node", "debug_node"):
-        assert isinstance(by_name[name].condition, IfCondition)
+    node = _single_node(_load("yolo"), configs, params_file)
+    assert node._Node__parameters[0].param_file[0] is params_file
+    params = _node_params(node)
+    assert params == {"detection.threshold": pytest.approx(0.5)}
+    assert "detection.plugin" not in params
 
 
-def test_launch_setup_selects_tracker_from_params_file(tmp_path):
-    pipeline = tmp_path / "yolo.yaml"
-    pipeline.write_text(
-        "/yolo/tracking_node:\n  ros__parameters:\n    tracker: botsort_reid\n"
-    )
-    module = _load("yolo")
-    context = _FakeContext(
-        {"params_file": str(pipeline), "namespace": "yolo", "with_reid": "true"}
-    )
-    params_file = LaunchConfiguration("params_file")
-    nodes = module._launch_setup(
-        context,
-        params_file,
-        LaunchConfiguration("namespace"),
-        LaunchConfiguration("use_tracking"),
-        LaunchConfiguration("use_3d"),
-        LaunchConfiguration("use_debug"),
-    )
-    params = {node._Node__node_name: node for node in nodes}[
-        "tracking_node"
-    ]._Node__parameters
-    # pipeline config -> per-tracker file -> CLI overrides
-    assert len(params) == 3
-    assert params[0].param_file[0] is params_file
-    assert str(_unsub(params[1].param_file[0])).endswith(
-        os.path.join("config", "trackers", "botsort_reid.yaml")
-    )
-    overrides = {
-        key: yaml.safe_load(value) if isinstance(value, str) else value
-        for key, value in _unsub(params[2]).items()
-    }
-    assert overrides == {"with_reid": True}
-
-
-def test_launch_setup_tracker_arg_overrides_params_file(tmp_path):
-    pipeline = tmp_path / "yolo.yaml"
-    pipeline.write_text(
-        "/yolo/tracking_node:\n  ros__parameters:\n    tracker: bytetrack\n"
-    )
-    module = _load("yolo")
-    context = _FakeContext(
-        {"params_file": str(pipeline), "namespace": "yolo", "tracker": "botsort"}
-    )
-    nodes = module._launch_setup(
-        context,
-        LaunchConfiguration("params_file"),
-        LaunchConfiguration("namespace"),
-        LaunchConfiguration("use_tracking"),
-        LaunchConfiguration("use_3d"),
-        LaunchConfiguration("use_debug"),
-    )
-    params = {node._Node__node_name: node for node in nodes}[
-        "tracking_node"
-    ]._Node__parameters
-    assert str(_unsub(params[1].param_file[0])).endswith(
-        os.path.join("config", "trackers", "botsort.yaml")
-    )
-
-
-def test_pipelines_declares_pipeline_file():
-    assert "pipeline_file" in _declared("pipelines")
-
-
-def test_pipelines_setup_generates_per_camera_nodes(tmp_path, monkeypatch):
-    import ament_index_python.packages as ament
-
-    bringup_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    monkeypatch.setattr(ament, "get_package_share_directory", lambda _: bringup_dir)
-
-    pipeline = tmp_path / "pipelines.yaml"
-    pipeline.write_text(
-        "namespace: yolo\n"
-        "tracker: bytetrack\n"
-        "model:\n"
-        "  model: /tmp/x.onnx\n"
-        "  threshold: 0.5\n"
-        "  max_batch_size: 4\n"
-        "  image_reliability: 2\n"
-        "cameras:\n"
-        "  - name: front\n"
-        "    image_topic: /front/image_raw\n"
-        "    tracker: botsort\n"
-        "    tracking: true\n"
-        "    debug: true\n"
-        "    depth:\n"
-        "      image_topic: /front/depth/image_raw\n"
-        "      info_topic: /front/depth/camera_info\n"
-        "      target_frame: front_link\n"
-        "  - name: back\n"
-        "    image_topic: /back/image_raw\n"
-        "    tracking: false\n"
-        "    debug: true\n"
-    )
-
-    nodes = _load("pipelines")._launch_setup(None, str(pipeline))
-    keyed = {(node._Node__node_namespace, node._Node__node_name): node for node in nodes}
-    assert ("yolo", "yolo_batch_node") in keyed
-    assert ("yolo/front", "tracking_node") in keyed
-    assert ("yolo/front", "detect_3d_node") in keyed
-    assert ("yolo/front", "debug_node") in keyed
-    assert ("yolo/back", "tracking_node") not in keyed
-    assert ("yolo/back", "detect_3d_node") not in keyed
-    assert ("yolo/back", "debug_node") in keyed
-
-    def params(node):
-        raw = node._Node__parameters[0]
-        return {
-            k: yaml.safe_load(v) if isinstance(v, str) else v
-            for k, v in _unsub(raw).items()
-        }
-
-    assert params(keyed[("yolo/front", "tracking_node")])["tracker_type"] == "botsort"
-    front_3d = params(keyed[("yolo/front", "detect_3d_node")])
-    assert front_3d["detections_topic"] == "tracking"
-    assert front_3d["depth_image_topic"] == "/front/depth/image_raw"
-    assert front_3d["target_frame"] == "front_link"
-    assert params(keyed[("yolo/back", "debug_node")])["detections_topic"] == "detections"
-
-
-def test_pipelines_resolves_pipeline_file_from_context(tmp_path, monkeypatch):
-    """Regression: OpaqueFunction hands _launch_setup the raw
-    LaunchConfiguration, which must be resolved through the launch context
-    rather than stringified."""
-    import ament_index_python.packages as ament
-
-    bringup_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    monkeypatch.setattr(ament, "get_package_share_directory", lambda _: bringup_dir)
-
-    pipeline = tmp_path / "pipelines.yaml"
-    pipeline.write_text(
-        "cameras:\n" "  - name: front\n" "    image_topic: /front/image_raw\n"
-    )
-    context = _FakeContext({"pipeline_file": str(pipeline)})
-    nodes = _load("pipelines")._launch_setup(
-        context, LaunchConfiguration("pipeline_file")
-    )
-    keyed = {(node._Node__node_namespace, node._Node__node_name): node for node in nodes}
-    assert ("yolo", "yolo_batch_node") in keyed
-    assert ("yolo/front", "debug_node") in keyed
-
-
-def test_pipelines_rejects_duplicate_camera_names(tmp_path):
-    pipeline = tmp_path / "pipelines.yaml"
-    pipeline.write_text(
-        "cameras:\n"
-        "  - name: cam\n"
-        "    image_topic: /a\n"
-        "  - name: cam\n"
-        "    image_topic: /b\n"
-    )
-    with pytest.raises(RuntimeError, match="unique"):
-        _load("pipelines")._launch_setup(None, str(pipeline))
+def test_yolo_launch_has_no_remappings(bringup_share):
+    node = _single_node(_load("yolo"), {"namespace": "yolo"})
+    assert not node._Node__remappings

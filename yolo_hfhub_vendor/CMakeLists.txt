@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Alejandro González Cantón
 # SPDX-License-Identifier: MIT
 
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.10)
 project(yolo_hfhub_vendor)
 
 include(FetchContent)
@@ -16,6 +16,9 @@ FetchContent_Declare(
   GIT_TAG        1.1.5
   GIT_SHALLOW    TRUE
 )
+# Built as a static archive, but downstream code (yolo_ros_plugins) links it
+# into a shared library, which requires position-independent code.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_MakeAvailable(yolo_hfhub)
 
 # Export the hfhub target and its include directories for downstream packages.

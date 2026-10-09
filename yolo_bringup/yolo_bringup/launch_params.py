@@ -1,37 +1,48 @@
 # Copyright (c) 2026 Alejandro González Cantón
+# Copyright (c) 2026 Miguel Ángel González Santamarta
 # SPDX-License-Identifier: MIT
 
-"""Command-line overrides for the yolo_bringup YAML params files.
+"""Command-line overrides for the yolo_bringup pipeline YAML.
 
-Every ROS parameter declared by the C++ nodes can be overridden from the
-command line, e.g.::
+The pipeline YAML (``config/yolo.yaml`` and its task presets) is the single
+source of truth for the node: the node-level ``cameras`` list, the ordered
+``plugins`` list, and each instance's ``plugin`` class, selected ``cameras``
+and parameters. This module only exposes the scalar plugin parameters as
+launch arguments, e.g.::
 
-    ros2 launch yolo_bringup yolo.launch.py model:=/x.onnx threshold:=0.5
+    ros2 launch yolo_bringup yolo.launch.py threshold:=0.5 tracker_type:=botsort
+
+A provided argument becomes the ``<instance>.<param>`` override that rclcpp
+layers on top of the YAML. Array parameters and structural fields
+(``plugins``, ``<camera>.rgb_topic``, ``<instance>.plugin``,
+``<instance>.cameras``) are YAML-only: a CLI value is always a plain string,
+which rclcpp rejects for a ``std::vector<std::string>`` parameter.
 
 An argument that is not passed keeps the value from the YAML params file, so
 the YAML remains the source of defaults. The empty string is the "not provided"
 sentinel; a non-empty YAML string therefore cannot be overridden *to* empty.
 
-Argument names mirror the upstream Python launch where one existed
-(``input_image_topic``, ``input_depth_topic``, ``input_depth_info_topic``,
-``tracker``); every other argument has the same name as its parameter.
+Each plugin instance reads its parameters under ``<instance>.<name>``, so the
+override keys are instance-prefixed (``detection.threshold``,
+``tracking.tracker_type``). Tracker knobs are inline under ``tracking:`` in the
+pipeline YAML; the tracking instance declares only the knobs of its selected
+``tracker_type``.
 """
 
-import os
 from dataclasses import dataclass
 from typing import Optional
 
-import yaml
 from launch.actions import DeclareLaunchArgument
 
 
 @dataclass(frozen=True)
 class ParamSpec:
-    """A node parameter exposed as a launch argument."""
+    """A plugin parameter exposed as a launch argument."""
 
     name: str
     type: type
     alias: Optional[str] = None
+    cli: bool = True
 
     @property
     def arg(self) -> str:
@@ -39,33 +50,40 @@ class ParamSpec:
         return self.alias or self.name
 
 
-#: Node name (Node(name=...)) -> parameters it declares, in declaration order.
-NODE_PARAMS = {
-    "yolo_node": (
+#: Pluginlib class -> parameters it declares (order preserved), and the
+#: instance name used by yolo.launch.py.
+PLUGINS = {
+    "yolo_ros/DetectionPlugin": "detection",
+    "yolo_ros/TrackingPlugin": "tracking",
+    "yolo_ros/Detect3DPlugin": "detection3d",
+    "yolo_ros/DebugPlugin": "debug",
+}
+
+PLUGIN_PARAMS = {
+    "yolo_ros/DetectionPlugin": (
         ParamSpec("model_type", str),
-        ParamSpec("model", str),
+        ParamSpec("model_path", str),
         ParamSpec("model_repo", str),
         ParamSpec("model_filename", str),
         ParamSpec("cache_dir", str),
         ParamSpec("force_download", bool),
         ParamSpec("device", str),
         ParamSpec("provider", str),
+        ParamSpec("cuda_graph_enable", bool),
         ParamSpec("trt_fp16_enable", bool),
         ParamSpec("trt_engine_cache_enable", bool),
         ParamSpec("trt_engine_cache_path", str),
         ParamSpec("threshold", float),
         ParamSpec("iou", float),
         ParamSpec("max_det", int),
-        ParamSpec("enable", bool),
-        ParamSpec("image_reliability", int),
-        ParamSpec("image_topic", str, "input_image_topic"),
         ParamSpec("n_threads", int),
         ParamSpec("max_fps", int),
+        ParamSpec("img_width", int),
+        ParamSpec("img_height", int),
         ParamSpec("top_k", int),
+        ParamSpec("max_batch_size", int),
     ),
-    "tracking_node": (
-        ParamSpec("image_reliability", int),
-        ParamSpec("image_topic", str, "input_image_topic"),
+    "yolo_ros/TrackingPlugin": (
         ParamSpec("tracker_type", str),
         ParamSpec("track_high_thresh", float),
         ParamSpec("track_low_thresh", float),
@@ -82,85 +100,17 @@ NODE_PARAMS = {
         ParamSpec("provider", str),
         ParamSpec("device", str),
     ),
-    "detect_3d_node": (
+    "yolo_ros/Detect3DPlugin": (
         ParamSpec("target_frame", str),
         ParamSpec("depth_image_units_divisor", int),
-        ParamSpec("depth_image_reliability", int),
-        ParamSpec("depth_info_reliability", int),
-        ParamSpec("depth_image_topic", str, "input_depth_topic"),
-        ParamSpec("depth_info_topic", str, "input_depth_info_topic"),
-        ParamSpec("detections_topic", str),
         ParamSpec("enable_orientation", bool),
         ParamSpec("min_seg_points_for_orientation", int),
     ),
-    "debug_node": (
-        ParamSpec("image_reliability", int),
-        ParamSpec("image_topic", str, "input_image_topic"),
-        ParamSpec("detections_topic", str),
-        ParamSpec("markers_topic", str),
-        ParamSpec("marker_lifetime", float),
-    ),
-    "yolo_batch_node": (
-        ParamSpec("model_type", str),
-        ParamSpec("model", str),
-        ParamSpec("model_repo", str),
-        ParamSpec("model_filename", str),
-        ParamSpec("cache_dir", str),
-        ParamSpec("force_download", bool),
-        ParamSpec("device", str),
-        ParamSpec("provider", str),
-        ParamSpec("trt_fp16_enable", bool),
-        ParamSpec("trt_engine_cache_enable", bool),
-        ParamSpec("trt_engine_cache_path", str),
-        ParamSpec("threshold", float),
-        ParamSpec("iou", float),
-        ParamSpec("max_det", int),
-        ParamSpec("enable", bool),
-        ParamSpec("image_reliability", int),
-        ParamSpec("n_threads", int),
-        ParamSpec("max_fps", int),
-        ParamSpec("top_k", int),
-        # Array params are provided by the pipeline file, never a CLI argument.
-        ParamSpec("camera_names", str),
-        ParamSpec("image_topics", str),
-        ParamSpec("max_batch_size", int),
-    ),
+    "yolo_ros/DebugPlugin": (ParamSpec("marker_lifetime", float),),
 }
 
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
-
-
-def _selected_node_params(node_names):
-    """Yield (node_name, ParamSpec); raise KeyError on an unknown node."""
-    for node_name in node_names:
-        if node_name not in NODE_PARAMS:
-            raise KeyError(f"unknown node '{node_name}'")
-        for spec in NODE_PARAMS[node_name]:
-            yield node_name, spec
-
-
-def param_arg_names(node_names) -> list:
-    """Sorted unique launch-argument names for the given nodes."""
-    return sorted({spec.arg for _, spec in _selected_node_params(node_names)})
-
-
-def declare_param_arguments(node_names) -> list:
-    """One DeclareLaunchArgument per unique argument, defaulting to ""."""
-    targets = {}
-    for node_name, spec in _selected_node_params(node_names):
-        targets.setdefault(spec.arg, set()).add(f"{node_name}.{spec.name}")
-    return [
-        DeclareLaunchArgument(
-            arg_name,
-            default_value="",
-            description=(
-                f"Override {', '.join(sorted(targets[arg_name]))}. "
-                "Empty keeps the value from the YAML params file."
-            ),
-        )
-        for arg_name in sorted(targets)
-    ]
 
 
 def _convert(arg_name: str, raw: str, value_type: type):
@@ -182,97 +132,58 @@ def _convert(arg_name: str, raw: str, value_type: type):
         ) from exc
 
 
-def build_overrides(context, node_name: str) -> dict:
-    """Assemble {param_name: value} for the node from provided launch args."""
-    if node_name not in NODE_PARAMS:
-        raise KeyError(f"unknown node '{node_name}'")
+def plugin_names(types) -> list:
+    """['detection', ...] for the `plugins` parameter, in selection order."""
+    return [PLUGINS[t] for t in types]
+
+
+def param_arg_names(types) -> list:
+    """Sorted unique launch-argument names for the given plugin types."""
+    return sorted({spec.arg for t in types for spec in PLUGIN_PARAMS[t] if spec.cli})
+
+
+def declare_param_arguments(types) -> list:
+    """One DeclareLaunchArgument per unique argument, defaulting to ""."""
+    targets = {}
+    for plugin_type in types:
+        for spec in PLUGIN_PARAMS[plugin_type]:
+            if not spec.cli:
+                continue
+            targets.setdefault(spec.arg, set()).add(f"{PLUGINS[plugin_type]}.{spec.name}")
+    return [
+        DeclareLaunchArgument(
+            arg_name,
+            default_value="",
+            description=(
+                f"Override {', '.join(sorted(targets[arg_name]))}. "
+                "Empty keeps the value from the YAML params file."
+            ),
+        )
+        for arg_name in sorted(targets)
+    ]
+
+
+def build_overrides(context, plugin_type: str) -> dict:
+    """{instance.param: value} for the plugin from provided launch args."""
+    instance = PLUGINS[plugin_type]
     overrides = {}
-    for spec in NODE_PARAMS[node_name]:
+    for spec in PLUGIN_PARAMS[plugin_type]:
+        if not spec.cli:
+            continue
         raw = context.launch_configurations.get(spec.arg, "")
         if raw is None or str(raw) == "":
             continue
-        overrides[spec.name] = _convert(spec.arg, str(raw), spec.type)
+        overrides[f"{instance}.{spec.name}"] = _convert(spec.arg, str(raw), spec.type)
     return overrides
 
 
-def pipeline_tracker(params_file, namespace: str = "yolo") -> str:
-    """Read the ``tracker`` selector from a pipeline params file.
+def build_all_overrides(context, types) -> dict:
+    """Merge every plugin's scalar CLI overrides into one dict.
 
-    Looks up ``/<namespace>/tracking_node`` -> ``ros__parameters`` -> ``tracker``
-    so the launch can pick ``config/trackers/<tracker>.yaml`` without a CLI
-    argument. Returns ``"bytetrack"`` when the file or key is absent.
+    ``plugin`` classes, the ``plugins`` order and the per-instance ``cameras``
+    selection live in the pipeline YAML and are never overridden from here.
     """
-    if not params_file or not os.path.isfile(params_file):
-        return "bytetrack"
-    with open(params_file) as handle:
-        data = yaml.safe_load(handle) or {}
-    block = data.get(f"/{namespace}/tracking_node", {})
-    parameters = block.get("ros__parameters", {}) if isinstance(block, dict) else {}
-    return str(parameters.get("tracker", "bytetrack"))
-
-
-def tracker_params_file(tracker: str) -> str:
-    """Path to the tracker config file selected by the ``tracker`` argument.
-
-    Accepts a tracker config name (resolved to ``config/trackers/<name>.yaml``,
-    e.g. ``bytetrack``/``botsort``/``botsort_reid``) or a path/filename to any
-    ROS params file. Empty -> the ``bytetrack`` default. Each config file then
-    sets the real ``tracker_type`` (the C++ implementation) it runs.
-    """
-    from ament_index_python.packages import get_package_share_directory
-
-    config_dir = os.path.join(get_package_share_directory("yolo_bringup"), "config")
-    trackers_dir = os.path.join(config_dir, "trackers")
-    value = (tracker or "bytetrack").strip()
-    if os.sep in value or value.endswith((".yaml", ".yml")):
-        candidates = (
-            [value]
-            if os.path.isabs(value)
-            else [
-                value,
-                os.path.join(config_dir, value),
-                os.path.join(trackers_dir, value),
-            ]
-        )
-        path = next((c for c in candidates if os.path.isfile(c)), candidates[0])
-    else:
-        path = os.path.join(trackers_dir, f"{value}.yaml")
-    if not os.path.isfile(path):
-        available = sorted(
-            entry[:-5]
-            for entry in os.listdir(trackers_dir)
-            if entry.endswith(".yaml")
-            and os.path.isfile(os.path.join(trackers_dir, entry))
-        )
-        raise RuntimeError(
-            f"unknown tracker '{value}'; available trackers: {', '.join(available)} "
-            "(or pass a path to a params file)"
-        )
-    return path
-
-
-def load_params_mapping(path: str) -> dict:
-    """Return the first ``ros__parameters`` mapping in a ROS params file.
-
-    Per-tracker files wrap their values under a fully-qualified node name
-    (``/yolo/tracking_node: ros__parameters: ...``). The multi-camera launch
-    re-keys them per camera, so it needs the inner mapping without the node
-    name. Returns ``{}`` for a missing file or a file without such a block.
-    """
-    if not path or not os.path.isfile(path):
-        return {}
-    with open(path) as handle:
-        data = yaml.safe_load(handle) or {}
-    for block in data.values():
-        if isinstance(block, dict) and isinstance(block.get("ros__parameters"), dict):
-            return dict(block["ros__parameters"])
-    return {}
-
-
-def node_parameters(params_file, context, node_name: str, extra_files=()) -> list:
-    """Parameters list for a Node: the YAML file(s) plus the CLI overrides.
-
-    ``extra_files`` are layered between the pipeline config and the CLI
-    overrides (the per-tracker file for the tracking node), so later values win.
-    """
-    return [params_file, *extra_files, build_overrides(context, node_name)]
+    overrides = {}
+    for plugin_type in types:
+        overrides.update(build_overrides(context, plugin_type))
+    return overrides

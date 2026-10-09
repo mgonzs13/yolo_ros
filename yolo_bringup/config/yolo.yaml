@@ -1,90 +1,47 @@
-# ROS 2 parameters file for the C++ detection pipeline
-# (yolo_bringup/launch/yolo.launch.py). The launch passes this file
-# as `parameters=[params_file]` plus any command-line overrides from the
-# matching launch arguments, and makes no topic remaps: every node reads its
-# input topic from a parameter here.
+# Single pipeline definition for the single yolo_node. The `plugins` order
+# defines the data-flow chain: the first plugin must be the detector, and each
+# plugin consumes the previous plugin's output for every camera it selects.
+# All output channels/topics are camera-prefixed (<cam>/detections, ...).
 #
 # IMPORTANT: rclcpp loads `--params-file` sections by the node's fully
-# qualified name, so each block key includes the launch namespace (default
-# "yolo"). If you change `namespace:=`, update the block names to match.
-#
-# Honor status of the README inference knobs in the C++/ONNX implementation:
-#   model / device / provider / trt_fp16_enable / trt_engine_cache_enable /
-#   trt_engine_cache_path / threshold / iou / image_reliability / image_topic /
-#   n_threads / model_type / enable / max_det / max_fps -> drive the pipeline
-#   (the Python-only knobs imgsz_* / half / augment / agnostic_nms /
-#   retina_masks were removed: the ONNX tensor fixes the input size, NMS is
-#   baked at export, and the pipeline runs FP32 with no TTA)
+# qualified name, so the block key includes the launch namespace (default
+# "yolo"). If you change `namespace:=`, update the block name to match.
 /yolo/yolo_node:
   ros__parameters:
-    model_type: auto # YOLO (=detect) | Segment | auto (decide by file name)
-    model: /home/agonzc34/models/yolo26m.onnx
-    # The default sources the model from the Hugging Face Hub instead of the
-    # local path above (model is ignored when model_repo is set). The file is
-    # cached under ~/.cache/huggingface/hub and reused unless force_download.
-    # Defaults to the YOLO26 ONNX mirror
-    # (https://huggingface.co/unileon-robotics/YOLO26-ONNX); clear model_repo to
-    # fall back to the local `model` path.
-    model_repo: unileon-robotics/YOLO26-ONNX # HF repo id ("" -> use local `model`)
-    model_filename: yolo26s.onnx # file inside that repo
-    force_download: false
-    device: cuda:0 # device ordinal for the CUDA/TensorRT EPs
-    provider: auto # auto = CUDA -> CPU; or tensorrt/trt/cuda/cpu
-    trt_fp16_enable: true # TensorRT FP16 (provider: tensorrt/auto)
-    trt_engine_cache_enable: true # persist built TensorRT engines
-    trt_engine_cache_path: "" # empty -> ~/.cache/yolo_ros/trt_engines/<model>
-    threshold: 0.7
-    iou: 0.45
-    max_det: 300
-    enable: true
-    image_reliability: 2 # 0=SystemDefault, 1=Reliable, 2=BestEffort
-    image_topic: /camera/rgb/image_raw
-    n_threads: -1 # -1 = auto (only used by the CPU EP)
-    max_fps: 0 # 0 = unlimited (process every frame); >0 caps inference/publish rate in Hz
-
-/yolo/tracking_node:
-  ros__parameters:
-    # `tracker` selects the config/trackers/<tracker>.yaml file that yolo.launch.py
-    # layers over this one (bytetrack | botsort | botsort_reid). That file defines
-    # the real `tracker_type` (the C++ implementation). Override from the CLI with
-    # `tracker:=<name|path>`.
-    tracker: bytetrack
-    image_reliability: 2 # 0=SystemDefault, 1=Reliable, 2=BestEffort
-    image_topic: /camera/rgb/image_raw
-
-/yolo/detect_3d_node:
-  ros__parameters:
-    target_frame: camera_link
-    depth_image_units_divisor: 1000 # raw depth units -> meters
-    depth_image_reliability: 2 # 0=SystemDefault, 1=Reliable, 2=BestEffort
-    depth_info_reliability: 2
-    depth_image_topic: /camera/depth/image_raw
-    depth_info_topic: /camera/depth/camera_info
-    detections_topic: tracking # lift the tracked stream; use "detections" if tracking is off
-    # Estimate and publish the orientation of the 3D bounding boxes (OBB via
-    # PCA on a strided depth sample). Default off; needs >=
-    # min_seg_points_for_orientation valid depths per detection.
-    enable_orientation: false
-    min_seg_points_for_orientation: 20
-
-/yolo/debug_node:
-  ros__parameters:
-    image_reliability: 2 # 0=SystemDefault, 1=Reliable, 2=BestEffort
-    image_topic: /camera/rgb/image_raw
-    # 2D detection stream the debug node SYNCs with the image to draw and
-    # publish debug_image. It runs at the full camera rate and is NOT gated by
-    # the 3D/depth node, so debug_image always keeps the input frequency even
-    # when depth is slow/absent:
-    #   tracking   -> tracked 2D IDs (use_3d:=False, use_tracking:=True). Default.
-    #   detections -> raw YOLO 2D output (tracking off)
-    detections_topic: tracking
-    # 3D-enriched stream read SEPARATELY just to drive the RViz 3D box /
-    # keypoint markers (use_3d:=True). Markers publish at this stream's rate
-    # (min(debug image, 3D detections)) and are decoupled from debug_image by
-    # the node's own markers_topic subscription.
-    markers_topic: detections_3d
-    # Seconds a marker stays visible after its last update. RViz never drops a
-    # marker just because it is absent from a later MarkerArray, so without a
-    # lifetime a box whose detection vanished (invalid depth, stream stalled)
-    # would linger forever. 0 keeps markers persistent.
-    marker_lifetime: 0.5
+    plugins: ["detection", "tracking", "detection3d", "debug"]
+    cameras: ["cam0"]
+    cam0:
+      rgb_topic: /camera/rgb/image_raw
+      depth_topic: /camera/depth/image_raw
+      depth_info_topic: /camera/depth/camera_info
+      image_reliability: 1
+      depth_reliability: 1
+    detection:
+      plugin: yolo_ros/DetectionPlugin
+      model_repo: unileon-robotics/YOLO26-ONNX
+      model_filename: yolo26s.onnx
+      threshold: 0.7
+      iou: 0.45
+      n_threads: -1
+      img_width: 640
+      img_height: 480
+      provider: cuda
+      cameras: ["cam0"]
+    tracking:
+      plugin: yolo_ros/TrackingPlugin
+      cameras: ["cam0"]
+      tracker_type: bytetrack
+      track_high_thresh: 0.25
+      track_low_thresh: 0.1
+      new_track_thresh: 0.25
+      track_buffer: 30
+      match_thresh: 0.8
+      fuse_score: true
+    detection3d:
+      plugin: yolo_ros/Detect3DPlugin
+      cameras: ["cam0"]
+      target_frame: base_link
+    debug:
+      plugin: yolo_ros/DebugPlugin
+      cameras: ["cam0"]
+      marker_lifetime: 0.5

@@ -1,24 +1,29 @@
+# Classification preset: detection + debug only (no tracking/3D instances),
+# the `detection` block selects a classification ONNX export.
 /yolo/yolo_node:
   ros__parameters:
-    model_type: cls # force classification (auto works for paths containing "cls")
-    # YOLO26 ONNX mirror (https://huggingface.co/unileon-robotics/YOLO26-ONNX).
-    model_repo: unileon-robotics/YOLO26-ONNX
-    model_filename: yolo26s-cls.onnx
-    force_download: false
-    device: cuda:0 # device ordinal for the CUDA/TensorRT EPs
-    provider: auto # auto = CUDA -> CPU; or tensorrt/trt/cuda/cpu
-    trt_fp16_enable: true # TensorRT FP16 (provider: tensorrt/auto)
-    trt_engine_cache_enable: true # persist built TensorRT engines
-    trt_engine_cache_path: "" # empty -> ~/.cache/yolo_ros/trt_engines/<model>
-    enable: true
-    image_reliability: 2 # 0=SystemDefault, 1=Reliable, 2=BestEffort
-    image_topic: /camera/rgb/image_raw
-    n_threads: -1 # -1 = auto (only used by the CPU EP)
-    max_fps: 0 # 0 = unlimited (process every frame); >0 caps inference/publish rate in Hz
-    top_k: 5 # number of top classes to publish per image (1..N)
-
-/yolo/debug_node:
-  ros__parameters:
-    image_reliability: 2
-    image_topic: /camera/rgb/image_raw
-    detections_topic: detections
+    plugins: ["detection", "debug"]
+    cameras: ["cam0"]
+    cam0:
+      rgb_topic: /camera/rgb/image_raw
+      depth_topic: /camera/depth/image_raw
+      depth_info_topic: /camera/depth/camera_info
+      image_reliability: 2
+      depth_reliability: 2
+    detection:
+      plugin: yolo_ros/DetectionPlugin
+      model_type: classify
+      model_repo: unileon-robotics/YOLO26-ONNX
+      model_filename: yolo26s-cls.onnx
+      threshold: 0.7
+      iou: 0.45
+      top_k: 5
+      n_threads: -1
+      img_width: 640
+      img_height: 480
+      provider: cuda
+      cameras: ["cam0"]
+    debug:
+      plugin: yolo_ros/DebugPlugin
+      cameras: ["cam0"]
+      marker_lifetime: 0.5

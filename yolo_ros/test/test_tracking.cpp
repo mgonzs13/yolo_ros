@@ -729,12 +729,17 @@ TEST(TrackerFactory, CreatesBotSortWithReidParams) {
 
 TEST(ReIDEncoder, ProducesUnitNormEmbeddingsWhenModelAvailable) {
   const char *env = std::getenv("YOLO_ROS_REID_MODEL");
-  const std::string path =
-      env != nullptr ? env : "/home/agonzc34/models/osnet_x0_25_reid.onnx";
+
+  if (env == nullptr) {
+    GTEST_SKIP() << "set YOLO_ROS_REID_MODEL to a ReID ONNX model to run this";
+  }
+
+  const std::string path = env;
   std::ifstream probe(path);
 
   if (!probe.good()) {
-    GTEST_SKIP() << "set YOLO_ROS_REID_MODEL to a ReID ONNX model to run this";
+    GTEST_SKIP() << "YOLO_ROS_REID_MODEL does not point to a readable model: "
+                 << path;
   }
 
   engine::ReIDEncoder encoder(path, "cpu", "cpu");

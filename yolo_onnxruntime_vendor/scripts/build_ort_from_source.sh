@@ -21,7 +21,7 @@
 #                     builds the TensorRT provider, matching the node's
 #                     TensorRT -> CUDA -> CPU provider chain.
 #   --cuda-arch <NN>  CUDA architecture for --ep cuda (Jetson Xavier 72,
-#                     Orin 87). Auto-detected with nvidia-smi on x86_64.
+#                     Orin 87). Auto-detected with nvidia-smi when available.
 #   --rebuild         ignore any previous build and build again.
 #   --dry-run         print the ONNX Runtime build command and exit.
 #   -h, --help        show this help.
@@ -51,6 +51,42 @@ usage() {
   echo "usage: $(basename "$0") <ort_version> [output_dir] [--ep cpu|cuda] [--cuda-arch NN] [--rebuild] [--dry-run]" >&2
 }
 
+help() {
+  cat <<EOF
+Build ONNX Runtime from source and package it in the flat lib/ + include/
+layout consumed by yolo_onnxruntime_vendor (-DONNXRUNTIME_ROOT=<output_dir>).
+
+usage: $(basename "$0") <ort_version> [output_dir] [options]
+
+  ort_version   ONNX Runtime release to build, e.g. 1.6.0 or 1.20.2
+                (the git tag is v<ort_version>).
+  output_dir    defaults to <package>/ort-<ort_version>
+
+options:
+  --ep <cpu|cuda>   execution provider to build (default: cpu). "cuda" also
+                    builds the TensorRT provider, matching the node's
+                    TensorRT -> CUDA -> CPU provider chain.
+  --cuda-arch <NN>  CUDA architecture for --ep cuda (Jetson Xavier 72,
+                    Orin 87). Auto-detected with nvidia-smi when available.
+  --rebuild         ignore any previous build and build again.
+  --dry-run         print the ONNX Runtime build command and exit.
+  -h, --help        show this help.
+
+environment:
+  ORT_EP / ORT_CUDA_ARCH          fallbacks for --ep / --cuda-arch
+  ORT_SOURCE_DIR                  existing onnxruntime source tree (build.sh)
+  ORT_SOURCE_TARBALL              tarball whose top level contains onnxruntime/
+  ORT_BUILD_DIR                   work dir (default <package>/ort-<version>-build)
+  ORT_PARALLEL                    concurrent compile jobs (unset = all cores)
+  ORT_CMAKE_EXTRA_DEFINES         space-separated extra --cmake_extra_defines
+  ORT_OPS_CONFIG                  reduced-ops config (empty = full kernel set)
+  ORT_DISABLE_UNUSED_OPS          default 1
+  ORT_DISABLE_CONTRIB_OPS         default 0; 1 is incompatible with --ep cuda
+  ORT_MIN_CMAKE                   override the CMake version check
+  CUDA_HOME / CUDNN_HOME / TENSORRT_HOME   prefixes used by --ep cuda
+EOF
+}
+
 ORIG_ARGS=("$@")
 EP="${ORT_EP:-cpu}"
 CUDA_ARCH="${ORT_CUDA_ARCH:-}"
@@ -67,7 +103,7 @@ while [[ $# -gt 0 ]]; do
       CUDA_ARCH="$2"; shift 2 ;;
     --rebuild) REBUILD=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
-    -h|--help) usage; exit 0 ;;
+    -h|--help) help; exit 0 ;;
     --) shift; while [[ $# -gt 0 ]]; do positional+=("$1"); shift; done ;;
     -*) echo "error: unknown option '$1'" >&2; usage; exit 2 ;;
     *) positional+=("$1"); shift ;;
@@ -87,15 +123,42 @@ if [[ ! "${ORT_VERSION}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
   exit 2
 fi
 
+if [[ ${#positional[@]} -gt 2 ]]; then
+  echo "error: unexpected argument(s): ${positional[*]:2}" >&2
+  usage
+  exit 2
+fi
+
 case "${EP}" in
   cpu|cuda) ;;
   *) echo "error: unsupported --ep '${EP}' (supported: cpu, cuda)" >&2; exit 2 ;;
 esac
 
+case "${ORT_DISABLE_UNUSED_OPS:-1}" in
+  0|1) ;;
+  *) echo "error: ORT_DISABLE_UNUSED_OPS must be 0 or 1, got '${ORT_DISABLE_UNUSED_OPS}'" >&2; exit 2 ;;
+esac
+case "${ORT_DISABLE_CONTRIB_OPS:-0}" in
+  0|1) ;;
+  *) echo "error: ORT_DISABLE_CONTRIB_OPS must be 0 or 1, got '${ORT_DISABLE_CONTRIB_OPS}'" >&2; exit 2 ;;
+esac
+if [[ "${EP}" == "cuda" && "${ORT_DISABLE_CONTRIB_OPS:-0}" == "1" ]]; then
+  echo "error: ORT_DISABLE_CONTRIB_OPS=1 is incompatible with --ep cuda:" >&2
+  echo "       the TensorRT execution provider needs contrib ops." >&2
+  exit 2
+fi
+if [[ -n "${ORT_PARALLEL:-}" && ! "${ORT_PARALLEL}" =~ ^[0-9]+$ ]]; then
+  echo "error: ORT_PARALLEL must be a non-negative integer, got '${ORT_PARALLEL}'" >&2
+  exit 2
+fi
+
 # CUDA_ARCH is only meaningful for the cuda EP; ignore it otherwise so a stale
 # ORT_CUDA_ARCH does not perturb the reuse stamp.
 if [[ "${EP}" != "cuda" ]]; then
   CUDA_ARCH=""
+elif [[ -n "${CUDA_ARCH}" && ! "${CUDA_ARCH}" =~ ^[0-9]+(;[0-9]+)*$ ]]; then
+  echo "error: --cuda-arch must be a compute capability like 72 or 87, got '${CUDA_ARCH}'" >&2
+  exit 2
 fi
 
 # --- Default CMake defines ----------------------------------------------------
@@ -110,6 +173,16 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${positional[1]:-${SCRIPT_DIR}/../ort-${ORT_VERSION}}"
 WORK_DIR="${ORT_BUILD_DIR:-${SCRIPT_DIR}/../ort-${ORT_VERSION}-build}"
+
+# The output prefix is replaced with rm -rf below; never let a typo point it at
+# the root or at the work dir holding the source tree and build.
+case "${OUT_DIR}" in
+  ""|/) echo "error: refusing to use '${OUT_DIR}' as output directory" >&2; exit 2 ;;
+esac
+if [[ "${OUT_DIR}" == "${WORK_DIR}" ]]; then
+  echo "error: output_dir and ORT_BUILD_DIR must differ (both are '${OUT_DIR}')" >&2
+  exit 2
+fi
 
 ARCH="$(uname -m)"
 case "${ARCH}" in
@@ -144,7 +217,8 @@ if [[ ${REBUILD} -eq 0 && -f "${OUT_DIR}/lib/libonnxruntime.so" && -f "${STAMP}"
 fi
 
 # --- CUDA toolkit (only for the cuda EP) --------------------------------------
-CUDAHOSTCXX=""
+# CUDAHOSTCXX is deliberately not initialised here: a user-provided value skips
+# the host-compiler detection below (see the header comments).
 if [[ "${EP}" == "cuda" ]]; then
   # JetPack commonly has no /usr/local/cuda symlink; fall back to the newest
   # /usr/local/cuda-<version> when CUDA_HOME is not given.
@@ -152,7 +226,10 @@ if [[ "${EP}" == "cuda" ]]; then
     if [[ -d /usr/local/cuda ]]; then
       CUDA_HOME=/usr/local/cuda
     else
-      CUDA_HOME="$(ls -d /usr/local/cuda-* 2>/dev/null | sort -V | tail -1)"
+      # find exits 0 even when nothing matches, unlike a failing `ls` pipeline,
+      # so the /usr/local/cuda fallback below is always reached.
+      CUDA_HOME="$(find /usr/local -maxdepth 1 -type d -name 'cuda-*' 2>/dev/null \
+        | sort -V | tail -1)"
     fi
   fi
   CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
@@ -161,11 +238,15 @@ if [[ "${EP}" == "cuda" ]]; then
 fi
 
 # ONNX Runtime 1.16+ needs CMake >= 3.26 (JetPack/Ubuntu 22.04 ship 3.22, which
-# is too old). Older ONNX Runtime builds accept much older CMake.
+# is too old). Older ONNX Runtime builds accept much older CMake, but a CUDA
+# build passes CMAKE_CUDA_ARCHITECTURES / CMAKE_CUDA_HOST_COMPILER, which CMake
+# only understands from 3.18 on.
 version_ge() { [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }
 min_cmake=3.13
 if version_ge "${ORT_VERSION}" 1.16; then
   min_cmake=3.26
+elif [[ "${EP}" == "cuda" ]]; then
+  min_cmake=3.18
 fi
 MIN_CMAKE="${ORT_MIN_CMAKE:-${min_cmake}}"
 CMAKE_VER="$(cmake --version | sed -n 's/^cmake version //p')"
@@ -182,7 +263,7 @@ echo "==> CMake ${CMAKE_VER} (>= ${MIN_CMAKE} required)"
 if [[ "${EP}" == "cuda" ]]; then
   [[ -d "${CUDA_HOME}" ]] || {
     echo "error: CUDA toolkit not found (CUDA_HOME='${CUDA_HOME}')" >&2
-    echo "       found: $(ls -d /usr/local/cuda* 2>/dev/null | tr '\n' ' ' || true)" >&2
+    echo "       found: $(find /usr/local -maxdepth 1 -type d -name 'cuda*' 2>/dev/null | tr '\n' ' ' || true)" >&2
     echo "       set CUDA_HOME to the toolkit root, e.g. /usr/local/cuda-12.6" >&2
     exit 1
   }
@@ -204,31 +285,38 @@ if [[ "${EP}" == "cuda" ]]; then
     11) CUDA_MAX_GCC=10 ;;
     *) CUDA_MAX_GCC=99 ;;
   esac
-  DEFAULT_GCC_MAJOR="$(g++ -dumpversion | cut -d. -f1)"
-  if [[ -z "${CUDAHOSTCXX:-}" && "${DEFAULT_GCC_MAJOR}" -gt "${CUDA_MAX_GCC}" ]]; then
-    host_cxx=""
-    host_ver=""
-    for ver in "${CUDA_MAX_GCC}" "$((CUDA_MAX_GCC - 1))" 7 6; do
-      if command -v "g++-${ver}" >/dev/null 2>&1; then
-        host_cxx="$(command -v "g++-${ver}")"
-        host_ver="${ver}"
-        break
-      fi
-    done
-    if [[ -z "${host_cxx}" ]]; then
-      echo "error: CUDA ${CUDA_MAJOR} supports host gcc <= ${CUDA_MAX_GCC}, but the" >&2
-      echo "       default is gcc ${DEFAULT_GCC_MAJOR}. Install a compatible one, e.g.:" >&2
-      echo "         sudo apt install gcc-${CUDA_MAX_GCC} g++-${CUDA_MAX_GCC}" >&2
-      echo "       or export CUDAHOSTCXX=/usr/bin/g++-${CUDA_MAX_GCC}" >&2
+  if [[ -z "${CUDAHOSTCXX:-}" ]]; then
+    command -v g++ >/dev/null 2>&1 || {
+      echo "error: g++ not found (needed to pick the CUDA host compiler)." >&2
+      echo "       Set CUDAHOSTCXX to a compatible C++ compiler to skip this." >&2
       exit 1
+    }
+    DEFAULT_GCC_MAJOR="$(g++ -dumpversion | cut -d. -f1)"
+    if [[ "${DEFAULT_GCC_MAJOR}" -gt "${CUDA_MAX_GCC}" ]]; then
+      host_cxx=""
+      host_ver=""
+      for ver in $(seq "${CUDA_MAX_GCC}" -1 6); do
+        if command -v "g++-${ver}" >/dev/null 2>&1; then
+          host_cxx="$(command -v "g++-${ver}")"
+          host_ver="${ver}"
+          break
+        fi
+      done
+      if [[ -z "${host_cxx}" ]]; then
+        echo "error: CUDA ${CUDA_MAJOR} supports host gcc <= ${CUDA_MAX_GCC}, but the" >&2
+        echo "       default is gcc ${DEFAULT_GCC_MAJOR}. Install a compatible one, e.g.:" >&2
+        echo "         sudo apt install gcc-${CUDA_MAX_GCC} g++-${CUDA_MAX_GCC}" >&2
+        echo "       or export CUDAHOSTCXX=/usr/bin/g++-${CUDA_MAX_GCC}" >&2
+        exit 1
+      fi
+      export CXX="${host_cxx}"
+      export CUDAHOSTCXX="${host_cxx}"
+      if host_cc="$(command -v "gcc-${host_ver}" 2>/dev/null)"; then
+        export CC="${host_cc}"
+      fi
+      echo "==> Default g++ ${DEFAULT_GCC_MAJOR} is too new for CUDA ${CUDA_MAJOR};" \
+        "using g++-${host_ver} (${host_cxx})"
     fi
-    export CXX="${host_cxx}"
-    export CUDAHOSTCXX="${host_cxx}"
-    if host_cc="$(command -v "gcc-${host_ver}" 2>/dev/null)"; then
-      export CC="${host_cc}"
-    fi
-    echo "==> Default g++ ${DEFAULT_GCC_MAJOR} is too new for CUDA ${CUDA_MAJOR};" \
-      "using g++-${host_ver} (${host_cxx})"
   fi
   CUDAHOSTCXX="${CUDAHOSTCXX:-$(command -v g++)}"
   echo "==> CUDA host compiler: ${CUDAHOSTCXX} (CC=${CC:-$(command -v gcc)}, CXX=${CXX:-$(command -v g++)})"
@@ -248,12 +336,17 @@ fi
 mkdir -p "${WORK_DIR}"
 SRC_DIR="${WORK_DIR}/onnxruntime"
 
-if [[ -n "${ORT_SOURCE_TARBALL:-}" ]]; then
+if [[ -n "${ORT_SOURCE_DIR:-}" ]]; then
+  SRC_DIR="${ORT_SOURCE_DIR}"
+  echo "==> Using source tree ${SRC_DIR}"
+elif [[ -n "${ORT_SOURCE_TARBALL:-}" ]]; then
+  [[ -f "${ORT_SOURCE_TARBALL}" ]] || {
+    echo "error: ORT_SOURCE_TARBALL '${ORT_SOURCE_TARBALL}' not found" >&2
+    exit 1
+  }
   echo "==> Extracting source from ${ORT_SOURCE_TARBALL}"
   rm -rf "${SRC_DIR}"
   tar -xf "${ORT_SOURCE_TARBALL}" -C "${WORK_DIR}"
-elif [[ -n "${ORT_SOURCE_DIR:-}" ]]; then
-  SRC_DIR="${ORT_SOURCE_DIR}"
 elif [[ -d "${SRC_DIR}" ]]; then
   echo "==> Reusing existing source tree at ${SRC_DIR}"
 else
@@ -264,8 +357,14 @@ else
   }
   echo "==> Cloning ONNX Runtime v${ORT_VERSION} (requires internet)"
   # --recursive is mandatory: the GitHub source tarball has no submodules.
-  git clone --recursive -b "v${ORT_VERSION}" \
-    https://github.com/microsoft/onnxruntime "${SRC_DIR}"
+  if ! git clone --recursive -b "v${ORT_VERSION}" \
+      https://github.com/microsoft/onnxruntime "${SRC_DIR}"; then
+    # Do not leave a half-cloned tree behind: the next run would "reuse" it.
+    rm -rf "${SRC_DIR}"
+    echo "error: could not clone ONNX Runtime v${ORT_VERSION}." >&2
+    echo "       Check the version and network, or set ORT_SOURCE_DIR/ORT_SOURCE_TARBALL." >&2
+    exit 1
+  fi
 fi
 
 [[ -f "${SRC_DIR}/build.sh" ]] || {
@@ -338,16 +437,25 @@ if [[ "${EP}" == "cuda" ]]; then
   build_cmd+=(
     --use_cuda --cuda_home "${CUDA_HOME}" --cudnn_home "${CUDNN_HOME}"
     --use_tensorrt --tensorrt_home "${TRT_HOME}"
-    --cmake_extra_defines "CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}"
-    --cmake_extra_defines "CMAKE_CUDA_HOST_COMPILER=${CUDAHOSTCXX}"
   )
 fi
-build_cmd+=(--cmake_extra_defines onnxruntime_BUILD_UNIT_TESTS=OFF)
-if [[ -n "${ORT_CMAKE_EXTRA_DEFINES:-}" ]]; then
-  # shellcheck disable=SC2206
-  read -r -a _ort_extra_defines <<< "${ORT_CMAKE_EXTRA_DEFINES}"
-  build_cmd+=(--cmake_extra_defines "${_ort_extra_defines[@]}")
+# build.py < 1.16 defines --cmake_extra_defines without action="append", so a
+# repeated flag would overwrite the previous values; pass them all at once.
+cmake_defines=(onnxruntime_BUILD_UNIT_TESTS=OFF)
+if [[ "${EP}" == "cuda" ]]; then
+  cmake_defines+=(
+    "CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}"
+    "CMAKE_CUDA_HOST_COMPILER=${CUDAHOSTCXX}"
+  )
 fi
+if [[ -n "${ORT_CMAKE_EXTRA_DEFINES:-}" ]]; then
+  # Intentionally word-split: the contract is a space-separated list.
+  # shellcheck disable=SC2086
+  for define in ${ORT_CMAKE_EXTRA_DEFINES}; do
+    cmake_defines+=("${define}")
+  done
+fi
+build_cmd+=(--cmake_extra_defines "${cmake_defines[@]}")
 build_cmd+=("${extra_build_args[@]}")
 
 echo "==> Build reduction:"
@@ -373,9 +481,13 @@ pushd "${SRC_DIR}"
 # reduction when --include_ops_by_config is set.
 if ! "${build_cmd[@]}"; then
   popd >/dev/null
-  echo "error: ONNX Runtime build failed." >&2
-  echo "       To check whether the reduction caused it, retry with:" >&2
-  echo "         ORT_OPS_CONFIG= ORT_DISABLE_UNUSED_OPS=0 $0 ${ORIG_ARGS[*]}" >&2
+  {
+    echo "error: ONNX Runtime build failed."
+    echo "       To check whether the reduction caused it, retry with:"
+    printf '         ORT_OPS_CONFIG= ORT_DISABLE_UNUSED_OPS=0 %q' "$0"
+    printf ' %q' "${ORIG_ARGS[@]}"
+    printf '\n'
+  } >&2
   exit 1
 fi
 popd
@@ -396,6 +508,12 @@ if [[ ${#built_libs[@]} -eq 0 ]]; then
   exit 1
 fi
 cp -av "${built_libs[@]}" "${OUT_DIR}/lib/"
+# The vendor CMakeLists requires lib/libonnxruntime.so (the unversioned
+# symlink); fail here rather than at colcon configure time.
+if [[ ! -e "${OUT_DIR}/lib/libonnxruntime.so" ]]; then
+  echo "error: ${OUT_DIR}/lib/libonnxruntime.so was not produced by the build" >&2
+  exit 1
+fi
 
 # Header names are stable across releases but their location under include/ is
 # not, so look each one up by basename (flat layout expected by the vendor).

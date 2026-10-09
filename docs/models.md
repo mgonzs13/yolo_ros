@@ -9,9 +9,9 @@ The C++ pipeline runs any Ultralytics-exported **ONNX** model whose output match
 - [YOLOv8](https://docs.ultralytics.com/models/yolov8/)
 - [YOLOv9](https://docs.ultralytics.com/models/yolov9/)
 - [YOLOv10](https://docs.ultralytics.com/models/yolov10/)
-- [YOLOv11](https://docs.ultralytics.com/models/yolo11/)
-- [YOLOv12](https://docs.ultralytics.com/models/yolo12/)
-- [YOLOv26](https://docs.ultralytics.com/models/yolo26/)
+- [YOLO11](https://docs.ultralytics.com/models/yolo11/)
+- [YOLO12](https://docs.ultralytics.com/models/yolo12/)
+- [YOLO26](https://docs.ultralytics.com/models/yolo26/)
 
 These families are verified end-to-end with this C++ node. Export `yolov3u`/`yolov5u`, not `yolov3`/`yolov5` — Ultralytics only ships the updated heads for those generations. YOLOv4, YOLOv6 and YOLOv7 appear in the Ultralytics docs but have no downloadable weights, so they cannot be exported; YOLO-World and YOLOE depend on open-vocabulary text prompts, which this C++ pipeline does not implement.
 
@@ -28,10 +28,10 @@ yolo export model=yolo26m.pt format=onnx imgsz=640 opset=12
 
 Notes:
 
-- The exported `.onnx` is self-contained: Ultralytics writes the class vocabulary into the ONNX graph metadata (`names` key), which `Model::load_class_names()` reads at startup. The `coco.names` fallback is only used when a model has no metadata.
-- Keep the exported file outside the repository and pass `model:=<path>` on every launch.
-- `model_type` selects the pipeline (`YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify`, case-insensitive). `auto` (the default) falls back to a filename heuristic: a path containing `segment` selects segmentation, `pose` selects pose, `obb` selects OBB, `cls`/`classify` selects classification, otherwise detection. Ultralytics names segmentation exports `*-seg.onnx` (not `-segment`), so the segment config sets `model_type: Segment` explicitly.
-- The input size is fixed by the ONNX tensor (logged at startup), so the Python-only knobs `imgsz_height` / `imgsz_width` and `half` / `augment` / `agnostic_nms` / `retina_masks` were removed from the C++ node and its configs: NMS is baked at export and the pipeline runs FP32 with no test-time augmentation.
+- The exported `.onnx` is self-contained: Ultralytics writes the class vocabulary into the ONNX graph metadata (`names` key), which `Model::load_class_names()` reads at startup. The `coco.names` fallback is only used when a model has no metadata. The engine also honors an `input_color` metadata value (`rgb`/`bgr`) when the graph carries one; otherwise the input is treated as RGB (what Ultralytics exports expect).
+- Keep the exported file outside the repository and pass `model_path:=<path>` on every launch.
+- `model_type` selects the pipeline (`YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify`, case-insensitive). `auto` (the default) falls back to a filename heuristic: a path containing `segment`/`-seg`/`_seg` selects segmentation (Ultralytics names its exports `*-seg.onnx`), `pose` selects pose, `obb` selects OBB, `cls`/`classify` selects classification, otherwise detection.
+- The input size comes from the ONNX tensor for static exports (logged at startup); dynamic-input exports use the `detection.img_width` / `detection.img_height` parameters. The Python-only knobs `imgsz_height` / `imgsz_width` and `half` / `augment` / `agnostic_nms` / `retina_masks` were removed from the C++ node and its configs: the pipeline runs FP32 with no test-time augmentation, and NMS is either baked into the graph (end-to-end exports) or applied by the C++ postprocessor with `iou`.
 - OBB models have no baked-NMS export (rotated NMS cannot be exported into the graph), so the C++ postprocessor performs its own per-class rotated NMS and `iou` re-tunes it. The rotation angle is published in `BoundingBox2D.center.theta` (radians) with `size` holding the rotated `w`/`h`.
 - Classification exports bake the softmax into the graph (`output0` is `[1, N]` probabilities), so the postprocessor does **not** re-apply it. Top-`top_k` classes are published as detections with an **empty** bbox (image-level labels have no spatial extent).
 
@@ -46,25 +46,34 @@ task (`""`/`-seg`/`-pose`/`-obb`/`-cls`), exported batch-only dynamic. Point
 ```yaml
 /yolo/yolo_node:
   ros__parameters:
-    model_repo: unileon-robotics/YOLO26-ONNX
-    model_filename: dynamic/yolo26m.onnx
+    cameras: ["cam0"]
+    cam0:
+      rgb_topic: /camera/rgb/image_raw
+    detection:
+      plugin: yolo_ros/DetectionPlugin
+      cameras: ["cam0"]
+      model_repo: unileon-robotics/YOLO26-ONNX
+      model_filename: dynamic/yolo26m.onnx
 ```
 
 To export your own instead, Ultralytics' ONNX exporter is batch-1 by default.
-For the multi-camera `yolo_batch_node`, re-export with `dynamic=True`:
+For a multi-camera pipeline (a `DetectionPlugin` whose `cameras` list selects
+several cameras), re-export with `dynamic=True`:
 
 ```bash
 cp yolo26n.pt /tmp/yolo26n-dyn.pt
 uv run --with ultralytics --with onnx --with onnxruntime --with onnxslim \
   yolo export model=/tmp/yolo26n-dyn.pt format=onnx dynamic=True
-mv /tmp/yolo26n-dyn.onnx /home/agonzc34/models/
+mv /tmp/yolo26n-dyn.onnx ~/models/
 ```
 
 `dynamic=True` makes the input `['batch', 3, 'height', 'width']` — the batch
-**and** H/W axes. `yolo_ros` pins 640×640 for dynamic graphs (all shipped
-models train at that size). If you need a batch-only-dynamic graph (so
-`input_image_shape` is read from the file), zero the H/W dims first — this is
-exactly the form the mirror's `dynamic/` files ship:
+**and** H/W axes. Exports with `dynamic=True` leave the input H/W undefined;
+the node uses the `detection.img_width` / `detection.img_height` parameters
+(defaults 640/480) for them. Static exports carry their own size, which takes
+precedence. If you need a batch-only-dynamic graph, pin the H/W dims to 640 in
+the file so the graph's static size wins over the parameters — this is exactly
+the form the mirror's `dynamic/` files ship:
 
 ```python
 import onnx
@@ -73,28 +82,35 @@ for inp in m.graph.input:
     for d in (2, 3):
         inp.type.tensor_type.shape.dim[d].ClearField("dim_param")
         inp.type.tensor_type.shape.dim[d].dim_value = 640
-onnx.save(m, "/home/agonzc34/models/yolo26n-batch.onnx")
+onnx.save(m, "/tmp/yolo26n-batch.onnx")
 ```
 
 ## Download a model from the Hugging Face Hub
 
-Instead of a local path, the node can fetch the model from the Hub at startup via the `yolo_hfhub_vendor` package. Set `model_repo` + `model_filename` in the matching `config/yolo*.yaml` section (or on the command line); the `model` path is then ignored. The file is cached under `~/.cache/huggingface/hub` by default (override with the optional `cache_dir` param) and reused unless `force_download: true`:
+Instead of a local path, the node can fetch the model from the Hub at startup via the `yolo_hfhub_vendor` package. Set `model_repo` + `model_filename` in the matching `config/yolo*.yaml` section (or on the command line); the `model_path` is then ignored. The file is cached under `~/.cache/huggingface/hub` by default (override with the optional `cache_dir` param) and reused unless `force_download: true`:
 
 ```yaml
 /yolo/yolo_node:
   ros__parameters:
-    model_repo: unileon-robotics/YOLO26-ONNX # HF repo id
-    model_filename: yolo26s.onnx # file inside that repo
-    force_download: false
+    cameras: ["cam0"]
+    cam0:
+      rgb_topic: /camera/rgb/image_raw
+    detection:
+      plugin: yolo_ros/DetectionPlugin
+      cameras: ["cam0"]
+      model_repo: unileon-robotics/YOLO26-ONNX # HF repo id
+      model_filename: yolo26s.onnx # file inside that repo
+      force_download: false
 ```
 
-Or on the command line: `ros2 launch yolo_bringup yolo.launch.py model_repo:=unileon-robotics/YOLO26-ONNX model_filename:=yolo26s.onnx`. Requires the libcurl dev headers listed in the [README](../README.md#installation); only used when `model_repo`/`model_filename` are set. The node logs the model source as `[huggingface]` (with repo/filename) or `[local]` (with the path) so the two are easy to tell apart.
+Or on the command line: `ros2 launch yolo_bringup yolo.launch.py model_repo:=unileon-robotics/YOLO26-ONNX model_filename:=yolo26s.onnx`. The Hub client and its libcurl dependency are pulled in by `yolo_hfhub_vendor` (installed with the `rosdep install` step in the [README](../README.md#installation)); this path is only used when `model_repo`/`model_filename` are set. The node logs the model source as `[huggingface]` (with repo/filename) or `[local]` (with the path) so the two are easy to tell apart.
 
-The shipped `config/yolo*.yaml` files already default to the [`unileon-robotics/YOLO26-ONNX`](https://huggingface.co/unileon-robotics/YOLO26-ONNX) mirror — ONNX exports of the [`Ultralytics/YOLO26`](https://huggingface.co/Ultralytics/YOLO26) checkpoints (25 files: `yolo26{n,s,m,l,x}` for detect / `-seg` / `-pose` / `-obb` / `-cls`, exported with `imgsz=640 opset=12`). The same 25 models are also available batch-only dynamic under `dynamic/` (used by `config/pipelines.yaml` for the multi-camera `yolo_batch_node`). The first launch per model downloads it (so it needs network access) and caches it; clear `model_repo` to fall back to the local `model` path, or pass `model:=<path>` for a local file.
+The shipped `config/yolo*.yaml` files already default to the [`unileon-robotics/YOLO26-ONNX`](https://huggingface.co/unileon-robotics/YOLO26-ONNX) mirror — ONNX exports of the [`Ultralytics/YOLO26`](https://huggingface.co/Ultralytics/YOLO26) checkpoints (25 files: `yolo26{n,s,m,l,x}` for detect / `-seg` / `-pose` / `-obb` / `-cls`, exported with `imgsz=640 opset=12`). The same 25 models are also available batch-only dynamic under `dynamic/`, used by multi-camera pipelines whose detector `cameras` list selects several cameras. The first launch per model downloads it (so it needs network access) and caches it; clear `model_repo` to fall back to the local `model_path`, or pass `model_path:=<path>` for a local file.
 
 ## ReID encoder for BoT-SORT-ReID
 
-The BoT-SORT-ReID config (`config/botsort_reid.yaml`) needs a second ONNX model
+The BoT-SORT-ReID tracker (`tracking.tracker_type: botsort` with
+`tracking.with_reid: true`) needs a second ONNX model
 that turns a person crop into an appearance embedding. The C++ encoder
 (`engine::ReIDEncoder`) is model-agnostic; it only requires this contract:
 
@@ -137,7 +153,7 @@ torch.onnx.export(
 ```
 
 Weights: `kaiyangzhou/osnet` on the Hugging Face Hub (MIT). Then set
-`reid_model` in `config/botsort_reid.yaml`.
+`tracking.reid_model` in the pipeline YAML.
 
 ### FastReID SBS-S50 (Apache-2.0 code, MIT weights via BoT-SORT)
 

@@ -5,7 +5,13 @@
 
 #include "onnxruntime_cxx_api.h"
 
+#if defined(YOLO_ROS_HAS_CUDA_RUNTIME)
+#include <cuda_runtime_api.h>
+#endif
+
+#include "yolo_ros/engine/input_shape.hpp"
 #include "yolo_ros/engine/provider.hpp"
+#include "yolo_ros/utils/cpu_utils.hpp"
 #include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
 #include "yolo_ros/yolo/utils.hpp"
@@ -25,7 +31,6 @@
 #include <numeric>
 #include <regex>
 #include <stdexcept>
-#include <thread>
 
 namespace {
 
@@ -108,9 +113,11 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   this->iou_threshold = params.iou;
   std::string model_path = params.model_path;
 
-  if (n_threads == -1) {
-    n_threads = std::thread::hardware_concurrency();
+  if (n_threads <= 0) {
+    n_threads = yolo_ros::utils::num_math_threads();
   }
+
+  YOLO_LOG_INFO("Using %d threads for the ONNX Runtime session.", n_threads);
 
   // Resolve the availability-filtered provider fallback chain. "auto" prefers
   // CUDA, then CPU; an explicit provider forces its own chain.
@@ -203,6 +210,66 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
 
   Ort::AllocatorWithDefaultOptions allocator;
 
+  // Read the input shape first: a fixed batch axis is a prerequisite for CUDA
+  // graph capture (dynamic shapes invalidate a captured graph).
+  ONNXTensorElementDataType input_element_type =
+      ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
+  std::vector<int64_t> input_tensor_shape_vec;
+
+  {
+    Ort::TypeInfo input_type_info = this->session.GetInputTypeInfo(0);
+    const auto input_tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
+    input_element_type = input_tensor_info.GetElementType();
+    input_tensor_shape_vec = input_tensor_info.GetShape();
+
+    if (input_tensor_shape_vec.size() < 4) {
+      throw std::runtime_error("Invalid input tensor shape.");
+    }
+
+    this->fixed_batch_ =
+        input_tensor_shape_vec[0] > 0 ? input_tensor_shape_vec[0] : 0;
+
+    const InputShape resolved = resolve_input_shape(
+        input_tensor_shape_vec, params.img_width, params.img_height);
+    this->input_image_shape = cv::Size(resolved.width, resolved.height);
+
+    if (resolved.params_ignored) {
+      YOLO_LOG_WARN("Model has static input dimension(s); using %dx%d "
+                    "(img_width/img_height are ignored for those).",
+                    resolved.width, resolved.height);
+    } else if (resolved.from_params) {
+      YOLO_LOG_INFO("Dynamic input size in the ONNX graph; using %dx%d from "
+                    "img_width/img_height.",
+                    resolved.width, resolved.height);
+    }
+  }
+
+#if defined(YOLO_ROS_HAS_CUDA_RUNTIME)
+  // Rebuild the session with CUDA graphs when the model allows it: replaying
+  // the captured kernels removes most per-frame launch overhead.
+  if (params.cuda_graph_enable && this->active_provider_ == "cuda" &&
+      this->fixed_batch_ > 0 &&
+      input_element_type == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+    ProviderConfig graph_config;
+    graph_config.n_threads = n_threads;
+    graph_config.device_id = device_id;
+    graph_config.cuda_graph_enable = true;
+
+    try {
+      Ort::SessionOptions graph_options =
+          build_session_options(Provider::Cuda, graph_config);
+      Ort::Session graph_session(this->env, model_path.c_str(), graph_options);
+      this->session_options = std::move(graph_options);
+      this->session = std::move(graph_session);
+      this->cuda_graph_ = true;
+    } catch (const Ort::Exception &e) {
+      YOLO_LOG_WARN("CUDA graph session unavailable (%s); using the plain "
+                    "CUDA session.",
+                    e.what());
+    }
+  }
+#endif
+
   // Get input and output node information
   this->num_input_nodes = this->session.GetInputCount();
   this->num_output_nodes = this->session.GetOutputCount();
@@ -220,28 +287,6 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
         this->session.GetOutputNameAllocated(i, allocator));
     this->outputNames.push_back(
         this->output_node_name_alloc_strings.back().get());
-  }
-
-  Ort::TypeInfo input_type_info = this->session.GetInputTypeInfo(0);
-  std::vector<int64_t> input_tensor_shape_vec =
-      input_type_info.GetTensorTypeAndShapeInfo().GetShape();
-
-  if (input_tensor_shape_vec.size() >= 4) {
-    this->fixed_batch_ =
-        input_tensor_shape_vec[0] > 0 ? input_tensor_shape_vec[0] : 0;
-    this->input_image_shape =
-        cv::Size(static_cast<int>(input_tensor_shape_vec[3]),
-                 static_cast<int>(input_tensor_shape_vec[2]));
-
-    if (input_tensor_shape_vec[2] <= 0 || input_tensor_shape_vec[3] <= 0) {
-      // `dynamic=True` exports carry dynamic H/W as well as batch, so the
-      // graph cannot tell us the input size. All shipped models train at 640.
-      this->input_image_shape = cv::Size(640, 640);
-      YOLO_LOG_WARN("Dynamic input size in the ONNX graph; pinning 640x640 "
-                    "(export with a static imgsz if this is wrong).");
-    }
-  } else {
-    throw std::runtime_error("Invalid input tensor shape.");
   }
 
   // Pre-allocate the reusable input blob (1*3*H*W floats), written in place by
@@ -290,6 +335,30 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   this->memory_info =
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
+#if defined(YOLO_ROS_HAS_CUDA_RUNTIME)
+  if (this->cuda_graph_) {
+    this->device_id_ = device_id;
+    this->cuda_memory_info_ = Ort::MemoryInfo("Cuda", OrtArenaAllocator,
+                                              device_id, OrtMemTypeDefault);
+    this->cuda_allocator_ =
+        Ort::Allocator(this->session, this->cuda_memory_info_);
+    std::vector<int64_t> device_shape = {this->fixed_batch_, 3,
+                                         this->input_image_shape.height,
+                                         this->input_image_shape.width};
+    this->device_input_ = Ort::Value::CreateTensor<float>(
+        this->cuda_allocator_, device_shape.data(), device_shape.size());
+    this->io_binding_ = Ort::IoBinding(this->session);
+    this->io_binding_.BindInput(this->inputNames[0], this->device_input_);
+
+    for (std::size_t i = 0; i < this->num_output_nodes; ++i) {
+      this->io_binding_.BindOutput(this->outputNames[i], this->memory_info);
+    }
+
+    YOLO_LOG_INFO("CUDA graph mode enabled (batch=%lld).",
+                  static_cast<long long>(this->fixed_batch_));
+  }
+#endif
+
   // Consolidated load report: everything above has been resolved by now, and
   // this is the first thing to check when a model misbehaves.
   const std::string batch_str = this->fixed_batch_ > 0
@@ -309,14 +378,13 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
                 params.trt_fp16_enable ? "on" : "off",
                 params.trt_engine_cache_enable ? "on" : "off",
                 trt_cache_suffix.c_str());
-  YOLO_LOG_INFO(
-      "  input: name='%s' shape=%s dtype=%s  channel_order=%s  "
-      "batch=%s  image=%dx%d",
-      this->inputNames[0], join_shape(input_tensor_shape_vec).c_str(),
-      element_type_name(
-          input_type_info.GetTensorTypeAndShapeInfo().GetElementType()),
-      this->input_is_rgb_ ? "rgb" : "bgr", batch_str.c_str(),
-      this->input_image_shape.width, this->input_image_shape.height);
+  YOLO_LOG_INFO("  cuda_graph=%s", this->cuda_graph_ ? "on" : "off");
+  YOLO_LOG_INFO("  input: name='%s' shape=%s dtype=%s  channel_order=%s  "
+                "batch=%s  image=%dx%d",
+                this->inputNames[0], join_shape(input_tensor_shape_vec).c_str(),
+                element_type_name(input_element_type),
+                this->input_is_rgb_ ? "rgb" : "bgr", batch_str.c_str(),
+                this->input_image_shape.width, this->input_image_shape.height);
 
   for (std::size_t i = 0; i < this->num_output_nodes; ++i) {
     // Keep the TypeInfo alive: the ConstTensorTypeAndShapeInfo view points into
@@ -535,6 +603,32 @@ void yolo_ros::engine::Model::preprocess_into(
 
 std::vector<Ort::Value>
 yolo_ros::engine::Model::inference(std::vector<int64_t> &input_tensor_shape) {
+#if defined(YOLO_ROS_HAS_CUDA_RUNTIME)
+  if (this->cuda_graph_) {
+    try {
+      const std::size_t bytes = this->input_buffer_.size() * sizeof(float);
+      (void)cudaSetDevice(this->device_id_);
+      const cudaError_t error =
+          cudaMemcpy(this->device_input_.GetTensorMutableData<float>(),
+                     this->input_buffer_.data(), bytes, cudaMemcpyHostToDevice);
+
+      if (error != cudaSuccess) {
+        throw std::runtime_error(std::string("cudaMemcpy failed: ") +
+                                 cudaGetErrorString(error));
+      }
+
+      this->session.Run(Ort::RunOptions{nullptr}, this->io_binding_);
+      this->io_binding_.SynchronizeOutputs();
+      return this->io_binding_.GetOutputValues();
+    } catch (const std::exception &e) {
+      YOLO_LOG_WARN("CUDA graph inference failed (%s); falling back to the "
+                    "plain CUDA path.",
+                    e.what());
+      this->cuda_graph_ = false;
+    }
+  }
+#endif
+
   size_t input_tensor_size =
       std::accumulate(input_tensor_shape.begin(), input_tensor_shape.end(), 1,
                       std::multiplies<int64_t>());

@@ -1,4 +1,5 @@
 // Copyright (c) 2025 Alejandro González Cantón
+// Copyright (c) 2026 Miguel Ángel González Santamarta
 // SPDX-License-Identifier: MIT
 
 /// @file
@@ -129,6 +130,10 @@ struct YoloParams {
   /// @brief Execution device; its ordinal (e.g. "cuda:0", "trt:1", "1") is
   /// passed as device_id to the CUDA and TensorRT execution providers.
   std::string device;
+  /// @brief Enable CUDA graph execution on the CUDA EP; only applied to models
+  /// with a fixed batch axis. Unsupported sessions fall back to the plain
+  /// inference path.
+  bool cuda_graph_enable = true;
   /// @brief TensorRT: enable FP16 precision.
   bool trt_fp16_enable = true;
   /// @brief TensorRT: persist the built engine across sessions.
@@ -140,14 +145,8 @@ struct YoloParams {
   float threshold;
   /// @brief IoU threshold for the C++ NMS.
   float iou;
-  /// @brief Gate inference, matching the Python node's `enable` parameter.
-  bool enable; // gate inference (matches the Python node's `enable`)
   /// @brief Cap on the number of detections published per image.
   int max_det; // cap on the number of detections published per image
-  /// @brief Image subscription reliability (QoS) policy.
-  int image_reliability;
-  /// @brief Image topic to subscribe to.
-  std::string image_topic;
   /// @brief Number of intra-op threads used by ONNX Runtime.
   int n_threads;
   /// @brief Cap on the inference/publish rate in Hz; 0 = unlimited. Frames are
@@ -155,6 +154,10 @@ struct YoloParams {
   int max_fps; // cap on the inference/publish rate in Hz; 0 = unlimited
                // (process every received frame). Frames are dropped by the
                // node, the subscription stays live.
+  /// @brief Network input width for dynamic-input models.
+  int img_width = 640;
+  /// @brief Network input height for dynamic-input models.
+  int img_height = 480;
   /// @brief Classification only: number of top classes published per image
   /// (softmax probabilities, sorted descending).
   int top_k = 5; // classification: number of top classes to publish per

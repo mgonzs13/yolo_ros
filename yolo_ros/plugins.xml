@@ -1,0 +1,18 @@
+<library path="yolo_ros_plugins">
+  <class name="yolo_ros/DetectionPlugin" type="yolo_ros::DetectionPlugin"
+         base_class_type="yolo_ros::Plugin">
+    <description>YOLO inference over one or many camera topics.</description>
+  </class>
+  <class name="yolo_ros/TrackingPlugin" type="yolo_ros::TrackingPlugin"
+         base_class_type="yolo_ros::Plugin">
+    <description>Multi-object tracking over synchronized detections.</description>
+  </class>
+  <class name="yolo_ros/Detect3DPlugin" type="yolo_ros::Detect3DPlugin"
+         base_class_type="yolo_ros::Plugin">
+    <description>Lifts 2D detections into 3D with depth and tf2.</description>
+  </class>
+  <class name="yolo_ros/DebugPlugin" type="yolo_ros::DebugPlugin"
+         base_class_type="yolo_ros::Plugin">
+    <description>Draws detections and publishes RViz markers.</description>
+  </class>
+</library>

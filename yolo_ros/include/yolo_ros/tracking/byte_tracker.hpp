@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Alejandro González Cantón
+// Copyright (c) 2026 Miguel Ángel González Santamarta
 // Portions Copyright (c) 2021 Yifu Zhang
 // SPDX-License-Identifier: MIT
 
@@ -10,6 +11,7 @@
 #define YOLO_ROS__TRACKING__BYTE_TRACKER_HPP_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "yolo_ros/tracking/strack.hpp"
@@ -58,32 +60,57 @@ struct ByteTrackParams : public TrackerParams {
 
 /// @brief Declare the ByteTrack parameters on @p node with their defaults.
 ///
+/// Declarations are skipped for parameters that already exist, so calling this
+/// again after a cleanup/configure cycle is safe and keeps the declared values.
 /// Only called for the tracker selected by the `tracker_type` parameter, so an
 /// unselected tracker's knobs do not appear in `ros2 param list`.
-/// @tparam NodeT Node type providing declare_parameter().
+/// @tparam NodeT Node type providing declare_parameter() and has_parameter().
 /// @param[in,out] node Node on which the parameters are declared.
-template <typename NodeT> void declare_byte_track_params(NodeT &node) {
-  node.template declare_parameter<double>("track_high_thresh", 0.25);
-  node.template declare_parameter<double>("track_low_thresh", 0.1);
-  node.template declare_parameter<double>("new_track_thresh", 0.25);
-  node.template declare_parameter<int>("track_buffer", 30);
-  node.template declare_parameter<double>("match_thresh", 0.8);
-  node.template declare_parameter<bool>("fuse_score", true);
+/// @param[in] prefix Prefix prepended to every parameter name; already includes
+/// the trailing dot (e.g. "track."). Empty declares the bare parameter names.
+template <typename NodeT>
+void declare_byte_track_params(NodeT &node, const std::string &prefix = "") {
+  if (!node.has_parameter(prefix + "track_high_thresh")) {
+    node.template declare_parameter<double>(prefix + "track_high_thresh", 0.25);
+  }
+
+  if (!node.has_parameter(prefix + "track_low_thresh")) {
+    node.template declare_parameter<double>(prefix + "track_low_thresh", 0.1);
+  }
+
+  if (!node.has_parameter(prefix + "new_track_thresh")) {
+    node.template declare_parameter<double>(prefix + "new_track_thresh", 0.25);
+  }
+
+  if (!node.has_parameter(prefix + "track_buffer")) {
+    node.template declare_parameter<int>(prefix + "track_buffer", 30);
+  }
+
+  if (!node.has_parameter(prefix + "match_thresh")) {
+    node.template declare_parameter<double>(prefix + "match_thresh", 0.8);
+  }
+
+  if (!node.has_parameter(prefix + "fuse_score")) {
+    node.template declare_parameter<bool>(prefix + "fuse_score", true);
+  }
 }
 
 /// @brief Read the already-declared ByteTrack parameters from @p node.
 /// @tparam NodeT Node type providing get_parameter().
 /// @param[in] node Node whose parameters are read.
+/// @param[in] prefix Prefix prepended to every parameter name; already includes
+/// the trailing dot (e.g. "track.") and must match the declaration prefix.
 /// @return The params struct ready for create_tracker().
 template <typename NodeT>
-ByteTrackParams load_byte_track_params(const NodeT &node) {
+ByteTrackParams load_byte_track_params(const NodeT &node,
+                                       const std::string &prefix = "") {
   ByteTrackParams params;
-  node.get_parameter("track_high_thresh", params.track_high_thresh);
-  node.get_parameter("track_low_thresh", params.track_low_thresh);
-  node.get_parameter("new_track_thresh", params.new_track_thresh);
-  node.get_parameter("track_buffer", params.track_buffer);
-  node.get_parameter("match_thresh", params.match_thresh);
-  node.get_parameter("fuse_score", params.fuse_score);
+  node.get_parameter(prefix + "track_high_thresh", params.track_high_thresh);
+  node.get_parameter(prefix + "track_low_thresh", params.track_low_thresh);
+  node.get_parameter(prefix + "new_track_thresh", params.new_track_thresh);
+  node.get_parameter(prefix + "track_buffer", params.track_buffer);
+  node.get_parameter(prefix + "match_thresh", params.match_thresh);
+  node.get_parameter(prefix + "fuse_score", params.fuse_score);
   return params;
 }
 
