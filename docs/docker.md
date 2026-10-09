@@ -5,7 +5,7 @@ See the [README](../README.md#docker) for the short Docker section. This guide c
 Two Dockerfiles are provided:
 
 - `Dockerfile` — CPU image (plain `colcon build`; only the ONNX Runtime CPU execution provider).
-- `Dockerfile.gpu` — GPU image built on `nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04` with `colcon build --cmake-args -DONNX_GPU=ON`, which enables the CUDA and TensorRT execution providers.
+- `Dockerfile.gpu` — GPU image built on `nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04` with `colcon build --cmake-args -DONNX_GPU=ON`, which enables the CUDA and TensorRT execution providers. Only jammy-based ROS 2 distros (`humble`, `iron`) are supported; overriding `CUDA_VERSION` also requires a matching `TENSORRT_VERSION` build argument.
 
 ## CPU image
 
@@ -31,9 +31,9 @@ docker run -it --rm \
   yolo_ros:gpu
 ```
 
-Note the cache is mounted under `~/.cache/yolo_ros/container`, not `~/.cache/yolo_ros` directly: a TensorRT engine plan file is only readable by the exact TensorRT version that built it. The image pins TensorRT 10.13.2 to match the development host, but if the host ever builds engines with a different version, sharing the cache would make the TensorRT provider fail to deserialize them and silently fall back to CUDA. A dedicated container cache avoids that entirely (or keep both sides on the same TensorRT version).
+Note the cache is mounted under `~/.cache/yolo_ros/container`, not `~/.cache/yolo_ros` directly: a TensorRT engine plan file is only readable by the exact TensorRT version that built it. The image pins TensorRT 10.13.2 to match the development host, but if the host ever builds engines with a different version, sharing the cache would make the TensorRT provider fail to deserialize them and fall back to CUDA (a `failed to initialize` warning is logged). A dedicated container cache avoids that entirely (or keep both sides on the same TensorRT version).
 
-`config/yolo.yaml` already defaults to `device: cuda:0` and `provider: auto` (CUDA -> CPU). Select a backend with `provider:=tensorrt` (TensorRT -> CUDA -> CPU) or `provider:=cuda`, and check the startup log for the line `Using execution provider: tensorrt` (or `cuda`). If it reports `cpu`, the GPU libraries are not visible to the container — make sure you are using the GPU image and passed `--gpus all`.
+`config/yolo.yaml` sets `provider: cuda` (CUDA -> CPU) and the `device` parameter defaults to `cuda:0`. Select a backend with `provider:=tensorrt` (TensorRT -> CUDA -> CPU) or `provider:=cuda`, and check the startup log for the line `Using execution provider: tensorrt` (or `cuda`). If it reports `cpu`, the GPU libraries are not visible to the container — make sure you are using the GPU image and passed `--gpus all`.
 
 ### Pinned versions
 

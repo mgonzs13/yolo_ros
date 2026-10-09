@@ -73,7 +73,7 @@ For plugin _i_, the input of camera `cam` is the channel `output_channel(cam)` p
 | `yolo_ros/Detect3DPlugin`  | `CameraFrame` (with depth) + previous detections | `<cam>/detections_3d`                       |
 | `yolo_ros/DebugPlugin`     | `CameraFrame` + previous detections              | `<cam>/debug_image` + the two marker arrays |
 
-The 3D plugin must come after the detections it should lift (tracking, or detection when tracking is omitted); debug is terminal and draws `<cam>/debug_image` from the freshest non-3D upstream in the chain (so the image is not gated by the 3D rate), while its RViz markers come from the chain input when it carries `bbox3d`/`keypoints3d` (i.e. when `detection3d` precedes it).
+The 3D plugin must come after the detections it should lift (tracking, or detection when tracking is omitted); debug is terminal and draws `<cam>/debug_image` from its chain input, adding RViz markers when those detections carry `bbox3d`/`keypoints3d` (i.e. when `detection3d` precedes it).
 
 ## Per-camera outputs
 
@@ -98,4 +98,4 @@ Batching is a **throughput** optimization, not a latency one: per-image latency 
 |                            4 |       21.6 ms · 186 img/s |       13.9 ms · 287 img/s |
 | 4 × unbatched (same session) | 24.9 ms total · 161 img/s | 16.9 ms total · 237 img/s |
 
-Batching 4 cameras buys ~15-20 % more aggregate throughput than four unbatched runs; the execution provider is the larger lever (~+55 % for TensorRT fp16 over CUDA fp32). The dynamic-batch export itself costs ~0-8 % per image versus the static batch-1 model. These are saturated-batch numbers - with real cameras the latest-frame queue drops stale frames, so partial batches are cheaper and per-camera latency stays bounded. See the [model export guide](models.md#dynamic-batch-export-multi-camera-pipelines) for the dynamic-batch export.
+Batching 4 cameras buys ~15-20 % more aggregate throughput than four unbatched runs; the execution provider is the larger lever (~+50 % for TensorRT fp16 over CUDA fp32). The dynamic-batch export itself costs ~0-8 % per image versus the static batch-1 model. These are saturated-batch numbers - with real cameras the latest-frame queue drops stale frames, so partial batches are cheaper and per-camera latency stays bounded. See the [model export guide](models.md#dynamic-batch-export-multi-camera-pipelines) for the dynamic-batch export.

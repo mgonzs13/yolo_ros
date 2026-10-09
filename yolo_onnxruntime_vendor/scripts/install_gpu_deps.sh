@@ -40,8 +40,9 @@ Usage:
 
 Options:
   --cuda-major M   CUDA major to install for (auto-detected when omitted)
-  --gpu-arch NN    GPU compute capability without the dot (61, 70, 75, 86);
-                   auto-detected with nvidia-smi when omitted
+  --gpu-arch NN    GPU compute capability, with or without the dot
+                   (61, 6.1, 75, 86); auto-detected with nvidia-smi
+                   when omitted
   --tensorrt       also install the TensorRT 10 runtime for provider: tensorrt
                    (requires compute capability 7.5+)
   --ubuntu R       override the Ubuntu release detected from /etc/os-release
@@ -105,10 +106,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# First number of the "version" field in a CUDA version.json file.
+# First number of the "version" field in a CUDA version.json file. Returns 0
+# with empty output when the file is missing or unparseable so a bad candidate
+# cannot abort the detection under `set -e`.
 cuda_major_from_json() {
   grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+' "$1" 2>/dev/null |
-    grep -oE '[0-9]+$' | head -1
+    grep -oE '[0-9]+$' | head -1 || true
 }
 
 detect_cuda_major() {
@@ -220,6 +223,13 @@ if [ -z "$UBUNTU" ]; then
   echo "Could not detect the Ubuntu release; pass --ubuntu 2004|2204|2404." >&2
   exit 1
 fi
+case "$UBUNTU" in
+  2004 | 2204 | 2404) ;;
+  *)
+    echo "Unsupported Ubuntu release '${UBUNTU}' (supported: 2004, 2204, 2404)." >&2
+    exit 1
+    ;;
+esac
 
 if [ -z "$GPU_ARCH" ]; then
   if GPU_ARCH="$(detect_gpu_arch)"; then
@@ -320,6 +330,7 @@ if [ -z "$GPU_ARCH" ]; then
 fi
 if [ "$WITH_TENSORRT" -eq 1 ]; then
   echo "TensorRT 10 runtime requested (libnvinfer10, libnvonnxparsers10)"
+  echo "warning: do not install the 'tensorrt' meta package (now TensorRT 11); it does not provide libnvinfer.so.10" >&2
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -345,7 +356,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     if [ -n "$trt_version" ]; then
       echo "  apt-get install -y libnvinfer10=${trt_version} libnvonnxparsers10=${trt_version}"
     else
-      echo "  apt-get install -y libnvinfer10 libnvonnxparsers10"
+      echo "  warning: no libnvinfer10 build tagged +cuda${CUDA_MAJOR}. in apt; would install the unversioned packages (may pull a different CUDA runtime)"
     fi
   fi
   echo "  ldconfig && ldconfig -p | grep cudnn"
@@ -373,11 +384,24 @@ if [ "$WITH_TENSORRT" -eq 1 ] &&
   need_keyring=1
 fi
 
+# Download with whichever HTTP client is available.
+fetch_url() {
+  local url="$1" dest="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL -o "$dest" "$url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$dest" "$url"
+  else
+    echo "error: neither curl nor wget is available to download ${url}" >&2
+    return 1
+  fi
+}
+
 if [ "$need_keyring" -eq 1 ]; then
   echo "Adding the NVIDIA CUDA repository for ${TAG} ..."
   tmp_dir="$(mktemp -d)"
   trap 'rm -rf "${tmp_dir}"' EXIT
-  curl -fsSL -o "${tmp_dir}/cuda-keyring.deb" "$KEYRING_URL"
+  fetch_url "$KEYRING_URL" "${tmp_dir}/cuda-keyring.deb"
   dpkg -i "${tmp_dir}/cuda-keyring.deb"
   apt-get update
 fi
@@ -404,9 +428,12 @@ if [ "$WITH_TENSORRT" -eq 1 ]; then
   trt_version="$(trt_pinned_version)"
   if [ -n "$trt_version" ]; then
     apt-get install -y "libnvinfer10=${trt_version}" \
-      "libnvonnxparsers10=${trt_version}" ||
+      "libnvonnxparsers10=${trt_version}" || {
+      echo "warning: pinned TensorRT install failed; retrying with the unversioned packages" >&2
       apt-get install -y libnvinfer10 libnvonnxparsers10
+    }
   else
+    echo "warning: no libnvinfer10 build tagged +cuda${CUDA_MAJOR}. in apt; installing the unversioned packages (may pull a different CUDA runtime)" >&2
     apt-get install -y libnvinfer10 libnvonnxparsers10
   fi
 fi

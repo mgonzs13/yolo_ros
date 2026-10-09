@@ -7,6 +7,14 @@ FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS deps
 # ROS_DISTRO as an environment variable).
 ARG ROS_DISTRO
 
+# The CUDA base is Ubuntu 22.04 (jammy), so only jammy-based ROS 2 distros
+# (humble, iron) are coherent here. Overriding CUDA_VERSION also requires
+# bumping TENSORRT_VERSION to a matching +cudaXX build below.
+RUN if [ "${ROS_DISTRO}" != "humble" ] && [ "${ROS_DISTRO}" != "iron" ]; then \
+        echo "Dockerfile.gpu targets Ubuntu 22.04; use humble or iron (got ${ROS_DISTRO})" >&2; \
+        exit 1; \
+    fi
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 # ROS 2 apt repository. The CUDA image already ships the NVIDIA/CUDA repository,
@@ -16,22 +24,22 @@ RUN apt update && apt install -y --no-install-recommends \
     gnupg \
     lsb-release \
     ca-certificates \
-    && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+    && curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
         -o /usr/share/keyrings/ros-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
         > /etc/apt/sources.list.d/ros2.list \
     && rm -rf /var/lib/apt/lists/*
 
 # CUDA 12 and cuDNN 9 come from the base image; the TensorRT 10 runtime libraries
-# are what the TensorRT execution provider of ONNX Runtime dlopens at run time.
+# are what the TensorRT execution provider of ONNX Runtime loads at run time.
 # The TensorRT version is pinned: the CUDA repository also publishes
-# +cuda12.9/+cuda13.x builds and apt would otherwise pick the newest, pulling a
-# second (incompatible) CUDA runtime into the image. 10.13.2 is the version used
-# on the development host (CUDA 12.6), so host and container TensorRT engine
-# caches are interchangeable; the +cuda12.9 build runs on this 12.6 base via
-# CUDA minor-version compatibility, exactly as it does on the host. The packages
-# are held so the `apt upgrade` below does not bump them back to the newest
-# build.
+# +cuda12.9/+cuda13.x builds and apt would otherwise pick the newest, a
+# +cuda13.x build that does not match this CUDA 12 base.
+# 10.13.2 is the version used on the development host (CUDA 12.6), so host and
+# container TensorRT engine caches are interchangeable; the +cuda12.9 build runs
+# on this 12.6 base via CUDA minor-version compatibility, exactly as it does on
+# the host. The packages are held so the `apt upgrade` below does not bump them
+# back to the newest build.
 ARG TENSORRT_VERSION=10.13.2.6-1+cuda12.9
 RUN apt update && apt install -y --no-install-recommends \
     ros-${ROS_DISTRO}-ros-core \
@@ -52,9 +60,10 @@ COPY . /root/ros2_ws/src
 # Install ROS dependencies
 RUN rosdep init && rosdep update --include-eol-distros
 # Upgrade the packages shipped in the base image first
-RUN apt update && apt upgrade -y && rosdep install --filter-for-installers apt --from-paths src --ignore-src -r -y \
+RUN apt update && apt upgrade -y && rosdep install --from-paths src --ignore-src -r -y \
     --dependency-types=buildtool \
     --dependency-types=build \
+    --dependency-types=exec \
     && rm -rf /var/lib/apt/lists/*
 
 FROM deps AS builder

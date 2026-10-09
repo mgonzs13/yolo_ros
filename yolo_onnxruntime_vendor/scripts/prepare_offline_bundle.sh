@@ -7,9 +7,12 @@
 #
 # The bundle contains:
 #   - onnxruntime/     the v<ort_version> source tree with all git submodules
-#                      (git metadata stripped)
+#                      (git metadata stripped), plus reduced_ops.config when a
+#                      Python with the onnx package is available
 #   - onnxruntime/mirror/  pre-downloaded CMake dependency archives (>= 1.16)
 #   - models/          the opset-12 ONNX models for the pipeline
+#   - huggingface-hub-cpp/  source for yolo_hfhub_vendor's FetchContent
+#   - tools/           a prebuilt aarch64 CMake and the vendor scripts
 #
 # Usage: scripts/prepare_offline_bundle.sh <ort_version> [output_dir]
 #   ort_version  ONNX Runtime release, e.g. 1.6.0 or 1.20.2
@@ -26,14 +29,56 @@
 #   MODELS      space-separated model file names to include
 #   MIRROR_SKIP space-separated cmake/deps.txt names to not mirror (defaults to
 #               platform-specific archives not needed for a native aarch64 build)
+#   ONNX_PY     Python command with the onnx package (default: autodetect)
+#   CMAKE_VERSION  Kitware CMake version to bundle (default 3.26.6)
+#   STRICT_SHA  set to abort on any cmake/deps.txt SHA1 drift
 set -euo pipefail
 
 usage() {
   echo "usage: $(basename "$0") <ort_version> [output_dir]" >&2
 }
 
+help() {
+  cat <<EOF
+Run on an internet-connected host to produce a self-contained bundle for
+building ONNX Runtime <ort_version> (aarch64, CUDA + TensorRT) on the robot.
+
+usage: $(basename "$0") <ort_version> [output_dir]
+
+  ort_version  ONNX Runtime release, e.g. 1.6.0 or 1.20.2 (the git tag is
+               v<ort_version>).
+  output_dir   defaults to <package>/offline-bundle-<ort_version>; the tarball
+               is <output_dir>.tar.gz
+
+The bundle carries the ONNX Runtime source tree with all git submodules, the
+pre-downloaded CMake dependency archives (onnxruntime/mirror/, >= 1.16), the
+opset-12 ONNX models, a prebuilt aarch64 CMake and the vendor scripts, and
+prints the robot-side copy-paste sequence when it finishes.
+
+environment:
+  MODELS_DIR     directory holding the .onnx files (default ~/models)
+  MODELS         space-separated model file names (default yolo26m.onnx)
+  MIRROR_SKIP    cmake/deps.txt names to not mirror (defaults to archives
+                 not needed for a native aarch64 build)
+  ONNX_PY        command with the onnx package, e.g. "uv run --with onnx python3"
+  CMAKE_VERSION  Kitware CMake version to bundle (default 3.26.6)
+  STRICT_SHA     set to abort on any cmake/deps.txt SHA1 drift
+EOF
+}
+
+for arg in "$@"; do
+  case "${arg}" in
+    -h|--help) help; exit 0 ;;
+    -*) echo "error: unknown option '${arg}'" >&2; usage; exit 2 ;;
+  esac
+done
 if [[ $# -lt 1 || -z "${1:-}" ]]; then
   echo "error: ONNX Runtime version is required" >&2
+  usage
+  exit 2
+fi
+if [[ $# -gt 2 ]]; then
+  echo "error: unexpected argument(s): ${*:3}" >&2
   usage
   exit 2
 fi
@@ -47,6 +92,12 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${2:-${SCRIPT_DIR}/../offline-bundle-${ORT_VERSION}}"
+# A trailing slash would make <output_dir>.tar.gz land inside the directory
+# being archived.
+OUT_DIR="${OUT_DIR%/}"
+case "${OUT_DIR}" in
+  ""|/) echo "error: refusing to use '${OUT_DIR}' as output directory" >&2; exit 2 ;;
+esac
 MODELS_DIR="${MODELS_DIR:-${HOME}/models}"
 MODELS="${MODELS:-yolo26m.onnx}"
 ORT_GIT_URL="https://github.com/microsoft/onnxruntime"
@@ -55,10 +106,15 @@ HFHUB_TAG="1.1.5"
 # Kitware prebuilt aarch64 CMake bundled for the robot (needs only glibc 2.17).
 CMAKE_VERSION="${CMAKE_VERSION:-3.26.6}"
 
-# The colcon workspace root (repo is <workspace>/src/yolov8_ros/).
+# The colcon workspace root (the repo is <workspace>/src/<repo>/).
 WORKSPACE="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+# Repository directory name (the parent of the yolo_onnxruntime_vendor
+# package), used to print paths that match the actual checkout rather than a
+# hard-coded one.
+REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+REPO_NAME="$(basename "${REPO_DIR}")"
 
-for tool in curl git tar; do
+for tool in curl git tar sha1sum sha256sum; do
   command -v "${tool}" >/dev/null 2>&1 || {
     echo "error: ${tool} not found" >&2
     exit 1
@@ -68,8 +124,14 @@ done
 echo "==> Cloning ONNX Runtime v${ORT_VERSION} with submodules (shallow)..."
 rm -rf "${OUT_DIR}"
 mkdir -p "${OUT_DIR}"
-git clone --depth 1 --shallow-submodules --recursive \
-  -b "v${ORT_VERSION}" "${ORT_GIT_URL}" "${OUT_DIR}/onnxruntime"
+if ! git clone --depth 1 --shallow-submodules --recursive \
+    -b "v${ORT_VERSION}" "${ORT_GIT_URL}" "${OUT_DIR}/onnxruntime"; then
+  # Leave no partially cloned tree behind that a later run might pick up.
+  rm -rf "${OUT_DIR}/onnxruntime"
+  echo "error: could not clone ONNX Runtime v${ORT_VERSION}." >&2
+  echo "       Check the version and network." >&2
+  exit 1
+fi
 
 echo "==> Verifying git submodules are populated..."
 missing="$(git -C "${OUT_DIR}/onnxruntime" submodule status --recursive \
@@ -89,7 +151,11 @@ if [[ -f "${DEPS_FILE}" ]]; then
   drifted=()
   echo "==> Mirroring cmake/deps.txt archives into onnxruntime/mirror/..."
   while IFS=';' read -r name url sha; do
-    [[ -z "${name}" || "${name}" == \#* || -z "${url}" ]] && continue
+    [[ -z "${name}" || "${name}" == \#* ]] && continue
+    if [[ -z "${url}" || -z "${sha}" ]]; then
+      echo "warning: malformed deps.txt entry for '${name:-?}'; skipping" >&2
+      continue
+    fi
     [[ "${url}" == https://* ]] || continue
     if [[ " ${MIRROR_SKIP} " == *" ${name} "* ]]; then
       echo "    skip ${name} (not needed for a native aarch64 build)"
@@ -98,9 +164,9 @@ if [[ -f "${DEPS_FILE}" ]]; then
     dest="${OUT_DIR}/onnxruntime/mirror/${url#https://}"
     mkdir -p "$(dirname "${dest}")"
     echo "    fetch ${name}"
-    curl -fsSL -o "${dest}" "${url}"
+    curl -fsSL --retry 3 --retry-delay 2 -o "${dest}" "${url}"
     actual="$(sha1sum "${dest}" | awk '{print tolower($1)}')"
-    expected="$(printf '%s' "${sha}" | tr 'A-Z' 'a-z')"
+    expected="$(printf '%s' "${sha}" | tr '[:upper:]' '[:lower:]')"
     if [[ "${actual}" != "${expected}" ]]; then
       # GitLab regenerates archives non-deterministically, so a few pinned
       # hashes in cmake/deps.txt no longer match (eigen, kleidiai). The bytes
@@ -145,16 +211,18 @@ done < <(find "${OUT_DIR}/onnxruntime" -name .git -print0)
 
 echo "==> Collecting opset-12 models from ${MODELS_DIR}..."
 mkdir -p "${OUT_DIR}/models"
-found=0
+included_models=()
+# Intentionally word-split: the contract is a space-separated list of names.
+# shellcheck disable=SC2086
 for model in ${MODELS}; do
   if [[ -f "${MODELS_DIR}/${model}" ]]; then
     cp -v "${MODELS_DIR}/${model}" "${OUT_DIR}/models/"
-    found=$((found + 1))
+    included_models+=("${model}")
   else
     echo "warning: ${MODELS_DIR}/${model} not found; skipping" >&2
   fi
 done
-if [[ "${found}" -eq 0 ]]; then
+if [[ ${#included_models[@]} -eq 0 ]]; then
   echo "error: no models found in ${MODELS_DIR}" >&2
   exit 1
 fi
@@ -201,10 +269,10 @@ CMAKE_DIRNAME="cmake-${CMAKE_VERSION}-linux-aarch64"
 echo "==> Bundling CMake ${CMAKE_VERSION} (aarch64)..."
 mkdir -p "${OUT_DIR}/tools"
 CMAKE_TGZ="${OUT_DIR}/tools/${CMAKE_DIRNAME}.tar.gz"
-curl -fsSL -o "${CMAKE_TGZ}" \
+curl -fsSL --retry 3 --retry-delay 2 -o "${CMAKE_TGZ}" \
   "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/${CMAKE_DIRNAME}.tar.gz"
 CMAKE_SHA_FILE="$(mktemp)"
-if curl -fsSL -o "${CMAKE_SHA_FILE}" \
+if curl -fsSL --retry 3 --retry-delay 2 -o "${CMAKE_SHA_FILE}" \
   "https://cmake.org/files/v${CMAKE_VERSION%.*}/cmake-${CMAKE_VERSION}-SHA-256.txt"; then
   expected="$(grep " ${CMAKE_DIRNAME}.tar.gz\$" "${CMAKE_SHA_FILE}" | awk '{print $1}')"
   actual="$(sha256sum "${CMAKE_TGZ}" | awk '{print $1}')"
@@ -221,6 +289,10 @@ fi
 rm -f "${CMAKE_SHA_FILE}"
 tar -xzf "${CMAKE_TGZ}" -C "${OUT_DIR}/tools"
 rm -f "${CMAKE_TGZ}"
+[[ -x "${OUT_DIR}/tools/${CMAKE_DIRNAME}/bin/cmake" ]] || {
+  echo "error: ${CMAKE_DIRNAME} did not extract a usable cmake binary" >&2
+  exit 1
+}
 
 # Carry the robot-side scripts inside the bundle too, so the bundle does not
 # depend on the robot's workspace checkout having the latest version.
@@ -250,6 +322,7 @@ tar -C "$(dirname "${OUT_DIR}")" -czf "${BUNDLE}" "$(basename "${OUT_DIR}")"
 
 SIZE="$(du -h "${BUNDLE}" | cut -f1)"
 BUNDLE_NAME="$(basename "${OUT_DIR}")"
+FIRST_MODEL="${included_models[0]}"
 cat <<EOF
 
 Bundle ready: ${BUNDLE} (${SIZE})
@@ -269,18 +342,20 @@ This bundle ${REDUCED_OPS_NOTE}.
      export PATH=~/${BUNDLE_NAME}/tools/${CMAKE_DIRNAME}/bin:\$PATH
      # The build script ships inside the bundle; write the ONNX Runtime prefix
      # into the workspace vendor package so the colcon arg below finds it.
+     # --cuda-arch: 87 = Orin, 72 = Xavier. On low-RAM boards cap the compile
+     # jobs (e.g. ORT_PARALLEL=4) to avoid the CUDA provider build being OOM-killed.
      ORT_SOURCE_DIR=~/${BUNDLE_NAME}/onnxruntime \\
          ~/${BUNDLE_NAME}/tools/scripts/build_ort_from_source.sh ${ORT_VERSION} \\
-         "\$HOME/yr_ws/src/yolov8_ros/yolo_onnxruntime_vendor/ort-${ORT_VERSION}" \\
+         "\$HOME/yr_ws/src/${REPO_NAME}/yolo_onnxruntime_vendor/ort-${ORT_VERSION}" \\
          --ep cuda --cuda-arch 87
      # --base-paths src + the bundle's COLCON_IGNORE keep colcon away from the
      # ONNX Runtime source tree. The ORT source tree's mirror/ makes its CMake
      # dependency fetches local, so no FETCHCONTENT_FULLY_DISCONNECTED here (it
      # would skip extracting those local archives).
      colcon build --symlink-install --base-paths src --cmake-args \\
-         -DONNXRUNTIME_ROOT=\$(pwd)/src/yolov8_ros/yolo_onnxruntime_vendor/ort-${ORT_VERSION} \\
+         -DONNXRUNTIME_ROOT=\$(pwd)/src/${REPO_NAME}/yolo_onnxruntime_vendor/ort-${ORT_VERSION} \\
          -DFETCHCONTENT_SOURCE_DIR_YOLO_HFHUB=\$HOME/${BUNDLE_NAME}/huggingface-hub-cpp
      source install/setup.bash
      ros2 launch yolo_bringup yolo.launch.py \\
-         model_path:=\$HOME/${BUNDLE_NAME}/models/yolo26m.onnx
+         model_path:=\$HOME/${BUNDLE_NAME}/models/${FIRST_MODEL}
 EOF

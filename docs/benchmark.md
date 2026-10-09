@@ -2,9 +2,9 @@
 
 See the [README](../README.md) for the short project overview.
 
-Same model (`yolo26m`), same 640x480 frames and same detection settings (`imgsz=640`, `conf=0.7`, ~8.7 detections/frame); only the execution provider changes. Latency is the median per-frame round trip with a single frame in flight, throughput the saturated end-to-end rate.
+Same model (`yolo26m`), same 640x480 frames and same detection settings (640x640 model input, `threshold: 0.7`, ~8.7 detections/frame); only the execution provider changes (`provider: cpu`, `cuda` and `tensorrt` respectively). Latency is the median per-frame round trip with a single frame in flight, throughput the saturated end-to-end rate.
 
-Measured on a 12th Gen Intel Core i7-12700F (12 cores / 20 threads, 32 GB RAM) with an NVIDIA GeForce RTX 3060 (12 GB, driver 580.178.04), on Ubuntu 22.04 with CUDA 12.6 / cuDNN 9 and ONNX Runtime 1.20.0.
+Measured on a 12th Gen Intel Core i7-12700F (12 cores / 20 threads, 32 GB RAM) with an NVIDIA GeForce RTX 3060 (12 GB, driver 580.178.04), on Ubuntu 22.04 with CUDA 12.6 / cuDNN 9 and ONNX Runtime 1.20.0. The CPU row was measured with ONNX Runtime using all logical cores; the current `n_threads: -1` auto selection limits the CPU EP to the performance cores on hybrid CPUs, and `cuda_graph_enable` changes the CUDA path, so re-measure on your hardware.
 
 | Backend  | Provider           | Latency (median) | Throughput |         CPU |      RSS | GPU memory |
 | :------- | :----------------- | ---------------: | ---------: | ----------: | -------: | ---------: |

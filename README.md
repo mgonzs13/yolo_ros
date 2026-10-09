@@ -67,7 +67,8 @@ The vendor package detects the CUDA major and downloads the matching ONNX Runtim
 
 ```shell
 # Scripted: detects CUDA + Ubuntu, installs the matching cuDNN, runs ldconfig
-# and verifies it (add --tensorrt for the TensorRT EP, --dry-run to preview).
+# and verifies it (--tensorrt for the TensorRT EP, --ubuntu 2004|2204|2404 to
+# override the detected release, --dry-run to preview).
 sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh
 
 colcon build --symlink-install --cmake-args -DONNX_GPU=ON
@@ -81,8 +82,9 @@ wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
 
-# cuDNN matching the detected CUDA major; the -dev package also provides the
-# unversioned libcudnn.so symlink ONNX Runtime dlopens.
+# cuDNN matching the detected CUDA major. The -dev package is recommended:
+# ONNX Runtime 1.18/1.20 link the versioned libcudnn soname directly, while
+# 1.28 resolves it at run time (probing libcudnn.so.9, then libcudnn.so).
 sudo apt-get install libcudnn9-dev-cuda-13   # CUDA 13; libcudnn9-dev-cuda-12 for CUDA 12; libcudnn8-dev for CUDA 11
 sudo ldconfig
 ```
@@ -116,6 +118,8 @@ See the [Docker guide](docs/docker.md) for the GPU details, the TensorRT engine 
 
 The C++ pipeline runs any Ultralytics-exported **ONNX** model whose output matches one of the YOLO layouts below. The compatible model families are:
 
+- [YOLOv3](https://docs.ultralytics.com/models/yolov3/) (`yolov3u`, Ultralytics' updated anchor-free head)
+- [YOLOv5](https://docs.ultralytics.com/models/yolov5/) (`yolov5u`)
 - [YOLOv8](https://docs.ultralytics.com/models/yolov8/)
 - [YOLOv9](https://docs.ultralytics.com/models/yolov9/)
 - [YOLOv10](https://docs.ultralytics.com/models/yolov10/)
@@ -140,10 +144,10 @@ The `plugins` parameter is an ordered list of plugin instance names; each instan
     cameras: ["cam0"]
     cam0:
       rgb_topic: /camera/rgb/image_raw
-      depth_topic: /camera/depth/image_raw # optional pair with
-      depth_info_topic: /camera/depth/camera_info # depth_info_topic
-      image_reliability: 2
-      depth_reliability: 2
+      depth_topic: /camera/depth/image_raw # optional pair, set together
+      depth_info_topic: /camera/depth/camera_info
+      image_reliability: 1
+      depth_reliability: 1
     detection:
       plugin: yolo_ros/DetectionPlugin
       cameras: ["cam0"]
@@ -151,6 +155,8 @@ The `plugins` parameter is an ordered list of plugin instance names; each instan
       model_filename: yolo26s.onnx
       threshold: 0.7
       iou: 0.45
+      n_threads: -1
+      provider: cuda
     tracking:
       plugin: yolo_ros/TrackingPlugin
       cameras: ["cam0"]
@@ -233,7 +239,7 @@ detection3d:
   cameras: ["cam0"] # every camera here must have depth
 debug:
   plugin: yolo_ros/DebugPlugin
-  cameras: ["cam0", "cam1"]
+  cameras: ["cam0"] # subset of detection3d's cameras
 ```
 
 `DetectionPlugin` runs directly on the single-camera case and batches (up to `max_batch_size`) when it selects several cameras; the shared model must be a dynamic-batch ONNX export (the mirror's `dynamic/` files are). Outputs stay camera-prefixed (`cam0/detections`, `cam1/detections`, ...). See the [multi-camera pipelines guide](docs/pipelines.md) for the full example and the batching-scaling numbers.
@@ -301,8 +307,8 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 #### Detection plugin (`detection.*`, `yolo_ros/DetectionPlugin`)
 
 - **model_type**: Pipeline to run: `YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify` or `auto` (default: `auto`, which infers the task from the model file name: `-seg`/`segment`, `-pose`/`pose`, `-obb`/`obb`, `-cls`/`classify`).
-- **model_path**: Path to the ONNX model (default: machine-specific).
-- **model_repo** / **model_filename** / **force_download** / **cache_dir**: Hugging Face Hub download (used instead of `model_path` when set). The shipped configs default to the `unileon-robotics/YOLO26-ONNX` mirror; clear `model_repo` to fall back to the local `model_path`.
+- **model_path**: Path to the ONNX model (default: empty; the shipped configs set `model_repo`/`model_filename` instead).
+- **model_repo** / **model_filename** / **force_download** / **cache_dir**: Hugging Face Hub download (used instead of `model_path` when set; defaults: empty / empty / `false` / `~/.cache/huggingface/hub`). The shipped configs default to the `unileon-robotics/YOLO26-ONNX` mirror; clear `model_repo` to fall back to the local `model_path`.
 - **provider**: Execution provider: `auto` (CUDA → CPU fallback chain), or force `tensorrt`/`trt` (TensorRT → CUDA → CPU), `cuda` (CUDA → CPU), `cpu` (default: `auto`).
 - **device**: CUDA/TensorRT device ordinal, e.g. `cuda:0`, `trt:1`, `1` (default: `cuda:0`). The `cuda:`/`trt:` prefix is accepted but `provider` selects the execution provider.
 - **cuda_graph_enable**: Capture the fixed-shape model as a CUDA graph on the CUDA provider, cutting per-kernel launch overhead (default: `true`). Only applies to fixed-batch models; dynamic-batch exports, CPU and TensorRT sessions keep the plain path.
@@ -310,7 +316,7 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 - **trt_engine_cache_enable**: Persist built TensorRT engines (default: `true`).
 - **trt_engine_cache_path**: TensorRT engine cache base directory; empty → `~/.cache/yolo_ros/trt_engines/<model>` (default: empty).
 - **threshold**: Detection confidence threshold (default: `0.7`).
-- **iou**: IoU threshold for NMS. Re-tunes the C++ NMS for raw-output exports (segment/pose/OBB) and has no effect on baked-NMS models (default: `0.45`).
+- **iou**: IoU threshold for the C++ NMS applied to raw-output exports (detection without a baked-NMS head, segmentation, pose and OBB); it has no effect on exports that bake NMS into the graph (default: `0.45`).
 - **max_det**: Maximum number of detections per image (default: `300`).
 - **cameras**: Cameras to run inference on; omit the list to select every defined camera (never write `cameras: []`). Detection is first in the chain, so it can select any defined camera. One camera uses the direct path, several run the dynamic-batch path.
 - **max_batch_size**: Maximum batch size for the multi-camera path (default: `8`).
@@ -330,8 +336,8 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 - **fuse_score**: Fuse detection score with IoU cost for matching (default: `true`).
 - **gmc_method** (BoT-SORT only): Camera-motion method: `none` (default), `sparseOptFlow`, `orb` or `ecc`.
 - **gmc_downscale** (BoT-SORT only): Camera-motion downscale factor (default: `2`).
-- **with_reid** / **reid_model** / **proximity_thresh** / **appearance_thresh** (BoT-SORT only): ReID appearance model and its matching thresholds. Set `with_reid: true` and point `reid_model` at an ONNX encoder (export recipes in the [model export guide](docs/models.md#reid-encoder-for-bot-sort-reid)).
-- **provider** / **device** (BoT-SORT + ReID only): ReID model execution provider and device.
+- **with_reid** / **reid_model** / **proximity_thresh** / **appearance_thresh** (BoT-SORT only): ReID appearance model and its matching thresholds (defaults: `false` / empty / `0.5` / `0.25`). Set `with_reid: true` and point `reid_model` at an ONNX encoder (export recipes in the [model export guide](docs/models.md#reid-encoder-for-bot-sort-reid)).
+- **provider** / **device** (BoT-SORT + ReID only): ReID model execution provider and device (defaults: `auto` / `cuda:0`).
 
 #### 3D detection plugin (`detection3d.*`, `yolo_ros/Detect3DPlugin`)
 
@@ -346,7 +352,7 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 - **cameras**: Cameras to render; omit the list to select every defined camera (never write `cameras: []`) and every selected camera must also be selected by the previous plugin. Debug is terminal, so the plugin must be last in the chain.
 - **marker_lifetime**: RViz marker lifetime in seconds (default: `0.5`).
 
-The plugin syncs each camera frame with the freshest non-3D upstream in the chain (the tracking/detection stream before `detection3d`) and publishes `<cam>/debug_image`, so the image is not gated by the slower 3D stream. The RViz markers `<cam>/debug_bb_markers` and `<cam>/debug_kp_markers` are built independently from the chain input whenever those detections carry `bbox3d`/`keypoints3d` data (i.e. when `detection3d` precedes debug in the chain).
+The plugin syncs each camera frame with its chain input (the previous plugin's detections) and publishes `<cam>/debug_image`; the RViz markers `<cam>/debug_bb_markers` and `<cam>/debug_kp_markers` are built whenever those detections carry `bbox3d`/`keypoints3d` data (i.e. when `detection3d` precedes debug in the chain).
 
 ### Writing a plugin
 
@@ -484,7 +490,7 @@ The whole repository is licensed under the **MIT License**. See the root [`LICEN
 
 Specifically, the repository contains independently licensed ROS 2 packages:
 
-- `yolo_ros`, `yolo_msgs`, `yolo_bringup` and `yolo_onnxruntime_vendor` are licensed under **MIT**. See each package's `LICENSE` file; third-party notices are installed with the applicable packages (`yolo_ros/THIRD_PARTY_NOTICES.md`).
+- `yolo_ros`, `yolo_msgs`, `yolo_bringup`, `yolo_onnxruntime_vendor` and `yolo_hfhub_vendor` are licensed under **MIT**. See each package's `LICENSE` file; third-party notices are installed with the applicable packages (`yolo_ros/THIRD_PARTY_NOTICES.md`).
 
 The C++ pipeline adapts behavior from the original `yolo_ros` Python nodes; those contributions were authorized by their copyright holder for release in the MIT-licensed C++ pipeline (see `THIRD_PARTY_NOTICES.md`).
 

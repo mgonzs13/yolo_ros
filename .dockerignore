@@ -1,0 +1,9 @@
+.git
+.github
+.kilo
+.worktrees
+build
+install
+log
+__pycache__
+*.pyc

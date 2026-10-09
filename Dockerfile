@@ -1,6 +1,8 @@
 ARG ROS_DISTRO=humble
 FROM ros:${ROS_DISTRO}-ros-core AS deps
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Install system dependencies early for better caching
 RUN apt update && apt install -y --no-install-recommends \
     git \
@@ -17,9 +19,10 @@ COPY . /root/ros2_ws/src
 # Install ROS dependencies
 RUN rosdep init && rosdep update --include-eol-distros
 # Upgrade the packages shipped in the base image first
-RUN apt update && apt upgrade -y && rosdep install --filter-for-installers apt --from-paths src --ignore-src -r -y \
+RUN apt update && apt upgrade -y && rosdep install --from-paths src --ignore-src -r -y \
     --dependency-types=buildtool \
     --dependency-types=build \
+    --dependency-types=exec \
     && rm -rf /var/lib/apt/lists/*
 
 FROM deps AS builder
