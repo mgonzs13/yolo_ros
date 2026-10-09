@@ -34,6 +34,7 @@ Notes:
 - The input size comes from the ONNX tensor for static exports (logged at startup); dynamic-input exports use the `detection.img_width` / `detection.img_height` parameters. The Python-only knobs `imgsz_height` / `imgsz_width` and `half` / `augment` / `agnostic_nms` / `retina_masks` were removed from the C++ node and its configs: the pipeline runs FP32 with no test-time augmentation, and NMS is either baked into the graph (end-to-end exports) or applied by the C++ postprocessor with `iou`.
 - OBB models have no baked-NMS export (rotated NMS cannot be exported into the graph), so the C++ postprocessor performs its own per-class rotated NMS and `iou` re-tunes it. The rotation angle is published in `BoundingBox2D.center.theta` (radians) with `size` holding the rotated `w`/`h`.
 - Classification exports bake the softmax into the graph (`output0` is `[1, N]` probabilities), so the postprocessor does **not** re-apply it. Top-`top_k` classes are published as detections with an **empty** bbox (image-level labels have no spatial extent).
+- CUDA 10 / ONNX Runtime 1.6 (the legacy path) supports ONNX opset 13 at most; the mirror's `opset=12` exports are the tested combination, and opset 14+ exports do not load.
 
 ## Dynamic-batch export (multi-camera pipelines)
 

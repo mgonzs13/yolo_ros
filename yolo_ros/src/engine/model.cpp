@@ -10,6 +10,7 @@
 #endif
 
 #include "yolo_ros/engine/input_shape.hpp"
+#include "yolo_ros/engine/ort_compat.hpp"
 #include "yolo_ros/engine/provider.hpp"
 #include "yolo_ros/utils/cpu_utils.hpp"
 #include "yolo_ros/utils/logs.hpp"
@@ -191,7 +192,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
           Ort::Session(this->env, model_path.c_str(), this->session_options);
       this->active_provider_ = provider_name(provider);
       break;
-    } catch (const Ort::Exception &e) {
+    } catch (const std::exception &e) {
       last_error = e.what();
       YOLO_LOG_WARN("Execution provider %s failed to initialize: %s",
                     provider_name(provider), e.what());
@@ -207,8 +208,6 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   // Names the primary EP that accepted the session; within a TensorRT session
   // ORT may still fall back node-by-node to CUDA.
   YOLO_LOG_INFO("Using execution provider: %s", this->active_provider_.c_str());
-
-  Ort::AllocatorWithDefaultOptions allocator;
 
   // Read the input shape first: a fixed batch axis is a prerequisite for CUDA
   // graph capture (dynamic shapes invalidate a captured graph).
@@ -244,7 +243,14 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
     }
   }
 
-#if defined(YOLO_ROS_HAS_CUDA_RUNTIME)
+#if YOLO_ORT_LEGACY
+  if (params.cuda_graph_enable) {
+    YOLO_LOG_WARN("cuda_graph_enable is not supported by this legacy ONNX "
+                  "Runtime build; ignoring.");
+  }
+#endif
+
+#if defined(YOLO_ROS_HAS_CUDA_RUNTIME) && !YOLO_ORT_LEGACY
   // Rebuild the session with CUDA graphs when the model allows it: replaying
   // the captured kernels removes most per-frame launch overhead.
   if (params.cuda_graph_enable && this->active_provider_ == "cuda" &&
@@ -274,19 +280,20 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   this->num_input_nodes = this->session.GetInputCount();
   this->num_output_nodes = this->session.GetOutputCount();
 
-  // Allocate input and output node names
-  for (size_t i = 0; i < this->num_input_nodes; i++) {
-    this->input_node_name_alloc_strings.push_back(
-        this->session.GetInputNameAllocated(i, allocator));
-    this->inputNames.push_back(
-        this->input_node_name_alloc_strings.back().get());
+  // Node names come from the compat layer so the same code works against the
+  // legacy (1.6) and modern ONNX Runtime string APIs.
+  this->input_node_name_storage = compat::input_names(this->session);
+  this->inputNames.reserve(this->input_node_name_storage.size());
+
+  for (const std::string &name : this->input_node_name_storage) {
+    this->inputNames.push_back(name.c_str());
   }
 
-  for (size_t i = 0; i < this->num_output_nodes; i++) {
-    this->output_node_name_alloc_strings.push_back(
-        this->session.GetOutputNameAllocated(i, allocator));
-    this->outputNames.push_back(
-        this->output_node_name_alloc_strings.back().get());
+  this->output_node_name_storage = compat::output_names(this->session);
+  this->outputNames.reserve(this->output_node_name_storage.size());
+
+  for (const std::string &name : this->output_node_name_storage) {
+    this->outputNames.push_back(name.c_str());
   }
 
   // Pre-allocate the reusable input blob (1*3*H*W floats), written in place by
@@ -313,12 +320,10 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
 
     try {
       const Ort::ModelMetadata metadata = this->session.GetModelMetadata();
-      Ort::AllocatorWithDefaultOptions allocator;
-      auto value = metadata.LookupCustomMetadataMapAllocated(
-          "input_color", static_cast<OrtAllocator *>(allocator));
+      const auto value = compat::lookup_metadata(metadata, "input_color");
 
       if (value) {
-        const std::string meta = yolo_ros::utils::to_lower(value.get());
+        const std::string meta = yolo_ros::utils::to_lower(*value);
 
         if (meta == "rgb") {
           this->input_is_rgb_ = true;
@@ -335,7 +340,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   this->memory_info =
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
-#if defined(YOLO_ROS_HAS_CUDA_RUNTIME)
+#if defined(YOLO_ROS_HAS_CUDA_RUNTIME) && !YOLO_ORT_LEGACY
   if (this->cuda_graph_) {
     this->device_id_ = device_id;
     this->cuda_memory_info_ = Ort::MemoryInfo("Cuda", OrtArenaAllocator,
@@ -398,27 +403,23 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   }
 
   YOLO_LOG_INFO("  onnxruntime=%s  classes=%zu (%s)",
-                Ort::GetVersionString().c_str(), this->class_names.size(),
+                compat::version_string().c_str(), this->class_names.size(),
                 this->class_names_from_metadata_ ? "ONNX metadata"
                                                  : "coco.names fallback");
   try {
     const Ort::ModelMetadata metadata = this->session.GetModelMetadata();
 
-    for (const auto &key :
-         metadata.GetCustomMetadataMapKeysAllocated(allocator)) {
-      const std::string name = key.get();
-
+    for (const std::string &name : compat::metadata_keys(metadata)) {
       if (name == "names") {
         YOLO_LOG_INFO("  metadata: names=<%zu classes>",
                       this->class_names.size());
         continue;
       }
 
-      auto value = metadata.LookupCustomMetadataMapAllocated(
-          name.c_str(), static_cast<OrtAllocator *>(allocator));
+      const auto value = compat::lookup_metadata(metadata, name.c_str());
 
       if (value) {
-        YOLO_LOG_INFO("  metadata: %s=%s", name.c_str(), value.get());
+        YOLO_LOG_INFO("  metadata: %s=%s", name.c_str(), value->c_str());
       }
     }
   } catch (const Ort::Exception &e) {
@@ -435,12 +436,10 @@ void yolo_ros::engine::Model::load_class_names() {
   //    {"0": "person", ...}; both are handled here).
   try {
     const Ort::ModelMetadata metadata = this->session.GetModelMetadata();
-    Ort::AllocatorWithDefaultOptions allocator;
-    auto names_value = metadata.LookupCustomMetadataMapAllocated(
-        "names", static_cast<OrtAllocator *>(allocator));
+    const auto names_value = compat::lookup_metadata(metadata, "names");
 
     if (names_value) {
-      const std::string names(names_value.get());
+      const std::string names(*names_value);
       std::map<int, std::string> indexed_names;
       int max_index = -1;
       const std::regex name_re(R"((\d+):\s*['"]([^'"]*)['"])");
@@ -603,7 +602,7 @@ void yolo_ros::engine::Model::preprocess_into(
 
 std::vector<Ort::Value>
 yolo_ros::engine::Model::inference(std::vector<int64_t> &input_tensor_shape) {
-#if defined(YOLO_ROS_HAS_CUDA_RUNTIME)
+#if defined(YOLO_ROS_HAS_CUDA_RUNTIME) && !YOLO_ORT_LEGACY
   if (this->cuda_graph_) {
     try {
       const std::size_t bytes = this->input_buffer_.size() * sizeof(float);

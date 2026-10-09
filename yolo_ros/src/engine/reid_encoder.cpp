@@ -13,6 +13,7 @@
 
 #include <opencv2/imgproc.hpp>
 
+#include "yolo_ros/engine/ort_compat.hpp"
 #include "yolo_ros/engine/provider.hpp"
 #include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
@@ -61,7 +62,7 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
           Ort::Session(this->env_, model_path.c_str(), this->session_options_);
       this->active_provider_ = provider_name(primary);
       break;
-    } catch (const Ort::Exception &e) {
+    } catch (const std::exception &e) {
       last_error = e.what();
       YOLO_LOG_WARN("ReID execution provider %s failed to initialize: %s",
                     provider_name(primary), e.what());
@@ -74,18 +75,18 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
         (last_error.empty() ? std::string(".") : ": " + last_error));
   }
 
-  Ort::AllocatorWithDefaultOptions allocator;
+  this->input_name_storage_ = compat::input_names(this->session_);
+  this->input_names_.reserve(this->input_name_storage_.size());
 
-  for (std::size_t i = 0; i < this->session_.GetInputCount(); ++i) {
-    this->input_name_alloc_.push_back(
-        this->session_.GetInputNameAllocated(i, allocator));
-    this->input_names_.push_back(this->input_name_alloc_.back().get());
+  for (const std::string &name : this->input_name_storage_) {
+    this->input_names_.push_back(name.c_str());
   }
 
-  for (std::size_t i = 0; i < this->session_.GetOutputCount(); ++i) {
-    this->output_name_alloc_.push_back(
-        this->session_.GetOutputNameAllocated(i, allocator));
-    this->output_names_.push_back(this->output_name_alloc_.back().get());
+  this->output_name_storage_ = compat::output_names(this->session_);
+  this->output_names_.reserve(this->output_name_storage_.size());
+
+  for (const std::string &name : this->output_name_storage_) {
+    this->output_names_.push_back(name.c_str());
   }
 
   const std::vector<int64_t> input_shape =

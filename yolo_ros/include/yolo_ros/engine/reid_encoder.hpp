@@ -76,13 +76,13 @@ private:
   int input_width_ = 0;
   /// @brief Model input height.
   int input_height_ = 0;
-  /// @brief Storage backing input_names_.
-  std::vector<Ort::AllocatedStringPtr> input_name_alloc_;
-  /// @brief Input node names.
+  /// @brief Owned input name storage.
+  std::vector<std::string> input_name_storage_;
+  /// @brief Input names passed to the ONNX Runtime session.
   std::vector<const char *> input_names_;
-  /// @brief Storage backing output_names_.
-  std::vector<Ort::AllocatedStringPtr> output_name_alloc_;
-  /// @brief Output node names.
+  /// @brief Owned output name storage.
+  std::vector<std::string> output_name_storage_;
+  /// @brief Output names requested from the ONNX Runtime session.
   std::vector<const char *> output_names_;
   /// @brief Reusable input batch buffer.
   std::vector<float> blob_;

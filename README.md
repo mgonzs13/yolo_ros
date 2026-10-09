@@ -59,11 +59,12 @@ source install/setup.bash
 
 The vendor package detects the CUDA major and downloads the matching ONNX Runtime GPU build, which needs the cuDNN major shown:
 
-| CUDA | ONNX Runtime | cuDNN |
-| ---- | ------------ | ----- |
-| 11   | 1.18.0       | 8     |
-| 12   | 1.20.0       | 9     |
-| 13   | 1.28.0       | 9     |
+| CUDA      | ONNX Runtime | cuDNN |
+| --------- | ------------ | ----- |
+| 10 (10.2) | 1.6.0        | 8     |
+| 11        | 1.18.0       | 8     |
+| 12        | 1.20.0       | 9     |
+| 13        | 1.28.0       | 9     |
 
 ```shell
 # Scripted: detects CUDA + Ubuntu, installs the matching cuDNN, runs ldconfig
@@ -83,17 +84,22 @@ sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
 
 # cuDNN matching the detected CUDA major. The -dev package is recommended:
-# ONNX Runtime 1.18/1.20 link the versioned libcudnn soname directly, while
-# 1.28 resolves it at run time (probing libcudnn.so.9, then libcudnn.so).
-sudo apt-get install libcudnn9-dev-cuda-13   # CUDA 13; libcudnn9-dev-cuda-12 for CUDA 12; libcudnn8-dev for CUDA 11
+# ONNX Runtime 1.6/1.18 link libcudnn.so.8 directly and 1.20 links
+# libcudnn.so.9, while 1.28 resolves it at run time (probing libcudnn.so.9,
+# then libcudnn.so).
+sudo apt-get install libcudnn9-dev-cuda-13   # CUDA 13; libcudnn9-dev-cuda-12 for CUDA 12; libcudnn8-dev for CUDA 10/11
 sudo ldconfig
 ```
 
-If startup reports `Using execution provider: cpu`, or the CUDA provider fails with `cuDNN is unavailable or disabled ... dlopen failed for libcudnn.so`, the runtime libraries are missing or the wrong major — install the cuDNN matching the table (cuDNN 8 for CUDA 11, cuDNN 9 for CUDA 12/13, with the CUDA-major-specific package).
+If startup reports `Using execution provider: cpu`, or the CUDA provider fails with `cuDNN is unavailable or disabled ... dlopen failed for libcudnn.so`, the runtime libraries are missing or the wrong major — install the cuDNN matching the table (cuDNN 8 for CUDA 10/11, cuDNN 9 for CUDA 12/13, with the CUDA-major-specific package).
 
-For `provider: tensorrt`, the ONNX Runtime builds need the TensorRT **10** runtime (`libnvinfer.so.10`, `libnvonnxparser.so.10`): install `libnvinfer10` and `libnvonnxparsers10`, or run the script with `--tensorrt`. The `tensorrt` meta package may point at a newer major (TensorRT 11) and will not satisfy it; in that case the provider logs `Failed to load library .../libonnxruntime_providers_tensorrt.so ... libnvinfer.so.10: cannot open shared object file` and `provider: tensorrt` falls back to CUDA.
+For `provider: tensorrt`, the ONNX Runtime builds need the TensorRT **10** runtime (`libnvinfer.so.10`, `libnvonnxparser.so.10`): install `libnvinfer10` and `libnvonnxparsers10`, or run the script with `--tensorrt`. The `tensorrt` meta package may point at a newer major (TensorRT 11) and will not satisfy it; in that case the provider logs `Failed to load library .../libonnxruntime_providers_tensorrt.so ... libnvinfer.so.10: cannot open shared object file` and `provider: tensorrt` falls back to CUDA. The CUDA 10 / ONNX Runtime 1.6 legacy path has no TensorRT EP.
 
-`-DONNX_GPU=ON` detects the CUDA major (`CUDA_VERSION` env, `$CUDA_HOME/version.json`, `/usr/local/cuda*/version.json`, then `nvcc`) and downloads the matching ONNX Runtime GPU build with its cuDNN major; the host also needs an NVIDIA driver and the same CUDA series at run time. Override the selection with `-DONNX_CUDA_MAJOR=11|12|13`, `-DONNXRUNTIME_VERSION=...`, `-DONNX_GPU_SUFFIX=...` or a full `-DONNXRUNTIME_URL=...`. TensorRT is opt-in: the default `provider: auto` runs on the CUDA execution provider and falls back to CPU; set `provider: tensorrt` to prefer the TensorRT EP (TensorRT → CUDA → CPU) when it is installed. `provider` and `device` are chosen at runtime — see [Parameters](#parameters). The prebuilt GPU tarballs are x64-only and cover only the table above; on aarch64 or for any other CUDA/cuDNN combination build from source (see the [build guide](docs/build.md)).
+`-DONNX_GPU=ON` detects the CUDA major (`CUDA_VERSION` env, `$CUDA_HOME/version.json`, `/usr/local/cuda*/version.json`, then `nvcc`) and downloads the matching ONNX Runtime GPU build with its cuDNN major; the host also needs an NVIDIA driver and the same CUDA series at run time. Override the selection with `-DONNX_CUDA_MAJOR=10|11|12|13`, `-DONNXRUNTIME_VERSION=...`, `-DONNX_GPU_SUFFIX=...` or a full `-DONNXRUNTIME_URL=...`. TensorRT is opt-in: the default `provider: auto` runs on the CUDA execution provider and falls back to CPU; set `provider: tensorrt` to prefer the TensorRT EP (TensorRT → CUDA → CPU) when it is installed. `provider` and `device` are chosen at runtime — see [Parameters](#parameters). The prebuilt GPU tarballs are x64-only and cover only the table above; on aarch64 or for any other CUDA/cuDNN combination build from source (see the [build guide](docs/build.md)).
+
+CUDA 10.2 (JetPack 4 / old drivers) is supported on ROS 2 Galactic through
+ONNX Runtime 1.6.0 with the CUDA execution provider only — TensorRT and CUDA
+Graph are unavailable on that path. See [docs/build.md](docs/build.md#cuda-10-legacy).
 
 Launch from the workspace root so relative source paths resolve.
 

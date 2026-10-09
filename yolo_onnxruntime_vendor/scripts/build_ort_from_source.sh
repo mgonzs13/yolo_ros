@@ -2,10 +2,10 @@
 # Copyright (c) 2026 Alejandro González Cantón
 # SPDX-License-Identifier: MIT
 #
-# Build ONNX Runtime (any version) from source, for the CPU or CUDA (+TensorRT)
-# execution provider, and package it in the flat layout consumed by
-# yolo_onnxruntime_vendor (point that package at the result with
-# -DONNXRUNTIME_ROOT=<output_dir>).
+# Build ONNX Runtime (any version) from source, for the CPU or CUDA execution
+# provider (plus TensorRT on ONNX Runtime >= 1.12), and package it in the flat
+# layout consumed by yolo_onnxruntime_vendor (point that package at the result
+# with -DONNXRUNTIME_ROOT=<output_dir>).
 #
 # Runs on x86_64 and aarch64. It can work fully offline when given a source tree
 # prepared by scripts/prepare_offline_bundle.sh (see that script for the
@@ -18,8 +18,9 @@
 #
 # Options:
 #   --ep <cpu|cuda>   execution provider to build (default: cpu). "cuda" also
-#                     builds the TensorRT provider, matching the node's
-#                     TensorRT -> CUDA -> CPU provider chain.
+#                     builds the TensorRT provider for ONNX Runtime >= 1.12
+#                     (matching the node's TensorRT -> CUDA -> CPU provider
+#                     chain); older releases build CUDA only.
 #   --cuda-arch <NN>  CUDA architecture for --ep cuda (Jetson Xavier 72,
 #                     Orin 87). Auto-detected with nvidia-smi when available.
 #   --rebuild         ignore any previous build and build again.
@@ -38,7 +39,8 @@
 # Env overrides: CUDA_HOME, CUDNN_HOME, TENSORRT_HOME, ORT_BUILD_DIR,
 #   ORT_PARALLEL (concurrent compile jobs; unset = all cores),
 #   ORT_CMAKE_EXTRA_DEFINES (space-separated extra --cmake_extra_defines; for
-#   --ep cuda it defaults to "onnxruntime_USE_FLASH_ATTENTION=OFF
+#   --ep cuda on ONNX Runtime >= 1.11 it defaults to
+#   "onnxruntime_USE_FLASH_ATTENTION=OFF
 #   onnxruntime_USE_MEMORY_EFFICIENT_ATTENTION=OFF" since the detection family
 #   doesn't use the CUDA attention kernels; override to re-enable),
 #   ORT_OPS_CONFIG (default: <source>/reduced_ops.config; empty disables the
@@ -64,8 +66,9 @@ usage: $(basename "$0") <ort_version> [output_dir] [options]
 
 options:
   --ep <cpu|cuda>   execution provider to build (default: cpu). "cuda" also
-                    builds the TensorRT provider, matching the node's
-                    TensorRT -> CUDA -> CPU provider chain.
+                    builds the TensorRT provider for ONNX Runtime >= 1.12
+                    (matching the node's TensorRT -> CUDA -> CPU provider
+                    chain); older releases build CUDA only.
   --cuda-arch <NN>  CUDA architecture for --ep cuda (Jetson Xavier 72,
                     Orin 87). Auto-detected with nvidia-smi when available.
   --rebuild         ignore any previous build and build again.
@@ -84,6 +87,7 @@ environment:
   ORT_DISABLE_CONTRIB_OPS         default 0; 1 is incompatible with --ep cuda
   ORT_MIN_CMAKE                   override the CMake version check
   CUDA_HOME / CUDNN_HOME / TENSORRT_HOME   prefixes used by --ep cuda
+                                           (TENSORRT_HOME only for ORT >= 1.12)
 EOF
 }
 
@@ -161,12 +165,16 @@ elif [[ -n "${CUDA_ARCH}" && ! "${CUDA_ARCH}" =~ ^[0-9]+(;[0-9]+)*$ ]]; then
   exit 2
 fi
 
+version_ge() { [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }
+
 # --- Default CMake defines ----------------------------------------------------
-# A --ep cuda build disables the CUDA attention kernels by default: the
-# detection / segmentation / pose / OBB pipelines don't use them, and skipping
-# them roughly halves the CUDA provider build. Override ORT_CMAKE_EXTRA_DEFINES
-# to re-enable them (e.g. attention-based models such as YOLOv12).
-if [[ "${EP}" == "cuda" && -z "${ORT_CMAKE_EXTRA_DEFINES:-}" ]]; then
+# A --ep cuda build on ONNX Runtime >= 1.11 disables the CUDA attention kernels
+# by default: the detection / segmentation / pose / OBB pipelines don't use
+# them, and skipping them roughly halves the CUDA provider build. Override
+# ORT_CMAKE_EXTRA_DEFINES to re-enable them (e.g. attention-based models such
+# as YOLOv12). Older releases have no such kernels and get no defines.
+if [[ "${EP}" == "cuda" && -z "${ORT_CMAKE_EXTRA_DEFINES:-}" ]] \
+   && version_ge "${ORT_VERSION}" 1.11; then
   ORT_CMAKE_EXTRA_DEFINES="onnxruntime_USE_FLASH_ATTENTION=OFF onnxruntime_USE_MEMORY_EFFICIENT_ATTENTION=OFF"
 fi
 
@@ -241,7 +249,6 @@ fi
 # is too old). Older ONNX Runtime builds accept much older CMake, but a CUDA
 # build passes CMAKE_CUDA_ARCHITECTURES / CMAKE_CUDA_HOST_COMPILER, which CMake
 # only understands from 3.18 on.
-version_ge() { [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }
 min_cmake=3.13
 if version_ge "${ORT_VERSION}" 1.16; then
   min_cmake=3.26
@@ -374,8 +381,13 @@ fi
 }
 
 if [[ "${EP}" == "cuda" ]]; then
-  echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda: CUDA ${CUDA_HOME}," \
-    "TRT ${TRT_HOME}, arch ${CUDA_ARCH})"
+  if version_ge "${ORT_VERSION}" 1.12; then
+    echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda: CUDA ${CUDA_HOME}," \
+      "TRT ${TRT_HOME}, arch ${CUDA_ARCH})"
+  else
+    echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda only: CUDA ${CUDA_HOME}," \
+      "arch ${CUDA_ARCH})"
+  fi
 else
   echo "==> Building ONNX Runtime ${ORT_VERSION} (cpu)"
 fi
@@ -436,8 +448,13 @@ fi
 if [[ "${EP}" == "cuda" ]]; then
   build_cmd+=(
     --use_cuda --cuda_home "${CUDA_HOME}" --cudnn_home "${CUDNN_HOME}"
-    --use_tensorrt --tensorrt_home "${TRT_HOME}"
   )
+  if version_ge "${ORT_VERSION}" 1.12; then
+    build_cmd+=(--use_tensorrt --tensorrt_home "${TRT_HOME}")
+  else
+    echo "warning: ONNX Runtime ${ORT_VERSION} is a legacy build (< 1.12);" \
+      "building CUDA only (TensorRT EP disabled)." >&2
+  fi
 fi
 # build.py < 1.16 defines --cmake_extra_defines without action="append", so a
 # repeated flag would overwrite the previous values; pass them all at once.
@@ -498,8 +515,9 @@ rm -rf "${OUT_DIR}"
 mkdir -p "${OUT_DIR}/lib" "${OUT_DIR}/include"
 
 # Copy every produced library. The provider set differs across versions: 1.6
-# links CUDA into the TensorRT provider, while >= 1.12 ships a separate
-# libonnxruntime_providers_cuda.so. Globbing keeps this version-agnostic.
+# links the CUDA provider statically into libonnxruntime.so, while >= 1.12
+# ships separate libonnxruntime_providers_*.so libraries (the TensorRT provider
+# is not built below 1.12). Globbing keeps this version-agnostic.
 shopt -s nullglob
 built_libs=("${BUILD_DIR}"/libonnxruntime*.so*)
 shopt -u nullglob

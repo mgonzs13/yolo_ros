@@ -13,7 +13,7 @@ set(ONNXRUNTIME_VERSION "" CACHE STRING
 set(ONNX_GPU_SUFFIX "" CACHE STRING
     "GPU tarball suffix override (e.g. -gpu, -gpu_cuda12, -gpu_cuda13)")
 set(ONNX_CUDA_MAJOR "" CACHE STRING
-    "CUDA major version for the GPU prebuilt (11, 12 or 13); auto-detected when unset")
+    "CUDA major version for the GPU prebuilt (10, 11, 12 or 13); auto-detected when unset")
 set(ONNXRUNTIME_URL "" CACHE STRING
     "Full ONNX Runtime tarball URL override (skips version/suffix selection)")
 
@@ -43,7 +43,9 @@ else()
                 "Prebuilt GPU ONNX Runtime tarballs are x86_64-only. On "
                 "${CMAKE_SYSTEM_PROCESSOR} build from source with "
                 "scripts/build_ort_from_source.sh <version> --ep cuda "
-                "[--cuda-arch NN], then reconfigure with -DONNXRUNTIME_ROOT=<prefix>.")
+                "[--cuda-arch NN], then reconfigure with -DONNXRUNTIME_ROOT=<prefix>. "
+                "For CUDA 10.2 (JetPack 4) build ONNX Runtime 1.6.0 with "
+                "--cuda-arch 53 (Nano), 62 (TX2) or 72 (Xavier).")
         endif()
 
         # The CUDA generation decides which ONNX Runtime release to use, not the
@@ -89,9 +91,15 @@ else()
             endif()
         endif()
 
-        # Curated prebuilt combinations. CUDA 11 stops shipping C++ GPU
-        # tarballs after 1.18; CUDA 13 starts at 1.28. cuDNN major must match.
-        if(ONNX_CUDA_MAJOR STREQUAL "11")
+        # Curated prebuilt combinations. CUDA 10.2 is the legacy path: ONNX
+        # Runtime 1.6.0 with the CUDA execution provider only (no TensorRT, no
+        # CUDA graph; cuDNN 8). CUDA 11 stops shipping C++ GPU tarballs after
+        # 1.18; CUDA 13 starts at 1.28. cuDNN major must match.
+        if(ONNX_CUDA_MAJOR STREQUAL "10")
+            set(_ort_default "1.6.0")
+            set(_suffix_default "-gpu")
+            set(_cudnn_default "8")
+        elseif(ONNX_CUDA_MAJOR STREQUAL "11")
             set(_ort_default "1.18.0")
             set(_suffix_default "-gpu")
             set(_cudnn_default "8")
@@ -107,7 +115,8 @@ else()
             message(FATAL_ERROR
                 "Unsupported or undetected CUDA major version "
                 "('${ONNX_CUDA_MAJOR}'). Supported prebuilt combinations: "
-                "11 (ORT 1.18.0), 12 (ORT 1.20.0), 13 (ORT 1.28.0). Pass "
+                "10 (ORT 1.6.0, CUDA EP only), 11 (ORT 1.18.0), "
+                "12 (ORT 1.20.0), 13 (ORT 1.28.0). Pass "
                 "-DONNX_CUDA_MAJOR=<major>, or build from source with "
                 "scripts/build_ort_from_source.sh and use "
                 "-DONNXRUNTIME_ROOT=<prefix>.")
@@ -124,6 +133,11 @@ else()
         message(STATUS
             "ONNX Runtime GPU: CUDA ${ONNX_CUDA_MAJOR} -> ${ONNXRUNTIME_VERSION} "
             "'${ONNX_GPU_SUFFIX}' (requires cuDNN ${_cudnn_default} at run time)")
+        if(ONNX_CUDA_MAJOR STREQUAL "10")
+            message(STATUS
+                "  CUDA 10.2 legacy path: CUDA execution provider only "
+                "(no TensorRT, no CUDA graph).")
+        endif()
     else()
         if(NOT ONNXRUNTIME_VERSION)
             set(ONNXRUNTIME_VERSION "1.20.0")

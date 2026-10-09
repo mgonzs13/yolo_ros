@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "yolo_ros/engine/ort_compat.hpp"
 #include "yolo_ros/engine/provider.hpp"
 
 namespace yolo_ros::engine {
@@ -187,6 +189,15 @@ TEST(BuildSessionOptions, AvailableGpuProvidersDoNotThrow) {
     });
   }
 }
+
+#if YOLO_ORT_LEGACY
+TEST(BuildSessionOptions, LegacyTensorRtRefusal) {
+  ProviderConfig config;
+  config.n_threads = 1;
+  EXPECT_THROW(build_session_options(Provider::TensorRt, config),
+               std::runtime_error);
+}
+#endif
 
 } // namespace
 } // namespace yolo_ros::engine

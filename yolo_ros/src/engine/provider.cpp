@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/engine/provider.hpp"
+#include "yolo_ros/engine/ort_compat.hpp"
 
 #include "yolo_ros/utils/logs.hpp"
 #include "yolo_ros/utils/string_utils.hpp"
@@ -27,22 +28,6 @@ bool contains(const std::vector<Provider> &providers, Provider provider) {
 std::string model_stem(const std::string &model_path) {
   return std::filesystem::path(model_path).stem().string();
 }
-
-struct TensorRtOptionsDeleter {
-  void operator()(OrtTensorRTProviderOptionsV2 *options) const {
-    if (options != nullptr) {
-      Ort::GetApi().ReleaseTensorRTProviderOptions(options);
-    }
-  }
-};
-
-struct CudaOptionsDeleter {
-  void operator()(OrtCUDAProviderOptionsV2 *options) const {
-    if (options != nullptr) {
-      Ort::GetApi().ReleaseCUDAProviderOptions(options);
-    }
-  }
-};
 
 } // namespace
 
@@ -144,54 +129,11 @@ Ort::SessionOptions build_session_options(Provider primary,
   options.SetIntraOpNumThreads(primary == Provider::Cpu ? config.n_threads : 1);
 
   if (primary == Provider::TensorRt) {
-    OrtTensorRTProviderOptionsV2 *raw_trt_options = nullptr;
-    Ort::ThrowOnError(
-        Ort::GetApi().CreateTensorRTProviderOptions(&raw_trt_options));
-    std::unique_ptr<OrtTensorRTProviderOptionsV2, TensorRtOptionsDeleter>
-        trt_options(raw_trt_options);
-
-    const std::string device_id = std::to_string(config.device_id);
-    const std::string fp16 = config.trt_fp16_enable ? "1" : "0";
-    const bool cache_enabled =
-        config.trt_engine_cache_enable && !config.trt_engine_cache_path.empty();
-    const std::string cache_enable = cache_enabled ? "1" : "0";
-    std::vector<const char *> keys = {"device_id", "trt_fp16_enable",
-                                      "trt_engine_cache_enable"};
-    std::vector<const char *> values = {device_id.c_str(), fp16.c_str(),
-                                        cache_enable.c_str()};
-
-    if (cache_enabled) {
-      keys.push_back("trt_engine_cache_path");
-      values.push_back(config.trt_engine_cache_path.c_str());
-    }
-
-    Ort::ThrowOnError(Ort::GetApi().UpdateTensorRTProviderOptions(
-        trt_options.get(), keys.data(), values.data(), keys.size()));
-    options.AppendExecutionProvider_TensorRT_V2(*trt_options);
+    compat::append_tensorrt_provider(options, config);
   }
 
   if (primary == Provider::TensorRt || primary == Provider::Cuda) {
-    OrtCUDAProviderOptionsV2 *raw_cuda_options = nullptr;
-    Ort::ThrowOnError(
-        Ort::GetApi().CreateCUDAProviderOptions(&raw_cuda_options));
-    std::unique_ptr<OrtCUDAProviderOptionsV2, CudaOptionsDeleter> cuda_options(
-        raw_cuda_options);
-
-    const std::string device_id = std::to_string(config.device_id);
-    std::vector<const char *> keys = {"device_id", "arena_extend_strategy",
-                                      "cudnn_conv_algo_search",
-                                      "cudnn_conv_use_max_workspace"};
-    std::vector<const char *> values = {device_id.c_str(), "kSameAsRequested",
-                                        "EXHAUSTIVE", "1"};
-
-    if (primary == Provider::Cuda && config.cuda_graph_enable) {
-      keys.push_back("enable_cuda_graph");
-      values.push_back("1");
-    }
-
-    Ort::ThrowOnError(Ort::GetApi().UpdateCUDAProviderOptions(
-        cuda_options.get(), keys.data(), values.data(), keys.size()));
-    options.AppendExecutionProvider_CUDA_V2(*cuda_options);
+    compat::append_cuda_provider(options, config);
   }
 
   return options;

@@ -69,7 +69,10 @@ const char *device_provider_name(const std::string &device);
 /// @param[in] config Provider configuration; @c n_threads must already be
 /// resolved (no -1 sentinel).
 /// @return The configured session options.
-/// @throws Ort::Exception if the provider cannot be appended.
+/// @throws Ort::Exception if the provider cannot be appended (modern builds).
+/// @throws std::runtime_error on legacy builds (ONNX Runtime < 1.12) when
+/// TensorRT is requested: the legacy TensorRT refusal falls through the
+/// provider chain to CUDA/CPU.
 Ort::SessionOptions build_session_options(Provider primary,
                                           const ProviderConfig &config);
 

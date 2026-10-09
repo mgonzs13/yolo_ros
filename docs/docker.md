@@ -15,7 +15,12 @@ docker build -t yolo_ros .
 
 ## GPU image (CUDA / TensorRT)
 
-The GPU build compiles against the prebuilt `onnxruntime-*-gpu` tarball (downloaded by `yolo_onnxruntime_vendor` at configure time; the vendor auto-selects the release from the image's CUDA 12 base, i.e. ONNX Runtime 1.20.0 with cuDNN 9) and installs the TensorRT 10 runtime libraries the provider needs at run time. Build it with:
+The GPU build compiles against the prebuilt `onnxruntime-*-gpu` tarball (downloaded by `yolo_onnxruntime_vendor` at configure time; the vendor auto-selects the release from the image's CUDA 12 base, i.e. ONNX Runtime 1.20.0 with cuDNN 9) and installs the TensorRT 10 runtime libraries the provider needs at run time.
+
+The GPU image targets CUDA 12 on x86_64 only; CUDA 10 / JetPack 4 is not
+containerized (see [build.md](build.md#cuda-10-legacy)).
+
+Build it with:
 
 ```shell
 docker build -f Dockerfile.gpu -t yolo_ros:gpu .

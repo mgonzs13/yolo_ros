@@ -412,6 +412,24 @@ if(BUILD_TESTING)
   find_package(CURL REQUIRED)
   find_package(JPEG REQUIRED)
 
+  ament_add_gtest(test_ort_compat
+    test/test_ort_compat.cpp
+  )
+  target_include_directories(test_ort_compat PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test>
+    ${OpenCV_INCLUDE_DIRS}
+  )
+  target_link_libraries(test_ort_compat
+    ${yolo_msgs_TARGETS}
+    ${yolo_onnxruntime_vendor_LIBRARIES}
+    ${yolo_hfhub_vendor_TARGETS}
+    ${OpenCV_LIBS}
+    CURL::libcurl
+    JPEG::JPEG
+  )
+  set_tests_properties(test_ort_compat PROPERTIES TIMEOUT 300)
+
   ament_add_gtest(test_yolo26n
     test/test_yolo26n.cpp
     src/yolo/detect.cpp
