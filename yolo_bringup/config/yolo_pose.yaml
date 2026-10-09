@@ -17,6 +17,8 @@
       model_filename: yolo26s-pose.onnx
       threshold: 0.7
       iou: 0.45
+      n_threads: -1
+      provider: cuda
       cameras: ["cam0"]
     tracking:
       plugin: yolo_ros/TrackingPlugin

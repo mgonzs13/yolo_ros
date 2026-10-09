@@ -18,6 +18,8 @@
       threshold: 0.7
       iou: 0.45
       top_k: 5
+      n_threads: -1
+      provider: cuda
       cameras: ["cam0"]
     debug:
       plugin: yolo_ros/DebugPlugin
