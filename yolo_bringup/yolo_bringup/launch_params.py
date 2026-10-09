@@ -69,6 +69,7 @@ PLUGIN_PARAMS = {
         ParamSpec("force_download", bool),
         ParamSpec("device", str),
         ParamSpec("provider", str),
+        ParamSpec("cuda_graph_enable", bool),
         ParamSpec("trt_fp16_enable", bool),
         ParamSpec("trt_engine_cache_enable", bool),
         ParamSpec("trt_engine_cache_path", str),

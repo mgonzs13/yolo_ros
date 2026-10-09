@@ -62,6 +62,10 @@ public:
   /// @return "cpu", "cuda" or "tensorrt".
   const std::string &active_provider() const { return this->active_provider_; }
 
+  /// @brief Whether inference runs through a captured CUDA graph.
+  /// @return true when the session uses CUDA graph replay.
+  bool using_cuda_graph() const { return this->cuda_graph_; }
+
   /// @brief Confidence threshold for detections, in [0, 1]. @see detect()
   float conf_threshold{0.5}; // Confidence threshold for detections
   /// @brief IoU threshold used by the C++ NMS, in [0, 1]. @see detect()
@@ -147,6 +151,19 @@ private:
   size_t num_output_nodes;
   /// @brief Memory information for ONNX Runtime tensor creation.
   Ort::MemoryInfo memory_info; // Memory information for ONNX Runtime
+
+  /// @brief True when inference goes through CUDA graph replay.
+  bool cuda_graph_{false};
+  /// @brief CUDA device ordinal of the graph input buffer.
+  int device_id_{0};
+  /// @brief CUDA memory info for the device-resident input tensor.
+  Ort::MemoryInfo cuda_memory_info_{nullptr};
+  /// @brief Allocator owning the device-resident input tensor.
+  Ort::Allocator cuda_allocator_{nullptr};
+  /// @brief Persistent device input tensor bound to the session.
+  Ort::Value device_input_{nullptr};
+  /// @brief I/O binding (device input, CPU outputs) reused every inference.
+  Ort::IoBinding io_binding_{nullptr};
 };
 
 /// @brief Slice one batch element out of a batched output tensor set.

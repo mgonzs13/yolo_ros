@@ -26,6 +26,18 @@ find_package(geometry_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(pluginlib REQUIRED)
 
+# Optional CUDA runtime: enables CUDA graph execution on the CUDA EP. The
+# feature compiles out when the toolkit is unavailable.
+set(YOLO_ROS_CUDA_RUNTIME_LIBS "")
+set(YOLO_ROS_CUDA_RUNTIME_DEFS "")
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.17)
+  find_package(CUDAToolkit QUIET)
+endif()
+if(CUDAToolkit_FOUND)
+  set(YOLO_ROS_CUDA_RUNTIME_LIBS CUDA::cudart)
+  set(YOLO_ROS_CUDA_RUNTIME_DEFS YOLO_ROS_HAS_CUDA_RUNTIME)
+endif()
+
 # Some dependencies renamed headers or changed their C++ API across distros.
 # ROS_DISTRO is exported by the sourced ROS environment; pick the variant with a
 # compile definition, mirroring the CV_BRIDGE_H handling in llama_ros.
@@ -127,6 +139,11 @@ if("$ENV{ROS_DISTRO}" STREQUAL "foxy")
   # Boost headers pulled in by Foxy's pluginlib; propagate to the plugins and
   # test targets that link yolo_ros_core.
   target_link_libraries(yolo_ros_core Boost::boost)
+endif()
+
+if(YOLO_ROS_CUDA_RUNTIME_DEFS)
+  target_compile_definitions(yolo_ros_core PRIVATE ${YOLO_ROS_CUDA_RUNTIME_DEFS})
+  target_link_libraries(yolo_ros_core ${YOLO_ROS_CUDA_RUNTIME_LIBS})
 endif()
 
 # Plugin implementations loaded by the single YoloNode.
@@ -417,6 +434,12 @@ if(BUILD_TESTING)
     JPEG::JPEG
   )
 
+  if(YOLO_ROS_CUDA_RUNTIME_DEFS)
+    target_compile_definitions(test_yolo26n PRIVATE
+      ${YOLO_ROS_CUDA_RUNTIME_DEFS})
+    target_link_libraries(test_yolo26n ${YOLO_ROS_CUDA_RUNTIME_LIBS})
+  endif()
+
   ament_add_gtest(test_batch
     test/test_batch.cpp
     src/yolo/detect.cpp
@@ -443,6 +466,12 @@ if(BUILD_TESTING)
     CURL::libcurl
     JPEG::JPEG
   )
+
+  if(YOLO_ROS_CUDA_RUNTIME_DEFS)
+    target_compile_definitions(test_batch PRIVATE
+      ${YOLO_ROS_CUDA_RUNTIME_DEFS})
+    target_link_libraries(test_batch ${YOLO_ROS_CUDA_RUNTIME_LIBS})
+  endif()
 
   ament_add_gtest(test_batch_scheduler
     test/test_batch_scheduler.cpp

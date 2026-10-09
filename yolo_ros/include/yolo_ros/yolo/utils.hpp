@@ -130,6 +130,10 @@ struct YoloParams {
   /// @brief Execution device; its ordinal (e.g. "cuda:0", "trt:1", "1") is
   /// passed as device_id to the CUDA and TensorRT execution providers.
   std::string device;
+  /// @brief Enable CUDA graph execution on the CUDA EP; only applied to models
+  /// with a fixed batch axis. Unsupported sessions fall back to the plain
+  /// inference path.
+  bool cuda_graph_enable = true;
   /// @brief TensorRT: enable FP16 precision.
   bool trt_fp16_enable = true;
   /// @brief TensorRT: persist the built engine across sessions.

@@ -29,6 +29,7 @@ void DetectionPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
   node.declare_parameter<bool>(prefix + "force_download", false);
   node.declare_parameter<std::string>(prefix + "device", "cuda:0");
   node.declare_parameter<std::string>(prefix + "provider", "auto");
+  node.declare_parameter<bool>(prefix + "cuda_graph_enable", true);
   node.declare_parameter<bool>(prefix + "trt_fp16_enable", true);
   node.declare_parameter<bool>(prefix + "trt_engine_cache_enable", true);
   node.declare_parameter<std::string>(prefix + "trt_engine_cache_path", "");
@@ -53,6 +54,8 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
                      this->yolo_params_.force_download);
   node.get_parameter(prefix + "device", this->yolo_params_.device);
   node.get_parameter(prefix + "provider", this->yolo_params_.provider);
+  node.get_parameter(prefix + "cuda_graph_enable",
+                     this->yolo_params_.cuda_graph_enable);
   node.get_parameter(prefix + "trt_fp16_enable",
                      this->yolo_params_.trt_fp16_enable);
   node.get_parameter(prefix + "trt_engine_cache_enable",

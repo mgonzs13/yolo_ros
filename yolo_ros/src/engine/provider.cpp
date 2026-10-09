@@ -179,9 +179,16 @@ Ort::SessionOptions build_session_options(Provider primary,
 
     const std::string device_id = std::to_string(config.device_id);
     std::vector<const char *> keys = {"device_id", "arena_extend_strategy",
-                                      "cudnn_conv_algo_search"};
+                                      "cudnn_conv_algo_search",
+                                      "cudnn_conv_use_max_workspace"};
     std::vector<const char *> values = {device_id.c_str(), "kSameAsRequested",
-                                        "HEURISTIC"};
+                                        "EXHAUSTIVE", "1"};
+
+    if (primary == Provider::Cuda && config.cuda_graph_enable) {
+      keys.push_back("enable_cuda_graph");
+      values.push_back("1");
+    }
+
     Ort::ThrowOnError(Ort::GetApi().UpdateCUDAProviderOptions(
         cuda_options.get(), keys.data(), values.data(), keys.size()));
     options.AppendExecutionProvider_CUDA_V2(*cuda_options);

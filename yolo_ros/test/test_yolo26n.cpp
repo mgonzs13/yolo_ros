@@ -105,6 +105,27 @@ TEST_F(Detect26nTest, FallsBackFromInvalidCudaDevice) {
   params.device = "cuda:999";
   auto detector = std::make_unique<ExposedDetect>(params);
   EXPECT_EQ(detector->active_provider(), "cpu");
+  EXPECT_FALSE(detector->using_cuda_graph());
+}
+
+// CUDA graphs capture a fixed set of kernels writing to fixed addresses, so a
+// CPU-owned input would silently replay stale data. This runs enough
+// inferences to cover capture and replay and checks the results stay valid.
+TEST_F(Detect26nTest, CudaGraphRepeatedInferenceStaysValid) {
+  if (this->detector_->active_provider() != "cuda") {
+    GTEST_SKIP() << "CUDA execution provider is not active";
+  }
+
+  EXPECT_TRUE(this->detector_->using_cuda_graph());
+
+  const auto first = this->detector_->detect(this->image_);
+  ASSERT_FALSE(first.empty());
+
+  for (int i = 0; i < 5; ++i) {
+    const auto dets = this->detector_->detect(this->image_);
+    ASSERT_FALSE(dets.empty());
+    EXPECT_EQ(dets.size(), first.size());
+  }
 }
 
 // A raw segmentation tensor is [1, 4 + nc + 32, N] (channel-major). The mask

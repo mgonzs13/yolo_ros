@@ -30,6 +30,8 @@ struct ProviderConfig {
   bool trt_engine_cache_enable{true};
   /// @brief TensorRT engine cache directory (empty disables caching).
   std::string trt_engine_cache_path;
+  /// @brief CUDA primary: capture the model as a CUDA graph (fixed shapes).
+  bool cuda_graph_enable{false};
 };
 
 /// @brief Execution providers available in the linked ONNX Runtime build.
