@@ -9,6 +9,7 @@
 #include <cuda_runtime_api.h>
 #endif
 
+#include "yolo_ros/engine/input_shape.hpp"
 #include "yolo_ros/engine/provider.hpp"
 #include "yolo_ros/utils/cpu_utils.hpp"
 #include "yolo_ros/utils/logs.hpp"
@@ -227,16 +228,19 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
 
     this->fixed_batch_ =
         input_tensor_shape_vec[0] > 0 ? input_tensor_shape_vec[0] : 0;
-    this->input_image_shape =
-        cv::Size(static_cast<int>(input_tensor_shape_vec[3]),
-                 static_cast<int>(input_tensor_shape_vec[2]));
 
-    if (input_tensor_shape_vec[2] <= 0 || input_tensor_shape_vec[3] <= 0) {
-      // `dynamic=True` exports carry dynamic H/W as well as batch, so the
-      // graph cannot tell us the input size. All shipped models train at 640.
-      this->input_image_shape = cv::Size(640, 640);
-      YOLO_LOG_WARN("Dynamic input size in the ONNX graph; pinning 640x640 "
-                    "(export with a static imgsz if this is wrong).");
+    const InputShape resolved = resolve_input_shape(
+        input_tensor_shape_vec, params.img_width, params.img_height);
+    this->input_image_shape = cv::Size(resolved.width, resolved.height);
+
+    if (resolved.params_ignored) {
+      YOLO_LOG_WARN("Model has static input dimension(s); using %dx%d "
+                    "(img_width/img_height are ignored for those).",
+                    resolved.width, resolved.height);
+    } else if (resolved.from_params) {
+      YOLO_LOG_INFO("Dynamic input size in the ONNX graph; using %dx%d from "
+                    "img_width/img_height.",
+                    resolved.width, resolved.height);
     }
   }
 

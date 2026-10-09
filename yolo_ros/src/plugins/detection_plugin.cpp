@@ -4,6 +4,7 @@
 #include "yolo_ros/plugins/detection_plugin.hpp"
 
 #include <algorithm>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -38,6 +39,8 @@ void DetectionPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
   node.declare_parameter<int>(prefix + "max_det", 300);
   node.declare_parameter<int>(prefix + "n_threads", -1);
   node.declare_parameter<int>(prefix + "max_fps", 0);
+  node.declare_parameter<int>(prefix + "img_width", 640);
+  node.declare_parameter<int>(prefix + "img_height", 480);
   node.declare_parameter<int>(prefix + "top_k", 5);
   node.declare_parameter<int>(prefix + "max_batch_size", 8);
 }
@@ -73,6 +76,24 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
 
   node.get_parameter(prefix + "n_threads", this->yolo_params_.n_threads);
   node.get_parameter(prefix + "max_fps", this->yolo_params_.max_fps);
+  node.get_parameter(prefix + "img_width", this->yolo_params_.img_width);
+  node.get_parameter(prefix + "img_height", this->yolo_params_.img_height);
+
+  if (this->yolo_params_.img_width <= 0 || this->yolo_params_.img_height <= 0) {
+    throw std::runtime_error(
+        "img_width/img_height must be positive (got " +
+        std::to_string(this->yolo_params_.img_width) + "x" +
+        std::to_string(this->yolo_params_.img_height) + ")");
+  }
+
+  if (this->yolo_params_.img_width % 32 != 0 ||
+      this->yolo_params_.img_height % 32 != 0) {
+    RCLCPP_WARN(node.get_logger(),
+                "img_width/img_height %dx%d are not multiples of 32; a "
+                "dynamic-input model may reject the input size",
+                this->yolo_params_.img_width, this->yolo_params_.img_height);
+  }
+
   node.get_parameter(prefix + "top_k", this->yolo_params_.top_k);
 
   int max_batch_size = 8;

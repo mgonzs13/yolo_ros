@@ -19,6 +19,8 @@
       iou: 0.45
       top_k: 5
       n_threads: -1
+      img_width: 640
+      img_height: 480
       provider: cuda
       cameras: ["cam0"]
     debug:

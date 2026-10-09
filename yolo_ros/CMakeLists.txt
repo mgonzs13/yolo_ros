@@ -100,6 +100,7 @@ add_library(yolo_ros_core SHARED
   src/engine/reid_encoder.cpp
   src/engine/provider.cpp
   src/engine/model.cpp
+  src/engine/input_shape.cpp
   src/utils/logs.cpp
   src/utils/cpu_utils.cpp
 
@@ -331,6 +332,14 @@ if(BUILD_TESTING)
     ${yolo_msgs_TARGETS}
   )
 
+  ament_add_gtest(test_input_shape
+    test/test_input_shape.cpp
+    src/engine/input_shape.cpp
+  )
+  target_include_directories(test_input_shape PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  )
+
   ament_add_gtest(test_utils
     test/test_utils.cpp
     src/yolo/utils.cpp
@@ -411,6 +420,7 @@ if(BUILD_TESTING)
     src/yolo/classify.cpp
     src/yolo/utils.cpp
     src/engine/model.cpp
+    src/engine/input_shape.cpp
     src/engine/provider.cpp
     src/utils/logs.cpp
   src/utils/cpu_utils.cpp
@@ -445,6 +455,7 @@ if(BUILD_TESTING)
     src/yolo/detect.cpp
     src/yolo/utils.cpp
     src/engine/model.cpp
+    src/engine/input_shape.cpp
     src/engine/provider.cpp
     src/utils/logs.cpp
   src/utils/cpu_utils.cpp

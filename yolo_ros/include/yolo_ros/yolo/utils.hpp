@@ -154,6 +154,10 @@ struct YoloParams {
   int max_fps; // cap on the inference/publish rate in Hz; 0 = unlimited
                // (process every received frame). Frames are dropped by the
                // node, the subscription stays live.
+  /// @brief Network input width for dynamic-input models.
+  int img_width = 640;
+  /// @brief Network input height for dynamic-input models.
+  int img_height = 480;
   /// @brief Classification only: number of top classes published per image
   /// (softmax probabilities, sorted descending).
   int top_k = 5; // classification: number of top classes to publish per

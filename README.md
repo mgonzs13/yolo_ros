@@ -322,6 +322,7 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 - **max_batch_size**: Maximum batch size for the multi-camera path (default: `8`).
 - **n_threads**: CPU execution-provider threads; `-1` (or any value <= 0) = auto: performance cores on hybrid CPUs, otherwise physical cores (default: `-1`).
 - **max_fps**: Cap the inference/publish rate in Hz; `0` = unlimited (default: `0`).
+- **img_width** / **img_height**: Network input size for models exported with a dynamic input (`dynamic=True`) (defaults: `640`/`480`). Models with a static input keep the size baked into the ONNX graph (a warning is logged when the parameters differ); non-positive values fail configure and values not divisible by 32 log a warning.
 - **top_k**: Classification only — number of top classes to publish (default: `5`).
 
 #### Tracking plugin (`tracking.*`, `yolo_ros/TrackingPlugin`)

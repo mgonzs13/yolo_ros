@@ -78,6 +78,8 @@ PLUGIN_PARAMS = {
         ParamSpec("max_det", int),
         ParamSpec("n_threads", int),
         ParamSpec("max_fps", int),
+        ParamSpec("img_width", int),
+        ParamSpec("img_height", int),
         ParamSpec("top_k", int),
         ParamSpec("max_batch_size", int),
     ),

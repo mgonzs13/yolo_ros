@@ -78,6 +78,11 @@ public:
   /// @return The clamped cap on published detections (0 drops all of them).
   int max_det() const { return this->yolo_params_.max_det; }
 
+  /// @brief Configured network input width (diagnostics).
+  int img_width() const { return this->yolo_params_.img_width; }
+  /// @brief Configured network input height (diagnostics).
+  int img_height() const { return this->yolo_params_.img_height; }
+
 private:
   /// @brief One selected camera and its frame reader.
   struct CameraStream {
