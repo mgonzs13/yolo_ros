@@ -99,6 +99,7 @@ ORIG_ARGS=("$@")
 EP="${ORT_EP:-cpu}"
 CUDA_ARCH="${ORT_CUDA_ARCH:-}"
 QNN_HOME="${QNN_HOME:-${QNN_SDK_ROOT:-${QAIRT_SDK_ROOT:-}}}"
+QNN_ARCH_ABI=""
 REBUILD=0
 DRY_RUN=0
 positional=()
@@ -150,6 +151,7 @@ esac
 # otherwise so a stale environment does not perturb the reuse stamp.
 if [[ "${EP}" != "qnn" ]]; then
   QNN_HOME=""
+  QNN_ARCH_ABI=""
 fi
 
 case "${ORT_DISABLE_UNUSED_OPS:-1}" in
@@ -193,6 +195,15 @@ if [[ "${EP}" == "qnn" ]]; then
     echo "       use /usr (e.g. on the VENTUNO Q)." >&2
     exit 1
   }
+  # ONNX Runtime >= 1.22 builds the QNN EP as a shared library and copies the
+  # QNN runtime from ${QNN_HOME}/lib/<QNN_ARCH_ABI>/ next to it, where the ABI
+  # defaults to aarch64-android on aarch64 Linux. The apt qairt-libs package
+  # installs the libraries flat in ${QNN_HOME}/lib (e.g. /usr/lib on the
+  # VENTUNO Q), so point QNN_ARCH_ABI at "." for that layout; without it the
+  # copy gets no files and fails with a bare "cmake -E" usage error.
+  if compgen -G "${QNN_HOME}/lib/libQnn*.so" >/dev/null; then
+    QNN_ARCH_ABI="."
+  fi
   echo "==> QNN SDK: ${QNN_HOME}"
 fi
 
@@ -493,6 +504,9 @@ if [[ "${EP}" == "cuda" ]]; then
     "CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}"
     "CMAKE_CUDA_HOST_COMPILER=${CUDAHOSTCXX}"
   )
+fi
+if [[ -n "${QNN_ARCH_ABI}" ]]; then
+  cmake_defines+=("QNN_ARCH_ABI=${QNN_ARCH_ABI}")
 fi
 if [[ -n "${ORT_CMAKE_EXTRA_DEFINES:-}" ]]; then
   # Intentionally word-split: the contract is a space-separated list.
