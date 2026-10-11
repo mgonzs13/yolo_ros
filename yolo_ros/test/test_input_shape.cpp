@@ -66,3 +66,29 @@ TEST(InputShape, ShortShapeFallsBackToParams) {
   EXPECT_TRUE(shape.from_params);
   EXPECT_FALSE(shape.params_ignored);
 }
+
+TEST(InputShape, ChannelLastStaticGraphWinsOverParams) {
+  const auto shape =
+      yolo_ros::engine::resolve_input_shape({1, 640, 640, 3}, 640, 480);
+  EXPECT_EQ(shape.width, 640);
+  EXPECT_EQ(shape.height, 640);
+  EXPECT_TRUE(shape.channel_last);
+  EXPECT_FALSE(shape.from_params);
+  EXPECT_TRUE(shape.params_ignored);
+}
+
+TEST(InputShape, ChannelLastDynamicGraphUsesParams) {
+  const auto shape =
+      yolo_ros::engine::resolve_input_shape({1, -1, -1, 3}, 640, 480);
+  EXPECT_EQ(shape.width, 640);
+  EXPECT_EQ(shape.height, 480);
+  EXPECT_TRUE(shape.channel_last);
+  EXPECT_TRUE(shape.from_params);
+  EXPECT_FALSE(shape.params_ignored);
+}
+
+TEST(InputShape, ChannelFirstIsNotChannelLast) {
+  const auto shape =
+      yolo_ros::engine::resolve_input_shape({1, 3, 640, 640}, 640, 480);
+  EXPECT_FALSE(shape.channel_last);
+}

@@ -20,6 +20,9 @@ struct InputShape {
   int width = 0;
   /// @brief Height in pixels.
   int height = 0;
+  /// @brief True when the graph uses a channel-last layout (NHWC, e.g. the
+  /// Ultralytics QNN exports); false for the standard channel-first NCHW.
+  bool channel_last = false;
   /// @brief True when the graph did not provide a static size for at least one
   /// dimension (dynamic or missing), so the parameters were used for it.
   bool from_params = false;
@@ -27,11 +30,13 @@ struct InputShape {
   bool params_ignored = false;
 };
 
-/// @brief Resolve the input size from the ONNX NCHW input shape.
+/// @brief Resolve the input size from the ONNX 4-D input shape.
 ///
-/// Static dimensions come from the graph, dynamic ones (<= 0) from the
-/// parameters. The batch and channel dimensions are not touched.
-/// @param graph_shape NCHW input shape as reported by ONNX Runtime.
+/// Accepts channel-first (NCHW) and channel-last (NHWC) shapes: the layout is
+/// detected from the channel axis, and the spatial dimensions are read from the
+/// matching axes. Static dimensions come from the graph, dynamic ones (<= 0)
+/// from the parameters. The batch and channel dimensions are not touched.
+/// @param graph_shape Input shape as reported by ONNX Runtime.
 /// @param img_width Configured width.
 /// @param img_height Configured height.
 /// @return The resolved size plus which source won.

@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <numeric>
@@ -251,6 +252,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
     const InputShape resolved = resolve_input_shape(
         input_tensor_shape_vec, params.img_width, params.img_height);
     this->input_image_shape = cv::Size(resolved.width, resolved.height);
+    this->input_channel_last_ = resolved.channel_last;
 
     if (resolved.params_ignored) {
       YOLO_LOG_WARN("Model has static input dimension(s); using %dx%d "
@@ -574,9 +576,14 @@ yolo_ros::engine::Model::detect_batch(const std::vector<cv::Mat> &images) {
 std::vector<std::vector<yolo_msgs::msg::Detection>>
 yolo_ros::engine::Model::run_batch(const std::vector<cv::Mat> &images) {
   const std::size_t count = images.size();
-  std::vector<int64_t> input_tensor_shape = {static_cast<int64_t>(count), 3,
-                                             this->input_image_shape.height,
-                                             this->input_image_shape.width};
+  std::vector<int64_t> input_tensor_shape =
+      this->input_channel_last_
+          ? std::vector<int64_t>{static_cast<int64_t>(count),
+                                 this->input_image_shape.height,
+                                 this->input_image_shape.width, 3}
+          : std::vector<int64_t>{static_cast<int64_t>(count), 3,
+                                 this->input_image_shape.height,
+                                 this->input_image_shape.width};
   const std::size_t per_image = static_cast<std::size_t>(
       this->input_image_shape.height * this->input_image_shape.width * 3);
   this->input_buffer_.resize(per_image * count);
@@ -602,8 +609,12 @@ yolo_ros::engine::Model::run_batch(const std::vector<cv::Mat> &images) {
 void yolo_ros::engine::Model::preprocess_into(
     const cv::Mat &image, const std::vector<int64_t> &input_tensor_shape,
     std::size_t index) {
-  const int H = static_cast<int>(input_tensor_shape[2]);
-  const int W = static_cast<int>(input_tensor_shape[3]);
+  const int H =
+      static_cast<int>(this->input_channel_last_ ? input_tensor_shape[1]
+                                                 : input_tensor_shape[2]);
+  const int W =
+      static_cast<int>(this->input_channel_last_ ? input_tensor_shape[2]
+                                                 : input_tensor_shape[3]);
   cv::Mat resized_image = yolo_ros::yolo::utils::letterbox(
       image, cv::Size(W, H), cv::Scalar(114, 114, 114));
 
@@ -612,6 +623,18 @@ void yolo_ros::engine::Model::preprocess_into(
   }
 
   resized_image.convertTo(resized_image, CV_32FC3, 1.0 / 255.0);
+
+  if (this->input_channel_last_) {
+    // NHWC: the interleaved HWC image is already in the expected layout.
+    if (!resized_image.isContinuous()) {
+      resized_image = resized_image.clone();
+    }
+    const std::size_t per_image = static_cast<std::size_t>(H) * W * 3;
+    std::memcpy(this->input_buffer_.data() + index * per_image,
+                resized_image.ptr<float>(), per_image * sizeof(float));
+    return;
+  }
+
   std::vector<cv::Mat> chw(resized_image.channels());
 
   for (int c = 0; c < resized_image.channels(); ++c) {
