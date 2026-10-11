@@ -632,6 +632,9 @@ copy_header() {
 copy_header onnxruntime_c_api.h required
 copy_header onnxruntime_cxx_api.h required
 copy_header onnxruntime_cxx_inline.h required
+# onnxruntime_c_api.h includes these from ONNX Runtime 1.28 on.
+copy_header onnxruntime_error_code.h optional
+copy_header onnxruntime_ep_c_api.h optional
 copy_header onnxruntime_float16.h optional
 copy_header onnxruntime_session_options_config_keys.h optional
 copy_header onnxruntime_run_options_config_keys.h optional
