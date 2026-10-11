@@ -132,10 +132,16 @@ A source build is heavy (tens of minutes and several GB of RAM). It reuses a pre
 ## QNN (Hexagon NPU) ONNX Runtime build
 
 The QNN execution provider is not part of the prebuilt tarballs; build ONNX
-Runtime from source on the target (the VENTUNO Q ships the QNN runtime and
-headers in the system image):
+Runtime from source on the target (the VENTUNO Q does not ship QAIRT by
+default, so install the QNN runtime and headers from its apt repository
+first):
 
 ```bash
+# Board prerequisites (VENTUNO Q): QNN runtime libraries and headers
+sudo apt update
+sudo apt install qairt-libs qairt-dsp-binaries qairt-headers
+# -> /usr/lib/libQnnHtp.so and /usr/include/QNN/QnnInterface.h
+
 # ONNX Runtime prefix (repository root)
 yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.20.0 --ep qnn --qnn-home /usr
 # colcon (workspace root)
@@ -144,7 +150,9 @@ colcon build --symlink-install \
 ```
 
 `--qnn-home` defaults to `$QNN_HOME`, `$QNN_SDK_ROOT`, `$QAIRT_SDK_ROOT` or
-`/usr`; it must contain `include/QNN/QnnInterface.h`. The resulting context
+`/usr`; it must contain `include/QNN/QnnInterface.h` (on the VENTUNO Q the
+`qairt-headers` package provides it, while `qairt-libs`/`qairt-dsp-binaries`
+provide the runtime; a QAIRT SDK prefix also works). The resulting context
 binaries and QNN libraries are tied to the board image's QAIRT version:
 rebuild and clear `~/.cache/yolo_ros/qnn_context` when the image changes.
 
@@ -169,7 +177,7 @@ Environment knobs (the CLI flags win over `ORT_EP` / `ORT_CUDA_ARCH`; `--qnn-hom
 - **`ORT_DISABLE_UNUSED_OPS`** (default `1`) / **`ORT_DISABLE_CONTRIB_OPS`** (default `0`) — extra kernel pruning. `ORT_DISABLE_CONTRIB_OPS=1` is **incompatible with `--ep cuda`**: the TensorRT execution provider needs contrib ops, so the script refuses the combination up front.
 - **`ORT_MIN_CMAKE`** — override the CMake version check (ONNX Runtime 1.16+ needs CMake ≥ 3.26; `--ep cuda` on ORT < 1.16 needs ≥ 3.18).
 - **`CUDA_HOME` / `CUDNN_HOME` / `TENSORRT_HOME`** — `--ep cuda` only. `CUDA_HOME` is a toolkit prefix (`include/` + `lib/`); the `CUDNN_HOME`/`TENSORRT_HOME` defaults resolve to the system library directories (`/usr/lib/<arch>-linux-gnu`), which carry no headers — set them explicitly when ORT's configure needs the development files.
-- **`QNN_HOME` / `QNN_SDK_ROOT` / `QAIRT_SDK_ROOT`** — `--ep qnn` only. QNN SDK prefix fallbacks when `--qnn-home` is not given (final fallback `/usr`, the board image's location); they must contain `include/QNN/QnnInterface.h`.
+- **`QNN_HOME` / `QNN_SDK_ROOT` / `QAIRT_SDK_ROOT`** — `--ep qnn` only. QNN SDK prefix fallbacks when `--qnn-home` is not given (final fallback `/usr`, where the VENTUNO Q's `qairt-headers` package installs them); they must contain `include/QNN/QnnInterface.h`.
 
 On x86_64 with CUDA + TensorRT the two prefix defaults usually need overriding: `CUDNN_HOME` (the runtime `libcudnn9-cuda-12` package ships no headers — add `libcudnn9-dev-cuda-12`) and `TENSORRT_HOME` (TensorRT lives under the CUDA toolkit, e.g. `/usr/local/cuda-12.6/targets/x86_64-linux`). CMake ≥ 3.26 must be on `PATH`:
 

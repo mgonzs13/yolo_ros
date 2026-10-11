@@ -180,14 +180,17 @@ elif [[ -n "${CUDA_ARCH}" && ! "${CUDA_ARCH}" =~ ^[0-9]+(;[0-9]+)*$ ]]; then
 fi
 
 # --- QNN SDK (only for the qnn EP) --------------------------------------------
-# On the VENTUNO Q the QNN headers and libraries are part of the system image
-# (/usr/include/QNN, /usr/lib); a QAIRT SDK prefix also works.
+# On the VENTUNO Q, install the QNN headers and runtime from apt:
+# `apt install qairt-headers qairt-libs qairt-dsp-binaries` puts the headers
+# under /usr/include/QNN and the libraries under /usr/lib. A QAIRT SDK prefix
+# also works.
 if [[ "${EP}" == "qnn" ]]; then
   QNN_HOME="${QNN_HOME:-/usr}"
   [[ -f "${QNN_HOME}/include/QNN/QnnInterface.h" ]] || {
     echo "error: QNN headers not found at '${QNN_HOME}/include/QNN/QnnInterface.h'." >&2
-    echo "       Point --qnn-home (or QNN_HOME/QNN_SDK_ROOT/QAIRT_SDK_ROOT) at the" >&2
-    echo "       QAIRT/QNN SDK prefix, or /usr on a board that ships the QNN runtime." >&2
+    echo "       Point --qnn-home (or QNN_HOME/QNN_SDK_ROOT/QAIRT_SDK_ROOT) at a" >&2
+    echo "       QAIRT/QNN SDK prefix, or install the qairt-headers package and" >&2
+    echo "       use /usr (e.g. on the VENTUNO Q)." >&2
     exit 1
   }
   echo "==> QNN SDK: ${QNN_HOME}"
