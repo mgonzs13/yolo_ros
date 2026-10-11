@@ -143,10 +143,10 @@ sudo apt install qairt-libs qairt-dsp-binaries qairt-headers
 # -> /usr/lib/libQnnHtp.so and /usr/include/QNN/QnnInterface.h
 
 # ONNX Runtime prefix (repository root)
-yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.20.0 --ep qnn --qnn-home /usr
+yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.28.0 --ep qnn --qnn-home /usr
 # colcon (workspace root)
 colcon build --symlink-install \
-  --cmake-args -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/yolo_onnxruntime_vendor/ort-1.20.0
+  --cmake-args -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/yolo_onnxruntime_vendor/ort-1.28.0
 ```
 
 `--qnn-home` defaults to `$QNN_HOME`, `$QNN_SDK_ROOT`, `$QAIRT_SDK_ROOT` or

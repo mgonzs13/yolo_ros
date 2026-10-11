@@ -34,9 +34,10 @@ struct ProviderConfig {
   /// @brief CUDA primary: capture the model as a CUDA graph (fixed shapes).
   bool cuda_graph_enable{false};
   /// @brief QNN: full path (or bare soname) of the HTP backend library the
-  /// QNN EP loads with dlopen on ONNX Runtime 1.20/1.21; the default
-  /// "libQnnHtp.so" resolves from the loader path (e.g. /usr/lib on the
-  /// VENTUNO Q). Point it at <sdk>/lib/<arch>/libQnnHtp.so for an SDK prefix.
+  /// QNN EP loads with dlopen on the source-built ONNX Runtime 1.28.0; the
+  /// default "libQnnHtp.so" resolves from the loader path (e.g. /usr/lib on
+  /// the VENTUNO Q). Point it at <sdk>/lib/<arch>/libQnnHtp.so for an SDK
+  /// prefix.
   std::string qnn_backend_path{"libQnnHtp.so"};
   /// @brief QNN: SoC model number (QCS8275 = 82).
   std::string qnn_soc_model{"82"};
@@ -92,9 +93,9 @@ const char *device_provider_name(const std::string &device);
 
 /// @brief QNN provider option key/value map for @p config.
 /// @param[in] config QNN configuration; a non-empty `qnn_backend_path` is
-/// forwarded to ONNX Runtime 1.20/1.21 (the HTP backend library to dlopen),
-/// while an empty value omits the key so ONNX Runtime >= 1.22 can resolve its
-/// own backend.
+/// forwarded to ONNX Runtime 1.28.0 as the `backend_path` option (the HTP
+/// backend library to dlopen), while an empty value omits the key so ONNX
+/// Runtime resolves its own default HTP backend.
 /// @return Options passed to AppendExecutionProvider("QNN", ...).
 std::unordered_map<std::string, std::string>
 qnn_provider_options(const ProviderConfig &config);

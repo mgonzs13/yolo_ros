@@ -480,7 +480,7 @@ fi
 if [[ "${EP}" == "qnn" ]]; then
   if ! supports_build_flag --use_qnn; then
     echo "error: ONNX Runtime ${ORT_VERSION} does not support --use_qnn" >&2
-    echo "       (QNN EP needs ONNX Runtime >= 1.15; use 1.20.0 or newer)." >&2
+    echo "       (QNN EP needs ONNX Runtime >= 1.15; use 1.28.0 or newer)." >&2
     exit 1
   fi
   build_cmd+=(--use_qnn --qnn_home "${QNN_HOME}")
