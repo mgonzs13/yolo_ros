@@ -1,7 +1,10 @@
 # VENTUNO Q preset: detection and tracking on the Hexagon NPU (QCS8275).
-# The W8A8 QNN artifacts are produced by scripts/compile_qnn_models.py and
-# must exist in the configured model_repo/model_path. See docs/models.md
-# ("Qualcomm QNN (Hexagon NPU)").
+# The QNN artifact is exported with Ultralytics
+# (`model.export(format="qnn", name="iq-8275", imgsz=640)`); the exported
+# *_qnn.onnx embeds the compiled HTP context binary, so nothing is compiled on
+# the board. Point model_path at the exported file (model_repo is empty so the
+# local file wins; it can also be overridden as model_path:=... on the command
+# line). See docs/models.md ("Qualcomm QNN (Hexagon NPU)").
 #
 # IMPORTANT: rclcpp loads `--params-file` sections by the node's fully
 # qualified name, so the block key includes the launch namespace (default
@@ -15,16 +18,13 @@
       image_reliability: 1
     detection:
       plugin: yolo_ros/DetectionPlugin
-      model_repo: unileon-robotics/YOLO26-QNN
-      # Self-caching W8A8 QDQ model (compiled on first use). The precompiled
-      # qnn/yolo26s_w8a8.ctx.onnx is used only when AI Hub returns a
-      # single-file wrap. model_repo must be populated with the compiled
-      # artifacts, or cleared (model_repo: "") in favor of a local model_path.
-      model_filename: qnn/yolo26s_w8a8.onnx
+      model_repo: ""
+      model_path: /path/to/yolo26s_qnn.onnx
       provider: qnn
       device: qnn:0
       max_batch_size: 1
       qnn_htp_performance_mode: burst
+      qnn_context_cache_enable: false
       cameras: ["cam0"]
     tracking:
       plugin: yolo_ros/TrackingPlugin

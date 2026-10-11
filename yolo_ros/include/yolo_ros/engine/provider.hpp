@@ -48,8 +48,8 @@ struct ProviderConfig {
   /// @brief QNN: offload graph I/O quantization to the CPU EP, keeping the
   /// ONNX graph inputs/outputs float32.
   bool qnn_offload_graph_io_quantization{true};
-  /// @brief QNN: allow fp16 inference for float32 graphs (W8A8 models keep
-  /// this disabled).
+  /// @brief QNN: allow fp16 inference for float32 graphs (quantized QDQ
+  /// models keep this disabled).
   bool qnn_enable_htp_fp16_precision{false};
   /// @brief QNN: generate the context cache now, as returned by
   /// resolve_qnn_model_path() (not merely "caching enabled").

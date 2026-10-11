@@ -323,7 +323,7 @@ TEST(ResolveQnnModelPath, PrecompiledContextKeepsModel) {
       std::filesystem::temp_directory_path() /
       ("yolo_qnn_resolve_ctx_test_" + std::to_string(::getpid()));
   std::filesystem::remove_all(base);
-  const std::string model = "/models/yolo26m_w8a8.ctx.onnx";
+  const std::string model = "/models/yolo26m.ctx.onnx";
   const QnnModelPath resolved =
       resolve_qnn_model_path(base.string(), model, true);
   EXPECT_EQ(resolved.model_path, model);

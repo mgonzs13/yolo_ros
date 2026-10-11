@@ -208,57 +208,45 @@ license).
 
 ## Qualcomm QNN (Hexagon NPU)
 
-The ONNX Runtime QNN execution provider runs W8A8 (INT8) QDQ models on the
+The ONNX Runtime QNN execution provider runs QNN context-binary models on the
 Hexagon HTP. On the VENTUNO Q (QCS8275 / HTP v75) run the node with
-`provider: qnn` and a static-batch-1 model (the exported `yolo26*.onnx` files,
-not the `dynamic/` ones). The provider needs a source-built ONNX Runtime (see
-the [QNN build section](build.md#qnn-hexagon-npu-onnx-runtime-build)).
+`provider: qnn` and a batch-1 model. The provider needs a source-built ONNX
+Runtime (see the [QNN build section](build.md#qnn-hexagon-npu-onnx-runtime-build)).
 
-1. Quantize and compile with `scripts/compile_qnn_models.py` (Qualcomm AI Hub
-   quantization for QCS8275, followed by QNN context-binary compilation and a
-   `precompiled_qnn_onnx` artifact for ORT). It requires `pip install qai-hub`
-   (plus `numpy`, `opencv-python` and `onnx` for the calibration
-   preprocessing) and an authenticated Qualcomm AI Hub account; uploading with
-   `--hf-repo` additionally needs `pip install huggingface_hub` and an
-   authenticated Hugging Face account (`huggingface-cli login`). Calibration
-   images come from `--images <calib-dir>` (searched recursively; up to
-   `--limit` are sampled, default `300`):
-   `python3 scripts/compile_qnn_models.py --models-dir <static-onnx-dir> --images <calib-dir> --tasks detect segment pose obb classify --size s --output-dir qnn_models --hf-repo unileon-robotics/YOLO26-QNN`
-   The artifacts (`*_w8a8.onnx` QDQ and, when AI Hub returns a standalone
-   single-file wrap, `*_w8a8.ctx.onnx` precompiled context) are uploaded under
-   the `qnn/` prefix of the configured repo, so the shipped preset expects
-   e.g. `qnn/yolo26s_w8a8.onnx`. The precompiled wrap usually references an
-   external QNN context `.bin` (an optionally zipped directory holding
-   `<model>.onnx` next to its context binary), and the node downloads exactly
-   one file, so such a wrap can never run. Only a truly standalone single-file
-   ONNX is deployed; any other wrap falls back to the always-valid
-   self-caching QDQ model (with a warning).
-2. Deploy the self-caching `*_w8a8.onnx` (QDQ; compiled on first use and
-   cached under `~/.cache/yolo_ros/qnn_context/<model>-<fingerprint>.ctx.onnx`)
-   or, when the compiler produced one, the precompiled `*_w8a8.ctx.onnx`, and
-   start the node with the VENTUNO Q preset, which downloads
-   `qnn/yolo26s_w8a8.onnx` from `unileon-robotics/YOLO26-QNN`:
-   `ros2 launch yolo_bringup yolo.launch.py params_file:=$(ros2 pkg prefix yolo_bringup)/share/yolo_bringup/config/yolo_qnn.yaml`.
-   That repository must be populated with the compiled artifacts before the
-   preset works out of the box. For a locally compiled artifact, copy the
-   preset, clear its `model_repo` (`model_repo: ""`) and run the copy with the
-   local model:
-   `ros2 launch yolo_bringup yolo.launch.py params_file:=<local-yaml> model_path:=qnn_models/yolo26s_w8a8.onnx provider:=qnn device:=qnn:0 max_batch_size:=1`.
-   `model_path` alone cannot bypass a params file that sets `model_repo` (the
-   preset and the default `yolo.yaml` both set one): the Hub copy wins
-   whenever the download succeeds.
-3. Validate accuracy and latency on-device with
-   `python3 scripts/validate_qnn.py --fp32 yolo26s.onnx --qnn yolo26s_w8a8.onnx --images <calib-dir> --manifest qnn_models/manifest.json --model-name yolo26s_w8a8.onnx`.
-   `--qnn` takes the QDQ export (`*_w8a8.onnx`): the gate runs it on the QNN
-   execution provider, which executes the same quantized weights as the
-   precompiled context. `--model-name` must match the manifest entry the
-   compiler recorded (`*_w8a8.onnx` on fallback, `*_w8a8.ctx.onnx` when the
-   wrap deployed). The script gates raw-output deltas only and records the
-   worst cosine, worst max-abs and mean QNN latency per image; mAP/mIoU
-   accuracy acceptance remains a manual step performed on the board.
+1. Export the model with the Ultralytics
+   [QNN export](https://docs.ultralytics.com/integrations/qnn/), which
+   quantizes it (INT8 weights, 16-bit activations) and compiles a QNN context
+   binary locally into a self-contained `*_qnn.onnx` — no Qualcomm account or
+   cloud service required:
+
+   ```python
+   from ultralytics import YOLO
+
+   model = YOLO("yolo26s.pt")
+   model.export(format="qnn", name="iq-8275", imgsz=640)  # imgsz=224 for classify
+   ```
+
+   `name` selects the HTP/SoC target (`iq-8275` = QCS8275, HTP v75; the
+   default is `73`). The export installs `onnxruntime-qnn` on first use and
+   runs on Linux x86-64/ARM64 or Windows with Python >= 3.11, producing
+   `yolo26s_qnn.onnx` with the compiled context embedded.
+
+2. Deploy the exported `*_qnn.onnx`: it is already compiled for the target, so
+   the node loads it directly and nothing is compiled on the board. The
+   VENTUNO Q preset references it through `model_path` (placeholder
+   `/path/to/yolo26s_qnn.onnx`; set your own route) and sets
+   `qnn_context_cache_enable: false`:
+   `ros2 launch yolo_bringup yolo.launch.py params_file:=$(ros2 pkg prefix yolo_bringup)/share/yolo_bringup/config/yolo_qnn.yaml model_path:=/path/to/yolo26s_qnn.onnx`.
+   The preset ships `model_repo: ""` so the local `model_path` is used; a
+   params file that sets `model_repo` wins instead whenever its download
+   succeeds.
+
+3. Validate on-device with Ultralytics: with `onnxruntime-qnn` installed on
+   the board, `YOLO("yolo26s_qnn.onnx").val(data=...)` runs the context binary
+   through the QNN execution provider.
 
 QNN context binaries are specific to the SoC, QAIRT version and board image;
-regenerate them (and delete the cache) after an OS/firmware upgrade. The
-on-device cache name includes a fingerprint of the source model, so updating
-a model regenerates its context automatically; old fingerprinted files are
-not pruned and can be deleted to reclaim space.
+regenerate the export after an OS/firmware upgrade. A plain quantized QDQ
+model (no embedded context) can still be used instead by leaving
+`qnn_context_cache_enable: true`: the node compiles it on first use under
+`~/.cache/yolo_ros/qnn_context/`.
