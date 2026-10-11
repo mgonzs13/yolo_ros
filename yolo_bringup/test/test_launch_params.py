@@ -259,10 +259,7 @@ def test_qnn_overrides_are_detection_only():
         }
     )
     overrides = build_overrides(context, DET)
-    assert (
-        overrides["detection.qnn_htp_performance_mode"]
-        == "sustained_high_performance"
-    )
+    assert overrides["detection.qnn_htp_performance_mode"] == "sustained_high_performance"
     assert overrides["detection.qnn_context_cache_enable"] is False
     assert overrides["detection.qnn_context_cache_path"] == "/tmp/qnn"
     assert build_overrides(context, TRACK) == {}
