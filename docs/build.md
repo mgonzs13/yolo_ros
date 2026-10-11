@@ -117,7 +117,7 @@ CUDA 11 has no C++ GPU tarball after ONNX Runtime 1.18, CUDA 13 starts at 1.28, 
 
 ## Custom ONNX Runtime
 
-`yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh` builds ONNX Runtime from source on x86_64 or aarch64 and packages it in the flat `lib/` + `include/` layout the vendor expects. Select the execution provider with `--ep` (`cpu`, or `cuda`, which also builds TensorRT), then point the colcon build at the resulting prefix with `-DONNXRUNTIME_ROOT=<prefix>` — it takes precedence over the prebuilt download. The node still selects CPU/CUDA/TensorRT at run time via the `provider` parameter (see [Parameters](../README.md#parameters)).
+`yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh` builds ONNX Runtime from source on x86_64 or aarch64 and packages it in the flat `lib/` + `include/` layout the vendor expects. Select the execution provider with `--ep` (`cpu`, `cuda`, which also builds TensorRT, or `qnn`, the Hexagon NPU provider): CPU/CUDA/TensorRT are also available as prebuilt tarballs, while the QNN execution provider requires this source build. Then point the colcon build at the resulting prefix with `-DONNXRUNTIME_ROOT=<prefix>` — it takes precedence over the prebuilt download. The node still selects CPU/CUDA/TensorRT/QNN at run time via the `provider` parameter (see [Parameters](../README.md#parameters)).
 
 ```shell
 # CPU build (x86_64 or aarch64); the prefix defaults to <package>/ort-<version>
@@ -127,18 +127,38 @@ colcon build --symlink-install --cmake-args \
     -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/yolo_onnxruntime_vendor/ort-1.20.0
 ```
 
-A source build is heavy (tens of minutes and several GB of RAM). It reuses a previous build of the same version/EP/architecture (the reuse stamp also covers the CUDA architecture and extra CMake defines) unless you pass `--rebuild`, and it accepts an existing source tree or tarball for offline use.
+A source build is heavy (tens of minutes and several GB of RAM). It reuses a previous build of the same version/EP/architecture (the reuse stamp also covers the CUDA architecture, the QNN SDK prefix and extra CMake defines) unless you pass `--rebuild`, and it accepts an existing source tree or tarball for offline use.
+
+## QNN (Hexagon NPU) ONNX Runtime build
+
+The QNN execution provider is not part of the prebuilt tarballs; build ONNX
+Runtime from source on the target (the VENTUNO Q ships the QNN runtime and
+headers in the system image):
+
+```bash
+# ONNX Runtime prefix (repository root)
+yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.20.0 --ep qnn --qnn-home /usr
+# colcon (workspace root)
+colcon build --symlink-install \
+  --cmake-args -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/yolo_onnxruntime_vendor/ort-1.20.0
+```
+
+`--qnn-home` defaults to `$QNN_HOME`, `$QNN_SDK_ROOT`, `$QAIRT_SDK_ROOT` or
+`/usr`; it must contain `include/QNN/QnnInterface.h`. The resulting context
+binaries and QNN libraries are tied to the board image's QAIRT version:
+rebuild and clear `~/.cache/yolo_ros/qnn_context` when the image changes.
 
 ## Source build knobs
 
 `build_ort_from_source.sh <ort_version> [output_dir]` accepts these flags:
 
-- **`--ep cpu|cuda`** — execution provider to build (default `cpu`); `cuda` also builds TensorRT, matching the node's provider chain.
+- **`--ep cpu|cuda|qnn`** — execution provider to build (default `cpu`); `cuda` also builds TensorRT, matching the node's provider chain; `qnn` builds the Hexagon NPU provider (see [QNN (Hexagon NPU) ONNX Runtime build](#qnn-hexagon-npu-onnx-runtime-build)).
 - **`--cuda-arch NN`** — CUDA architecture(s) for `--ep cuda` (Jetson Xavier `72`, Orin `87`; semicolon-separated for several, e.g. `"72;87"` (quote it)); auto-detected with `nvidia-smi` when available.
+- **`--qnn-home DIR`** — QAIRT/QNN SDK prefix containing `include/QNN/QnnInterface.h` for `--ep qnn`; defaults to `$QNN_HOME`, `$QNN_SDK_ROOT`, `$QAIRT_SDK_ROOT` or `/usr`.
 - **`--rebuild`** — ignore a previous build and build again.
 - **`--dry-run`** — print the assembled `build.sh` command and exit.
 
-Environment knobs (the CLI flags win over `ORT_EP` / `ORT_CUDA_ARCH`):
+Environment knobs (the CLI flags win over `ORT_EP` / `ORT_CUDA_ARCH`; `--qnn-home` wins over the QNN variables):
 
 - **`ORT_SOURCE_DIR`** — an existing ONNX Runtime source tree (contains `build.sh`); skips the clone.
 - **`ORT_SOURCE_TARBALL`** — a tarball whose top level contains `onnxruntime/`.
@@ -149,6 +169,7 @@ Environment knobs (the CLI flags win over `ORT_EP` / `ORT_CUDA_ARCH`):
 - **`ORT_DISABLE_UNUSED_OPS`** (default `1`) / **`ORT_DISABLE_CONTRIB_OPS`** (default `0`) — extra kernel pruning. `ORT_DISABLE_CONTRIB_OPS=1` is **incompatible with `--ep cuda`**: the TensorRT execution provider needs contrib ops, so the script refuses the combination up front.
 - **`ORT_MIN_CMAKE`** — override the CMake version check (ONNX Runtime 1.16+ needs CMake ≥ 3.26; `--ep cuda` on ORT < 1.16 needs ≥ 3.18).
 - **`CUDA_HOME` / `CUDNN_HOME` / `TENSORRT_HOME`** — `--ep cuda` only. `CUDA_HOME` is a toolkit prefix (`include/` + `lib/`); the `CUDNN_HOME`/`TENSORRT_HOME` defaults resolve to the system library directories (`/usr/lib/<arch>-linux-gnu`), which carry no headers — set them explicitly when ORT's configure needs the development files.
+- **`QNN_HOME` / `QNN_SDK_ROOT` / `QAIRT_SDK_ROOT`** — `--ep qnn` only. QNN SDK prefix fallbacks when `--qnn-home` is not given (final fallback `/usr`, the board image's location); they must contain `include/QNN/QnnInterface.h`.
 
 On x86_64 with CUDA + TensorRT the two prefix defaults usually need overriding: `CUDNN_HOME` (the runtime `libcudnn9-cuda-12` package ships no headers — add `libcudnn9-dev-cuda-12`) and `TENSORRT_HOME` (TensorRT lives under the CUDA toolkit, e.g. `/usr/local/cuda-12.6/targets/x86_64-linux`). CMake ≥ 3.26 must be on `PATH`:
 
@@ -166,7 +187,7 @@ The fixed `build.sh` recipe is `--config Release --update --build --build_shared
 
 GPU inference on an aarch64 Jetson (Xavier, Orin) needs an ONNX Runtime built with CUDA + TensorRT — the prebuilt GPU tarball is x64-only. `yolo_onnxruntime_vendor/scripts/` ships two tools for that, each documented in its own file header:
 
-- **`build_ort_from_source.sh`** — runs on the robot and builds ONNX Runtime from source into a flat `lib/` + `include/` prefix: `build_ort_from_source.sh <version> --ep cuda --cuda-arch <NN>` (Xavier `72`, Orin `87`). It reuses a previous build of the same version/EP/architecture (the reuse stamp also covers the CUDA architecture and extra CMake defines) unless you pass `--rebuild`.
+- **`build_ort_from_source.sh`** — runs on the robot and builds ONNX Runtime from source into a flat `lib/` + `include/` prefix: `build_ort_from_source.sh <version> --ep cuda --cuda-arch <NN>` (Xavier `72`, Orin `87`). It reuses a previous build of the same version/EP/architecture (the reuse stamp also covers the CUDA architecture, the QNN SDK prefix and extra CMake defines) unless you pass `--rebuild`.
 - **`prepare_offline_bundle.sh`** — runs on an internet-connected host and produces a self-contained tarball for a robot with no network: the ONNX Runtime source tree with its submodules, the mirrored CMake dependency archives, the ONNX models, a bundled CMake (ONNX Runtime 1.16+ needs CMake ≥ 3.26, while JetPack 6 / Ubuntu 22.04 ship 3.22) and all the helper scripts (the CMake dependency mirror is only used by ONNX Runtime 1.16+; older releases skip it). It prints the exact copy-paste sequence for the robot when it finishes.
 
 Extract the bundle **outside** the colcon workspace — it carries `COLCON_IGNORE` markers so colcon does not treat the ONNX Runtime tree as a package. The robot build also passes `-DFETCHCONTENT_SOURCE_DIR_YOLO_HFHUB=<bundle>/huggingface-hub-cpp` so `yolo_hfhub_vendor` does not fetch `huggingface-hub-cpp` from the network.

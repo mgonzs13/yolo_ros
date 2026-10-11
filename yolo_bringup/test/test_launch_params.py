@@ -248,3 +248,23 @@ def test_non_cli_catalogue_params_are_vectors_in_cpp(plugin_type):
             f"{plugin_type}: non-CLI parameter {spec.name!r} must be declared "
             f"as std::vector in C++, got {declared.get(spec.name)!r}"
         )
+
+
+def test_qnn_overrides_are_detection_only():
+    context = FakeContext(
+        {
+            "qnn_htp_performance_mode": "sustained_high_performance",
+            "qnn_context_cache_enable": "false",
+            "qnn_context_cache_path": "/tmp/qnn",
+        }
+    )
+    overrides = build_overrides(context, DET)
+    assert (
+        overrides["detection.qnn_htp_performance_mode"]
+        == "sustained_high_performance"
+    )
+    assert overrides["detection.qnn_context_cache_enable"] is False
+    assert overrides["detection.qnn_context_cache_path"] == "/tmp/qnn"
+    assert build_overrides(context, TRACK) == {}
+    assert build_overrides(context, D3D) == {}
+    assert build_overrides(context, DBG) == {}

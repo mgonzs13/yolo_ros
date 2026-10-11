@@ -13,6 +13,7 @@
 #include "pluginlib/class_list_macros.hpp"
 #include "rclcpp/logging.hpp"
 #include "rclcpp/qos.hpp"
+#include "yolo_ros/utils/string_utils.hpp"
 #include "yolo_ros/yolo/model_factory.hpp"
 
 PLUGINLIB_EXPORT_CLASS(yolo_ros::DetectionPlugin, yolo_ros::Plugin)
@@ -34,6 +35,10 @@ void DetectionPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
   node.declare_parameter<bool>(prefix + "trt_fp16_enable", true);
   node.declare_parameter<bool>(prefix + "trt_engine_cache_enable", true);
   node.declare_parameter<std::string>(prefix + "trt_engine_cache_path", "");
+  node.declare_parameter<std::string>(prefix + "qnn_htp_performance_mode",
+                                      "burst");
+  node.declare_parameter<bool>(prefix + "qnn_context_cache_enable", true);
+  node.declare_parameter<std::string>(prefix + "qnn_context_cache_path", "");
   node.declare_parameter<float>(prefix + "threshold", 0.7f);
   node.declare_parameter<float>(prefix + "iou", 0.45f);
   node.declare_parameter<int>(prefix + "max_det", 300);
@@ -65,6 +70,12 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
                      this->yolo_params_.trt_engine_cache_enable);
   node.get_parameter(prefix + "trt_engine_cache_path",
                      this->yolo_params_.trt_engine_cache_path);
+  node.get_parameter(prefix + "qnn_htp_performance_mode",
+                     this->yolo_params_.qnn_htp_performance_mode);
+  node.get_parameter(prefix + "qnn_context_cache_enable",
+                     this->yolo_params_.qnn_context_cache_enable);
+  node.get_parameter(prefix + "qnn_context_cache_path",
+                     this->yolo_params_.qnn_context_cache_path);
   node.get_parameter(prefix + "threshold", this->yolo_params_.threshold);
   node.get_parameter(prefix + "iou", this->yolo_params_.iou);
 
@@ -98,6 +109,16 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
 
   int max_batch_size = 8;
   node.get_parameter(prefix + "max_batch_size", max_batch_size);
+
+  if (yolo_ros::utils::to_lower(this->yolo_params_.provider) == "qnn" &&
+      max_batch_size > 1) {
+    RCLCPP_WARN(node.get_logger(),
+                "QNN runs static batch-1 models; clamping max_batch_size from "
+                "%d to 1",
+                max_batch_size);
+    max_batch_size = 1;
+  }
+
   this->max_batch_size_ = static_cast<std::size_t>(std::max(1, max_batch_size));
 }
 

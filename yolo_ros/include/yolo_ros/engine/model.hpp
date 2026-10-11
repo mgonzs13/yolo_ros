@@ -59,7 +59,7 @@ public:
   detect_batch(const std::vector<cv::Mat> &images);
 
   /// @brief Name of the execution provider that initialized the session.
-  /// @return "cpu", "cuda" or "tensorrt".
+  /// @return "cpu", "cuda", "tensorrt" or "qnn".
   const std::string &active_provider() const { return this->active_provider_; }
 
   /// @brief Whether inference runs through a captured CUDA graph.

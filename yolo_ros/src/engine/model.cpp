@@ -128,7 +128,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   }
 
   if (requested != "auto" && requested != "cpu" && requested != "cuda" &&
-      requested != "tensorrt" && requested != "trt") {
+      requested != "tensorrt" && requested != "trt" && requested != "qnn") {
     YOLO_LOG_WARN("Unknown provider \"%s\"; using auto.",
                   params.provider.c_str());
     requested = "auto";
@@ -174,6 +174,25 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
     config.device_id = device_id;
     config.trt_fp16_enable = params.trt_fp16_enable;
     config.trt_engine_cache_enable = params.trt_engine_cache_enable;
+    config.qnn_htp_performance_mode = params.qnn_htp_performance_mode;
+
+    std::string session_model_path = model_path;
+
+    if (provider == Provider::Qnn) {
+      const QnnModelPath qnn =
+          resolve_qnn_model_path(params.qnn_context_cache_path, model_path,
+                                 params.qnn_context_cache_enable);
+      session_model_path = qnn.model_path;
+      config.qnn_context_cache_enable = qnn.generate;
+      config.qnn_context_cache_path = qnn.context_path;
+
+      if (qnn.generate) {
+        YOLO_LOG_INFO("QNN context cache: compiling %s -> %s",
+                      session_model_path.c_str(), qnn.context_path.c_str());
+      } else if (!qnn.model_path.empty() && qnn.model_path != model_path) {
+        YOLO_LOG_INFO("QNN context cache: loading %s", qnn.model_path.c_str());
+      }
+    }
 
     if (provider == Provider::TensorRt && config.trt_engine_cache_enable) {
       config.trt_engine_cache_path =
@@ -187,8 +206,8 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
 
     try {
       this->session_options = build_session_options(provider, config);
-      this->session =
-          Ort::Session(this->env, model_path.c_str(), this->session_options);
+      this->session = Ort::Session(this->env, session_model_path.c_str(),
+                                   this->session_options);
       this->active_provider_ = provider_name(provider);
       break;
     } catch (const Ort::Exception &e) {
@@ -378,6 +397,9 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
                 params.trt_fp16_enable ? "on" : "off",
                 params.trt_engine_cache_enable ? "on" : "off",
                 trt_cache_suffix.c_str());
+  YOLO_LOG_INFO("  qnn: htp_performance_mode='%s'  context_cache=%s",
+                params.qnn_htp_performance_mode.c_str(),
+                params.qnn_context_cache_enable ? "on" : "off");
   YOLO_LOG_INFO("  cuda_graph=%s", this->cuda_graph_ ? "on" : "off");
   YOLO_LOG_INFO("  input: name='%s' shape=%s dtype=%s  channel_order=%s  "
                 "batch=%s  image=%dx%d",

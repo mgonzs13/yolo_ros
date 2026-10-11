@@ -2,8 +2,8 @@
 # Copyright (c) 2026 Alejandro González Cantón
 # SPDX-License-Identifier: MIT
 #
-# Build ONNX Runtime (any version) from source, for the CPU or CUDA (+TensorRT)
-# execution provider, and package it in the flat layout consumed by
+# Build ONNX Runtime (any version) from source, for the CPU, CUDA (+TensorRT) or
+# QNN (HTP) execution provider, and package it in the flat layout consumed by
 # yolo_onnxruntime_vendor (point that package at the result with
 # -DONNXRUNTIME_ROOT=<output_dir>).
 #
@@ -11,17 +11,20 @@
 # prepared by scripts/prepare_offline_bundle.sh (see that script for the
 # host-side workflow).
 #
-# Usage: scripts/build_ort_from_source.sh <ort_version> [output_dir] [options]
+# Usage: scripts/build_ort_from_source.sh <ort_version> [output_dir]
+#   [--ep cpu|cuda|qnn] [--qnn-home DIR] [--cuda-arch NN] [--rebuild] [--dry-run]
 #   ort_version   ONNX Runtime release to build, e.g. 1.6.0 or 1.20.2
 #                 (the git tag is v<ort_version>).
 #   output_dir    defaults to <package>/ort-<ort_version>
 #
 # Options:
-#   --ep <cpu|cuda>   execution provider to build (default: cpu). "cuda" also
-#                     builds the TensorRT provider, matching the node's
-#                     TensorRT -> CUDA -> CPU provider chain.
-#   --cuda-arch <NN>  CUDA architecture for --ep cuda (Jetson Xavier 72,
-#                     Orin 87). Auto-detected with nvidia-smi when available.
+#   --ep <cpu|cuda|qnn>   execution provider to build (default: cpu). "cuda" also
+#                         builds the TensorRT provider, matching the node's
+#                         TensorRT -> CUDA -> CPU provider chain; "qnn" builds
+#                         the QNN execution provider with the HTP backend.
+#   --qnn-home DIR        QAIRT/QNN SDK prefix (contains include/QNN/QnnInterface.h)
+#   --cuda-arch <NN>      CUDA architecture for --ep cuda (Jetson Xavier 72,
+#                         Orin 87). Auto-detected with nvidia-smi when available.
 #   --rebuild         ignore any previous build and build again.
 #   --dry-run         print the ONNX Runtime build command and exit.
 #   -h, --help        show this help.
@@ -36,6 +39,7 @@
 #   otherwise                 git clone --recursive (requires internet)
 #
 # Env overrides: CUDA_HOME, CUDNN_HOME, TENSORRT_HOME, ORT_BUILD_DIR,
+#   QNN_HOME / QNN_SDK_ROOT / QAIRT_SDK_ROOT (QNN SDK prefix for --ep qnn),
 #   ORT_PARALLEL (concurrent compile jobs; unset = all cores),
 #   ORT_CMAKE_EXTRA_DEFINES (space-separated extra --cmake_extra_defines; for
 #   --ep cuda it defaults to "onnxruntime_USE_FLASH_ATTENTION=OFF
@@ -48,7 +52,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $(basename "$0") <ort_version> [output_dir] [--ep cpu|cuda] [--cuda-arch NN] [--rebuild] [--dry-run]" >&2
+  echo "usage: $(basename "$0") <ort_version> [output_dir] [--ep cpu|cuda|qnn] [--qnn-home DIR] [--cuda-arch NN] [--rebuild] [--dry-run]" >&2
 }
 
 help() {
@@ -63,9 +67,12 @@ usage: $(basename "$0") <ort_version> [output_dir] [options]
   output_dir    defaults to <package>/ort-<ort_version>
 
 options:
-  --ep <cpu|cuda>   execution provider to build (default: cpu). "cuda" also
-                    builds the TensorRT provider, matching the node's
-                    TensorRT -> CUDA -> CPU provider chain.
+  --ep <cpu|cuda|qnn> execution provider to build (default: cpu). "cuda" also
+                      builds the TensorRT provider, matching the node's
+                      TensorRT -> CUDA -> CPU provider chain; "qnn" builds the
+                      QNN execution provider with the HTP backend.
+  --qnn-home DIR    QAIRT/QNN SDK prefix (contains include/QNN/QnnInterface.h);
+                    defaults to \$QNN_HOME, \$QNN_SDK_ROOT, \$QAIRT_SDK_ROOT or /usr
   --cuda-arch <NN>  CUDA architecture for --ep cuda (Jetson Xavier 72,
                     Orin 87). Auto-detected with nvidia-smi when available.
   --rebuild         ignore any previous build and build again.
@@ -74,6 +81,7 @@ options:
 
 environment:
   ORT_EP / ORT_CUDA_ARCH          fallbacks for --ep / --cuda-arch
+  QNN_HOME / QNN_SDK_ROOT / QAIRT_SDK_ROOT   QNN SDK prefix fallbacks for --ep qnn
   ORT_SOURCE_DIR                  existing onnxruntime source tree (build.sh)
   ORT_SOURCE_TARBALL              tarball whose top level contains onnxruntime/
   ORT_BUILD_DIR                   work dir (default <package>/ort-<version>-build)
@@ -90,6 +98,7 @@ EOF
 ORIG_ARGS=("$@")
 EP="${ORT_EP:-cpu}"
 CUDA_ARCH="${ORT_CUDA_ARCH:-}"
+QNN_HOME="${QNN_HOME:-${QNN_SDK_ROOT:-${QAIRT_SDK_ROOT:-}}}"
 REBUILD=0
 DRY_RUN=0
 positional=()
@@ -101,6 +110,9 @@ while [[ $# -gt 0 ]]; do
     --cuda-arch)
       [[ $# -ge 2 ]] || { echo "error: --cuda-arch needs a value" >&2; exit 2; }
       CUDA_ARCH="$2"; shift 2 ;;
+    --qnn-home)
+      [[ $# -ge 2 ]] || { echo "error: --qnn-home needs a value" >&2; exit 2; }
+      QNN_HOME="$2"; shift 2 ;;
     --rebuild) REBUILD=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) help; exit 0 ;;
@@ -130,9 +142,15 @@ if [[ ${#positional[@]} -gt 2 ]]; then
 fi
 
 case "${EP}" in
-  cpu|cuda) ;;
-  *) echo "error: unsupported --ep '${EP}' (supported: cpu, cuda)" >&2; exit 2 ;;
+  cpu|cuda|qnn) ;;
+  *) echo "error: unsupported --ep '${EP}' (supported: cpu, cuda, qnn)" >&2; exit 2 ;;
 esac
+
+# QNN_HOME only participates in qnn builds (mirrors CUDA_ARCH); ignore it
+# otherwise so a stale environment does not perturb the reuse stamp.
+if [[ "${EP}" != "qnn" ]]; then
+  QNN_HOME=""
+fi
 
 case "${ORT_DISABLE_UNUSED_OPS:-1}" in
   0|1) ;;
@@ -159,6 +177,20 @@ if [[ "${EP}" != "cuda" ]]; then
 elif [[ -n "${CUDA_ARCH}" && ! "${CUDA_ARCH}" =~ ^[0-9]+(;[0-9]+)*$ ]]; then
   echo "error: --cuda-arch must be a compute capability like 72 or 87, got '${CUDA_ARCH}'" >&2
   exit 2
+fi
+
+# --- QNN SDK (only for the qnn EP) --------------------------------------------
+# On the VENTUNO Q the QNN headers and libraries are part of the system image
+# (/usr/include/QNN, /usr/lib); a QAIRT SDK prefix also works.
+if [[ "${EP}" == "qnn" ]]; then
+  QNN_HOME="${QNN_HOME:-/usr}"
+  [[ -f "${QNN_HOME}/include/QNN/QnnInterface.h" ]] || {
+    echo "error: QNN headers not found at '${QNN_HOME}/include/QNN/QnnInterface.h'." >&2
+    echo "       Point --qnn-home (or QNN_HOME/QNN_SDK_ROOT/QAIRT_SDK_ROOT) at the" >&2
+    echo "       QAIRT/QNN SDK prefix, or /usr on a board that ships the QNN runtime." >&2
+    exit 1
+  }
+  echo "==> QNN SDK: ${QNN_HOME}"
 fi
 
 # --- Default CMake defines ----------------------------------------------------
@@ -210,6 +242,7 @@ if [[ ${REBUILD} -eq 0 && -f "${OUT_DIR}/lib/libonnxruntime.so" && -f "${STAMP}"
    && grep -qx "ep=${EP}" "${STAMP}" \
    && grep -qx "arch=${ARCH}" "${STAMP}" \
    && grep -qx "cuda_arch=${CUDA_ARCH}" "${STAMP}" \
+   && grep -qx "qnn_home=${QNN_HOME:-}" "${STAMP}" \
    && grep -qx "extra_defines=${ORT_CMAKE_EXTRA_DEFINES:-}" "${STAMP}"; then
   echo "==> Reusing existing ONNX Runtime ${ORT_VERSION} build (${EP}) at ${OUT_DIR}"
   echo "    (pass --rebuild to force a rebuild)"
@@ -376,6 +409,8 @@ fi
 if [[ "${EP}" == "cuda" ]]; then
   echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda: CUDA ${CUDA_HOME}," \
     "TRT ${TRT_HOME}, arch ${CUDA_ARCH})"
+elif [[ "${EP}" == "qnn" ]]; then
+  echo "==> Building ONNX Runtime ${ORT_VERSION} (qnn: HTP, SDK ${QNN_HOME})"
 else
   echo "==> Building ONNX Runtime ${ORT_VERSION} (cpu)"
 fi
@@ -438,6 +473,14 @@ if [[ "${EP}" == "cuda" ]]; then
     --use_cuda --cuda_home "${CUDA_HOME}" --cudnn_home "${CUDNN_HOME}"
     --use_tensorrt --tensorrt_home "${TRT_HOME}"
   )
+fi
+if [[ "${EP}" == "qnn" ]]; then
+  if ! supports_build_flag --use_qnn; then
+    echo "error: ONNX Runtime ${ORT_VERSION} does not support --use_qnn" >&2
+    echo "       (QNN EP needs ONNX Runtime >= 1.15; use 1.20.0 or newer)." >&2
+    exit 1
+  fi
+  build_cmd+=(--use_qnn --qnn_home "${QNN_HOME}")
 fi
 # build.py < 1.16 defines --cmake_extra_defines without action="append", so a
 # repeated flag would overwrite the previous values; pass them all at once.
@@ -508,6 +551,45 @@ if [[ ${#built_libs[@]} -eq 0 ]]; then
   exit 1
 fi
 cp -av "${built_libs[@]}" "${OUT_DIR}/lib/"
+if [[ "${EP}" == "qnn" ]]; then
+  # QAIRT SDKs ship the same library basenames under several
+  # lib/<target-platform> dirs; pick this machine's architecture, prefer
+  # glibc/Linux toolchains over android/oe, and dedupe by basename so cp
+  # never sees two sources for one destination.
+  shopt -s nullglob
+  qnn_candidates=(
+    "${QNN_HOME}"/lib/"${ARCH}"*ubuntu*/libQnn*.so
+    "${QNN_HOME}"/lib/"${ARCH}"*linux*/libQnn*.so
+    "${QNN_HOME}"/lib/libQnn*.so
+    "${QNN_HOME}"/lib/"${ARCH}"*/libQnn*.so
+    "${QNN_HOME}"/lib/*/libQnn*.so
+  )
+  shopt -u nullglob
+
+  declare -A qnn_seen=()
+  qnn_libs=()
+  for qnn_lib in "${qnn_candidates[@]}"; do
+    qnn_base="$(basename "${qnn_lib}")"
+    [[ -n "${qnn_seen[${qnn_base}]:-}" ]] && continue
+    qnn_seen["${qnn_base}"]="${qnn_lib}"
+    qnn_libs+=("${qnn_lib}")
+  done
+
+  if [[ ${#qnn_libs[@]} -gt 0 ]]; then
+    cp -av "${qnn_libs[@]}" "${OUT_DIR}/lib/"
+  else
+    echo "warning: no libQnn*.so under ${QNN_HOME}/lib; ensure the QNN runtime" \
+         "is available at run time (system libraries or qnn_backend_path)" >&2
+  fi
+
+  # Hexagon DSP skeletons (unique basenames, safe to copy wholesale).
+  shopt -s nullglob
+  qnn_skel_libs=("${QNN_HOME}"/lib/hexagon-v*/unsigned/libQnn*.so)
+  shopt -u nullglob
+  if [[ ${#qnn_skel_libs[@]} -gt 0 ]]; then
+    cp -av "${qnn_skel_libs[@]}" "${OUT_DIR}/lib/"
+  fi
+fi
 # The vendor CMakeLists requires lib/libonnxruntime.so (the unversioned
 # symlink); fail here rather than at colcon configure time.
 if [[ ! -e "${OUT_DIR}/lib/libonnxruntime.so" ]]; then
@@ -557,6 +639,7 @@ done
   echo "ep=${EP}"
   echo "arch=${ARCH}"
   echo "cuda_arch=${CUDA_ARCH}"
+  echo "qnn_home=${QNN_HOME:-}"
   echo "extra_defines=${ORT_CMAKE_EXTRA_DEFINES:-}"
 } > "${STAMP}"
 

@@ -123,9 +123,9 @@ struct YoloParams {
   std::string cache_dir; // HF cache dir, default ~/.cache/huggingface/hub
   /// @brief Re-download the model even when a cached copy exists.
   bool force_download = false; // re-download even if cached
-  /// @brief Execution provider preference: "auto" (CUDA -> CPU fallback chain)
-  /// or "tensorrt"/"trt" (TensorRT -> CUDA -> CPU), "cuda" (CUDA -> CPU),
-  /// "cpu" (case-insensitive).
+  /// @brief Execution provider preference: "auto" (CUDA -> CPU fallback chain),
+  /// "qnn" (QNN -> CPU), "tensorrt"/"trt" (TensorRT -> CUDA -> CPU), "cuda"
+  /// (CUDA -> CPU), "cpu" (case-insensitive).
   std::string provider = "auto";
   /// @brief Execution device; its ordinal (e.g. "cuda:0", "trt:1", "1") is
   /// passed as device_id to the CUDA and TensorRT execution providers.
@@ -141,6 +141,14 @@ struct YoloParams {
   /// @brief TensorRT: engine cache base directory (empty ->
   /// ~/.cache/yolo_ros/trt_engines).
   std::string trt_engine_cache_path;
+  /// @brief QNN (Hexagon NPU): HTP performance mode (e.g. "burst",
+  /// "sustained_high_performance").
+  std::string qnn_htp_performance_mode = "burst";
+  /// @brief QNN: cache the compiled context under qnn_context_cache_path.
+  bool qnn_context_cache_enable = true;
+  /// @brief QNN: context cache base directory (empty ->
+  /// ~/.cache/yolo_ros/qnn_context).
+  std::string qnn_context_cache_path;
   /// @brief Detection confidence threshold in [0, 1].
   float threshold;
   /// @brief IoU threshold for the C++ NMS.
