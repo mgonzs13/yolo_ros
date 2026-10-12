@@ -316,6 +316,11 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 - **trt_engine_cache_enable**: Persist built TensorRT engines (default: `true`).
 - **trt_engine_cache_path**: TensorRT engine cache base directory; empty → `~/.cache/yolo_ros/trt_engines/<model>` (default: empty).
 - **qnn_htp_performance_mode**: QNN only — HTP performance mode: `burst` (default), `balanced`, `sustained_high_performance`, `power_saver`, ... (see the QNN HTP documentation).
+- **qnn_htp_arch**: QNN only — Hexagon HTP architecture version (default: `75`, the VENTUNO Q; e.g. `73`, `79`, `81`). Must match the board and the model's compile target.
+- **qnn_soc_model**: QNN only — QNN SoC model number (default: `82`, QCS8275). Change it together with `qnn_htp_arch` when targeting another Qualcomm board.
+- **qnn_backend_path**: QNN only — HTP backend library the EP loads (default: `libQnnHtp.so`, resolved from the loader path; empty lets ONNX Runtime resolve its own backend). Point it at `<sdk>/lib/<arch>/libQnnHtp.so` for a QAIRT SDK prefix.
+- **qnn_offload_graph_io_quantization**: QNN only — offload graph I/O quant/dequant to the CPU EP, keeping graph inputs/outputs float32 (default: `true`).
+- **qnn_enable_htp_fp16_precision**: QNN only — finalize float32 graphs at fp16 precision on the HTP, which is what lets non-quantized models run on the NPU (default: `false`; quantized models keep it off).
 - **qnn_context_cache_enable**: QNN only — compile a plain quantized (QDQ) model once on first use and cache the serialized QNN context (default: `true`); disable it for models that already embed a context binary (e.g. Ultralytics `*_qnn.onnx` exports).
 - **qnn_context_cache_path**: QNN only — context cache base directory; empty → `~/.cache/yolo_ros/qnn_context/<model>-<fingerprint>.ctx.onnx` where `<model>` is the model file stem (default: empty). The fingerprint covers the model's path/size/mtime, so updated or same-named models compile a fresh context; delete the directory after a QAIRT/OS upgrade or to reclaim space from old fingerprints.
 - **threshold**: Detection confidence threshold (default: `0.7`).

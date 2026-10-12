@@ -176,6 +176,12 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
     config.trt_fp16_enable = params.trt_fp16_enable;
     config.trt_engine_cache_enable = params.trt_engine_cache_enable;
     config.qnn_htp_performance_mode = params.qnn_htp_performance_mode;
+    config.qnn_htp_arch = params.qnn_htp_arch;
+    config.qnn_soc_model = params.qnn_soc_model;
+    config.qnn_backend_path = params.qnn_backend_path;
+    config.qnn_offload_graph_io_quantization =
+        params.qnn_offload_graph_io_quantization;
+    config.qnn_enable_htp_fp16_precision = params.qnn_enable_htp_fp16_precision;
 
     std::string session_model_path = model_path;
 

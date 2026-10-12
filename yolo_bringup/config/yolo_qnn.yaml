@@ -1,6 +1,6 @@
 # VENTUNO Q preset: detection and tracking on the Hexagon NPU (QCS8275).
 # The QNN artifact is exported with Ultralytics
-# (`model.export(format="qnn", name="iq-8275", imgsz=640)`); the exported
+# (`model.export(format="qnn", name="75", imgsz=640,480)`); the exported
 # *_qnn.onnx embeds the compiled HTP context binary, so nothing is compiled on
 # the board. Point model_path at the exported file (model_repo is empty so the
 # local file wins; it can also be overridden as model_path:=... on the command
@@ -24,6 +24,8 @@
       device: qnn:0
       max_batch_size: 1
       qnn_htp_performance_mode: burst
+      # Hexagon target defaults to the VENTUNO Q (HTP v75, QCS8275/SoC 82);
+      # override qnn_htp_arch/qnn_soc_model for another board.
       qnn_context_cache_enable: false
       cameras: ["cam0"]
     tracking:

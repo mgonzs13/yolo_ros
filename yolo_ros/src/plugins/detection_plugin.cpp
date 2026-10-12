@@ -37,6 +37,13 @@ void DetectionPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
   node.declare_parameter<std::string>(prefix + "trt_engine_cache_path", "");
   node.declare_parameter<std::string>(prefix + "qnn_htp_performance_mode",
                                       "burst");
+  node.declare_parameter<std::string>(prefix + "qnn_htp_arch", "75");
+  node.declare_parameter<std::string>(prefix + "qnn_soc_model", "82");
+  node.declare_parameter<std::string>(prefix + "qnn_backend_path",
+                                      "libQnnHtp.so");
+  node.declare_parameter<bool>(prefix + "qnn_offload_graph_io_quantization",
+                               true);
+  node.declare_parameter<bool>(prefix + "qnn_enable_htp_fp16_precision", false);
   node.declare_parameter<bool>(prefix + "qnn_context_cache_enable", true);
   node.declare_parameter<std::string>(prefix + "qnn_context_cache_path", "");
   node.declare_parameter<float>(prefix + "threshold", 0.7f);
@@ -72,6 +79,15 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
                      this->yolo_params_.trt_engine_cache_path);
   node.get_parameter(prefix + "qnn_htp_performance_mode",
                      this->yolo_params_.qnn_htp_performance_mode);
+  node.get_parameter(prefix + "qnn_htp_arch", this->yolo_params_.qnn_htp_arch);
+  node.get_parameter(prefix + "qnn_soc_model",
+                     this->yolo_params_.qnn_soc_model);
+  node.get_parameter(prefix + "qnn_backend_path",
+                     this->yolo_params_.qnn_backend_path);
+  node.get_parameter(prefix + "qnn_offload_graph_io_quantization",
+                     this->yolo_params_.qnn_offload_graph_io_quantization);
+  node.get_parameter(prefix + "qnn_enable_htp_fp16_precision",
+                     this->yolo_params_.qnn_enable_htp_fp16_precision);
   node.get_parameter(prefix + "qnn_context_cache_enable",
                      this->yolo_params_.qnn_context_cache_enable);
   node.get_parameter(prefix + "qnn_context_cache_path",

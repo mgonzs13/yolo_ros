@@ -140,6 +140,11 @@ TEST_F(DetectionPluginTest, DeclaresQnnParams) {
   yolo_ros::DetectionPlugin plugin;
   plugin.declare_params(*node, "det.");
   EXPECT_TRUE(node->has_parameter("det.qnn_htp_performance_mode"));
+  EXPECT_TRUE(node->has_parameter("det.qnn_htp_arch"));
+  EXPECT_TRUE(node->has_parameter("det.qnn_soc_model"));
+  EXPECT_TRUE(node->has_parameter("det.qnn_backend_path"));
+  EXPECT_TRUE(node->has_parameter("det.qnn_offload_graph_io_quantization"));
+  EXPECT_TRUE(node->has_parameter("det.qnn_enable_htp_fp16_precision"));
   EXPECT_TRUE(node->has_parameter("det.qnn_context_cache_enable"));
   EXPECT_TRUE(node->has_parameter("det.qnn_context_cache_path"));
 }

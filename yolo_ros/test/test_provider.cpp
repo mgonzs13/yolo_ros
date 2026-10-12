@@ -348,11 +348,15 @@ TEST(QnnProviderOptions, HonorsOverrides) {
   ProviderConfig config;
   config.qnn_backend_path = "/opt/qairt/lib/libQnnHtp.so";
   config.qnn_htp_performance_mode = "sustained_high_performance";
+  config.qnn_htp_arch = "73";
+  config.qnn_soc_model = "79";
   config.qnn_offload_graph_io_quantization = false;
   config.qnn_enable_htp_fp16_precision = true;
   const auto options = qnn_provider_options(config);
   EXPECT_EQ(options.at("backend_path"), "/opt/qairt/lib/libQnnHtp.so");
   EXPECT_EQ(options.at("htp_performance_mode"), "sustained_high_performance");
+  EXPECT_EQ(options.at("htp_arch"), "73");
+  EXPECT_EQ(options.at("soc_model"), "79");
   EXPECT_EQ(options.at("offload_graph_io_quantization"), "0");
   EXPECT_EQ(options.at("enable_htp_fp16_precision"), "1");
 }
