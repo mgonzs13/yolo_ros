@@ -95,6 +95,20 @@ For `provider: tensorrt`, the ONNX Runtime builds need the TensorRT **10** runti
 
 `-DONNX_GPU=ON` detects the CUDA major (`CUDA_VERSION` env, `$CUDA_HOME/version.json`, `/usr/local/cuda*/version.json`, then `nvcc`) and downloads the matching ONNX Runtime GPU build with its cuDNN major; the host also needs an NVIDIA driver and the same CUDA series at run time. Override the selection with `-DONNX_CUDA_MAJOR=11|12|13`, `-DONNXRUNTIME_VERSION=...`, `-DONNX_GPU_SUFFIX=...` or a full `-DONNXRUNTIME_URL=...`. TensorRT is opt-in: the default `provider: auto` runs on the CUDA execution provider and falls back to CPU; set `provider: tensorrt` to prefer the TensorRT EP (TensorRT → CUDA → CPU) when it is installed. `provider` and `device` are chosen at runtime — see [Parameters](#parameters). The prebuilt GPU tarballs are x64-only and cover only the table above; on aarch64 or for any other CUDA/cuDNN combination build from source (see the [build guide](docs/build.md)).
 
+### QNN (Hexagon NPU, VENTUNO Q)
+
+The QNN execution provider is **not in the prebuilt ONNX Runtime**, so it always needs a source build. On the VENTUNO Q: install the board's QAIRT packages, build ONNX Runtime with `--ep qnn` and point colcon at the prefix — details, version notes and troubleshooting are in the [QNN build guide](docs/build.md#qnn-hexagon-npu-onnx-runtime-build):
+
+```shell
+sudo apt install qairt-libs qairt-dsp-binaries qairt-headers
+
+yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.28.0 --ep qnn --qnn-home /usr
+colcon build --symlink-install \
+    --cmake-args -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/yolo_onnxruntime_vendor/ort-1.28.0
+```
+
+Then export a QNN model with Ultralytics (`model.export(format="qnn", name="iq-8275")`) and launch the Hexagon NPU preset (`config/yolo_qnn.yaml`) — see the [QNN model guide](docs/models.md#qualcomm-qnn-hexagon-npu).
+
 Launch from the workspace root so relative source paths resolve.
 
 ## Docker
@@ -175,7 +189,9 @@ Each camera declares its `rgb_topic` and optionally the `depth_topic` + `depth_i
 
 > **YAML note (Jazzy)**: never write an empty sequence in the params file — `cameras: []`, `plugins: []`. rcl's YAML parser produces no value for `[]` on Jazzy, so the node fails to start. Omit the key instead: an omitted plugin `cameras` key means "all defined cameras" (or list every camera explicitly).
 
-Pick the model with `model_filename:=` (a file in the Hugging Face mirror set by `model_repo`) or `model_path:=` (a local path). The task is inferred from the file name (`model_type: auto`): `-seg`/`segment` → segmentation, `-pose`/`pose` → pose, `-obb`/`obb` → OBB, `-cls`/`classify` → classification, anything else detection. Each task also ships a preset params file (`config/yolo_segment.yaml`, `yolo_pose.yaml`, `yolo_obb.yaml`, `yolo_classify.yaml`) that pins `model_type` and task-specific tuning, plus the VENTUNO Q preset (`config/yolo_qnn.yaml`) that selects the Hexagon NPU provider — pass one with `params_file:=`:
+Pick the model with `model_filename:=` (a file in the Hugging Face mirror set by `model_repo`) or `model_path:=` (a local path). The task is inferred from the file name (`model_type: auto`): `-seg`/`segment` → segmentation, `-pose`/`pose` → pose, `-obb`/`obb` → OBB, `-cls`/`classify` → classification, anything else detection.
+
+Each task ships a preset params file that pins `model_type` and task-specific tuning — `config/yolo_segment.yaml`, `yolo_pose.yaml`, `yolo_obb.yaml`, `yolo_classify.yaml` — plus the VENTUNO Q Hexagon NPU preset (`config/yolo_qnn.yaml`, see [QNN](#qnn-hexagon-npu-ventuno-q)). Pass one with `params_file:=`:
 
 ```shell
 ros2 launch yolo_bringup yolo.launch.py params_file:=$(ros2 pkg prefix yolo_bringup)/share/yolo_bringup/config/yolo_segment.yaml
@@ -315,14 +331,20 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 - **trt_fp16_enable**: TensorRT FP16 precision (default: `true`).
 - **trt_engine_cache_enable**: Persist built TensorRT engines (default: `true`).
 - **trt_engine_cache_path**: TensorRT engine cache base directory; empty → `~/.cache/yolo_ros/trt_engines/<model>` (default: empty).
-- **qnn_htp_performance_mode**: QNN only — HTP performance mode: `burst` (default), `balanced`, `sustained_high_performance`, `power_saver`, ... (see the QNN HTP documentation).
-- **qnn_htp_arch**: QNN only — Hexagon HTP architecture version (default: `75`, the VENTUNO Q; e.g. `73`, `79`, `81`). Must match the board and the model's compile target.
-- **qnn_soc_model**: QNN only — QNN SoC model number (default: `82`, QCS8275). Change it together with `qnn_htp_arch` when targeting another Qualcomm board.
-- **qnn_backend_path**: QNN only — HTP backend library the EP loads (default: `libQnnHtp.so`, resolved from the loader path; empty lets ONNX Runtime resolve its own backend). Point it at `<sdk>/lib/<arch>/libQnnHtp.so` for a QAIRT SDK prefix.
-- **qnn_offload_graph_io_quantization**: QNN only — offload graph I/O quant/dequant to the CPU EP, keeping graph inputs/outputs float32 (default: `true`).
-- **qnn_enable_htp_fp16_precision**: QNN only — finalize float32 graphs at fp16 precision on the HTP, which is what lets non-quantized models run on the NPU (default: `false`; quantized models keep it off).
-- **qnn_context_cache_enable**: QNN only — compile a plain quantized (QDQ) model once on first use and cache the serialized QNN context (default: `true`); disable it for models that already embed a context binary (e.g. Ultralytics `*_qnn.onnx` exports).
-- **qnn_context_cache_path**: QNN only — context cache base directory; empty → `~/.cache/yolo_ros/qnn_context/<model>-<fingerprint>.ctx.onnx` where `<model>` is the model file stem (default: empty). The fingerprint covers the model's path/size/mtime, so updated or same-named models compile a fresh context; delete the directory after a QAIRT/OS upgrade or to reclaim space from old fingerprints.
+
+QNN options (`provider: qnn`; the defaults target the VENTUNO Q, QCS8275 / HTP v75):
+
+| Parameter                           | Default        | Description                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qnn_htp_performance_mode`          | `burst`        | HTP performance mode: `burst`, `balanced`, `sustained_high_performance`, `power_saver`, ... (see the QNN HTP documentation).                                                                                                                                                                                                                       |
+| `qnn_htp_arch`                      | `75`           | Hexagon HTP architecture version; must match the board and the model's compile target (e.g. `73`, `79`, `81`).                                                                                                                                                                                                                                     |
+| `qnn_soc_model`                     | `82`           | QNN SoC model number (QCS8275); change it together with `qnn_htp_arch` when targeting another Qualcomm board.                                                                                                                                                                                                                                      |
+| `qnn_backend_path`                  | `libQnnHtp.so` | HTP backend library the EP loads, resolved from the loader path; empty lets ONNX Runtime resolve its own backend. Point it at `<sdk>/lib/<arch>/libQnnHtp.so` for a QAIRT SDK prefix.                                                                                                                                                              |
+| `qnn_offload_graph_io_quantization` | `true`         | Offload graph I/O quant/dequant to the CPU EP, keeping graph inputs/outputs float32.                                                                                                                                                                                                                                                               |
+| `qnn_enable_htp_fp16_precision`     | `false`        | Finalize float32 graphs at fp16 precision on the HTP, which is what lets non-quantized models run on the NPU; quantized models keep it off.                                                                                                                                                                                                        |
+| `qnn_context_cache_enable`          | `true`         | Compile a plain quantized (QDQ) model once on first use and cache the serialized QNN context; disable it for models that already embed a context binary (e.g. Ultralytics `*_qnn.onnx` exports).                                                                                                                                                   |
+| `qnn_context_cache_path`            | empty          | Context cache base directory; empty → `~/.cache/yolo_ros/qnn_context/<model>-<fingerprint>.ctx.onnx` where `<model>` is the model file stem. The fingerprint covers the model's path/size/mtime, so updated or same-named models compile a fresh context; delete the directory after a QAIRT/OS upgrade or to reclaim space from old fingerprints. |
+
 - **threshold**: Detection confidence threshold (default: `0.7`).
 - **iou**: IoU threshold for the C++ NMS applied to raw-output exports (detection without a baked-NMS head, segmentation, pose and OBB); it has no effect on exports that bake NMS into the graph (default: `0.45`).
 - **max_det**: Maximum number of detections per image (default: `300`).

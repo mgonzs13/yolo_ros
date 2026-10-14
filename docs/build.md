@@ -1,6 +1,15 @@
 # Build
 
-[Installation](../README.md#installation) covers CPU everywhere and CUDA/TensorRT on x64. Use this guide when you need a different ONNX Runtime build or CUDA/TensorRT on aarch64.
+[Installation](../README.md#installation) covers CPU everywhere, CUDA/TensorRT on x64 and a QNN quick start for the VENTUNO Q. Use this guide for the prebuilt GPU selection, custom ONNX Runtime builds (including the QNN / Hexagon NPU), CUDA/TensorRT on aarch64 and the fast rebuild loop.
+
+## Contents
+
+- [Prebuilt GPU selection](#prebuilt-gpu-selection)
+- [Custom ONNX Runtime](#custom-onnx-runtime)
+- [QNN (Hexagon NPU) ONNX Runtime build](#qnn-hexagon-npu-onnx-runtime-build)
+- [Source build knobs](#source-build-knobs)
+- [CUDA / TensorRT on aarch64 (Jetson, offline build)](#cuda--tensorrt-on-aarch64-jetson-offline-build)
+- [Fast C++-only rebuild loop](#fast-c-only-rebuild-loop)
 
 ## Prebuilt GPU selection
 
@@ -131,30 +140,38 @@ A source build is heavy (tens of minutes and several GB of RAM). It reuses a pre
 
 ## QNN (Hexagon NPU) ONNX Runtime build
 
-The QNN execution provider is not part of the prebuilt tarballs; build ONNX
-Runtime from source on the target (the VENTUNO Q does not ship QAIRT by
-default, so install the QNN runtime and headers from its apt repository
-first):
+The QNN execution provider is **not included in the prebuilt ONNX Runtime tarballs**, so producing it always needs a source build with `--ep qnn`. On the VENTUNO Q the QAIRT packages are not installed by default — install them first:
+
+| Package              | Provides                                                          |
+| -------------------- | ----------------------------------------------------------------- |
+| `qairt-libs`         | QNN backend runtime libraries in `/usr/lib` (`libQnnHtp.so`, ...) |
+| `qairt-dsp-binaries` | Hexagon DSP/HTP runtime binaries                                  |
+| `qairt-headers`      | QNN headers in `/usr/include/QNN` for the source build            |
 
 ```bash
-# Board prerequisites (VENTUNO Q): QNN runtime libraries and headers
 sudo apt update
 sudo apt install qairt-libs qairt-dsp-binaries qairt-headers
-# -> /usr/lib/libQnnHtp.so and /usr/include/QNN/QnnInterface.h
+```
 
+Then build ONNX Runtime with the QNN EP and point colcon at the prefix:
+
+```bash
 # ONNX Runtime prefix (repository root)
 yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.28.0 --ep qnn --qnn-home /usr
+
 # colcon (workspace root)
 colcon build --symlink-install \
   --cmake-args -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/yolo_onnxruntime_vendor/ort-1.28.0
 ```
 
-`--qnn-home` defaults to `$QNN_HOME`, `$QNN_SDK_ROOT`, `$QAIRT_SDK_ROOT` or
-`/usr`; it must contain `include/QNN/QnnInterface.h` (on the VENTUNO Q the
-`qairt-headers` package provides it, while `qairt-libs`/`qairt-dsp-binaries`
-provide the runtime; a QAIRT SDK prefix also works). The resulting context
-binaries and QNN libraries are tied to the board image's QAIRT version:
-rebuild and clear `~/.cache/yolo_ros/qnn_context` when the image changes.
+Version notes:
+
+- **1.28.0 is recommended.** The built-in QNN EP that `provider: qnn` uses exists in 1.21.0–1.23.x and again from 1.25.0 — **1.24.0** is the only release without it, so avoid it. Fall back to **1.23.2** if 1.28.0 fails against the board's QAIRT headers.
+- 1.21.0+ also avoids the Eigen build failures that 1.20.x can hit with newer toolchains (Ubuntu 24.04).
+
+`--qnn-home` defaults to `$QNN_HOME`, `$QNN_SDK_ROOT`, `$QAIRT_SDK_ROOT` or `/usr`; it must contain `include/QNN/QnnInterface.h` (the `qairt-headers` package, or a QAIRT SDK prefix). The runtime libraries come from `qairt-libs`/`qairt-dsp-binaries` or the QAIRT SDK (`lib/aarch64-ubuntu*/libQnn*.so`). Context binaries and QNN libraries are tied to the board image's QAIRT version: after an OS/firmware upgrade, rebuild ONNX Runtime and clear `~/.cache/yolo_ros/qnn_context`.
+
+For exporting the QNN model and running it with the VENTUNO Q preset, see the [QNN model guide](models.md#qualcomm-qnn-hexagon-npu).
 
 ## Source build knobs
 
