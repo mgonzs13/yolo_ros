@@ -18,8 +18,8 @@
       image_reliability: 1
     detection:
       plugin: yolo_ros/DetectionPlugin
-      model_repo: ""
-      model_path: /path/to/yolo26s_qnn.onnx
+      model_repo: unileon-robotics/YOLO26-ONNX
+      model_filename: qnn/yolo26s_qnn.onnx
       provider: qnn
       device: qnn:0
       max_batch_size: 1
