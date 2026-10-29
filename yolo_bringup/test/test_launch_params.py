@@ -248,3 +248,30 @@ def test_non_cli_catalogue_params_are_vectors_in_cpp(plugin_type):
             f"{plugin_type}: non-CLI parameter {spec.name!r} must be declared "
             f"as std::vector in C++, got {declared.get(spec.name)!r}"
         )
+
+
+def test_qnn_overrides_are_detection_only():
+    context = FakeContext(
+        {
+            "qnn_htp_performance_mode": "sustained_high_performance",
+            "qnn_htp_arch": "73",
+            "qnn_soc_model": "79",
+            "qnn_backend_path": "/opt/qairt/lib/libQnnHtp.so",
+            "qnn_offload_graph_io_quantization": "false",
+            "qnn_enable_htp_fp16_precision": "true",
+            "qnn_context_cache_enable": "false",
+            "qnn_context_cache_path": "/tmp/qnn",
+        }
+    )
+    overrides = build_overrides(context, DET)
+    assert overrides["detection.qnn_htp_performance_mode"] == "sustained_high_performance"
+    assert overrides["detection.qnn_htp_arch"] == "73"
+    assert overrides["detection.qnn_soc_model"] == "79"
+    assert overrides["detection.qnn_backend_path"] == "/opt/qairt/lib/libQnnHtp.so"
+    assert overrides["detection.qnn_offload_graph_io_quantization"] is False
+    assert overrides["detection.qnn_enable_htp_fp16_precision"] is True
+    assert overrides["detection.qnn_context_cache_enable"] is False
+    assert overrides["detection.qnn_context_cache_path"] == "/tmp/qnn"
+    assert build_overrides(context, TRACK) == {}
+    assert build_overrides(context, D3D) == {}
+    assert build_overrides(context, DBG) == {}

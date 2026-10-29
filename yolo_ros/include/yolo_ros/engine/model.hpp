@@ -59,7 +59,7 @@ public:
   detect_batch(const std::vector<cv::Mat> &images);
 
   /// @brief Name of the execution provider that initialized the session.
-  /// @return "cpu", "cuda" or "tensorrt".
+  /// @return "cpu", "cuda", "tensorrt" or "qnn".
   const std::string &active_provider() const { return this->active_provider_; }
 
   /// @brief Whether inference runs through a captured CUDA graph.
@@ -127,13 +127,18 @@ private:
   /// @brief Expected input image shape for the model.
   cv::Size input_image_shape; // Expected input image shape for the model
 
-  // Persistent input buffer (CHW, 1*3*H*W floats) reused every inference to
-  // avoid re-allocating + copying the full blob per frame.
-  /// @brief Reusable CHW input blob (1*3*H*W floats).
+  // Persistent input buffer (1*3*H*W floats) reused every inference to avoid
+  // re-allocating + copying the full blob per frame. Written as planar CHW for
+  // channel-first models and interleaved HWC for channel-last (NHWC) ones.
+  /// @brief Reusable input blob (1*3*H*W floats).
   std::vector<float> input_buffer_;
 
   /// @brief Resolved input channel order (true = RGB, false = BGR).
   bool input_is_rgb_{false};
+
+  /// @brief True when the model input is channel-last (NHWC, e.g. the
+  /// Ultralytics QNN exports); false for the standard channel-first NCHW.
+  bool input_channel_last_{false};
 
   // Vectors to hold allocated input and output node names
   /// @brief Allocated storage backing inputNames.

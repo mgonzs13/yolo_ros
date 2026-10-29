@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <numeric>
@@ -128,7 +129,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   }
 
   if (requested != "auto" && requested != "cpu" && requested != "cuda" &&
-      requested != "tensorrt" && requested != "trt") {
+      requested != "tensorrt" && requested != "trt" && requested != "qnn") {
     YOLO_LOG_WARN("Unknown provider \"%s\"; using auto.",
                   params.provider.c_str());
     requested = "auto";
@@ -174,6 +175,31 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
     config.device_id = device_id;
     config.trt_fp16_enable = params.trt_fp16_enable;
     config.trt_engine_cache_enable = params.trt_engine_cache_enable;
+    config.qnn_htp_performance_mode = params.qnn_htp_performance_mode;
+    config.qnn_htp_arch = params.qnn_htp_arch;
+    config.qnn_soc_model = params.qnn_soc_model;
+    config.qnn_backend_path = params.qnn_backend_path;
+    config.qnn_offload_graph_io_quantization =
+        params.qnn_offload_graph_io_quantization;
+    config.qnn_enable_htp_fp16_precision = params.qnn_enable_htp_fp16_precision;
+
+    std::string session_model_path = model_path;
+
+    if (provider == Provider::Qnn) {
+      const QnnModelPath qnn =
+          resolve_qnn_model_path(params.qnn_context_cache_path, model_path,
+                                 params.qnn_context_cache_enable);
+      session_model_path = qnn.model_path;
+      config.qnn_context_cache_enable = qnn.generate;
+      config.qnn_context_cache_path = qnn.context_path;
+
+      if (qnn.generate) {
+        YOLO_LOG_INFO("QNN context cache: compiling %s -> %s",
+                      session_model_path.c_str(), qnn.context_path.c_str());
+      } else if (!qnn.model_path.empty() && qnn.model_path != model_path) {
+        YOLO_LOG_INFO("QNN context cache: loading %s", qnn.model_path.c_str());
+      }
+    }
 
     if (provider == Provider::TensorRt && config.trt_engine_cache_enable) {
       config.trt_engine_cache_path =
@@ -187,8 +213,8 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
 
     try {
       this->session_options = build_session_options(provider, config);
-      this->session =
-          Ort::Session(this->env, model_path.c_str(), this->session_options);
+      this->session = Ort::Session(this->env, session_model_path.c_str(),
+                                   this->session_options);
       this->active_provider_ = provider_name(provider);
       break;
     } catch (const Ort::Exception &e) {
@@ -232,6 +258,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
     const InputShape resolved = resolve_input_shape(
         input_tensor_shape_vec, params.img_width, params.img_height);
     this->input_image_shape = cv::Size(resolved.width, resolved.height);
+    this->input_channel_last_ = resolved.channel_last;
 
     if (resolved.params_ignored) {
       YOLO_LOG_WARN("Model has static input dimension(s); using %dx%d "
@@ -378,6 +405,9 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
                 params.trt_fp16_enable ? "on" : "off",
                 params.trt_engine_cache_enable ? "on" : "off",
                 trt_cache_suffix.c_str());
+  YOLO_LOG_INFO("  qnn: htp_performance_mode='%s'  context_cache=%s",
+                params.qnn_htp_performance_mode.c_str(),
+                params.qnn_context_cache_enable ? "on" : "off");
   YOLO_LOG_INFO("  cuda_graph=%s", this->cuda_graph_ ? "on" : "off");
   YOLO_LOG_INFO("  input: name='%s' shape=%s dtype=%s  channel_order=%s  "
                 "batch=%s  image=%dx%d",
@@ -552,9 +582,14 @@ yolo_ros::engine::Model::detect_batch(const std::vector<cv::Mat> &images) {
 std::vector<std::vector<yolo_msgs::msg::Detection>>
 yolo_ros::engine::Model::run_batch(const std::vector<cv::Mat> &images) {
   const std::size_t count = images.size();
-  std::vector<int64_t> input_tensor_shape = {static_cast<int64_t>(count), 3,
-                                             this->input_image_shape.height,
-                                             this->input_image_shape.width};
+  std::vector<int64_t> input_tensor_shape =
+      this->input_channel_last_
+          ? std::vector<int64_t>{static_cast<int64_t>(count),
+                                 this->input_image_shape.height,
+                                 this->input_image_shape.width, 3}
+          : std::vector<int64_t>{static_cast<int64_t>(count), 3,
+                                 this->input_image_shape.height,
+                                 this->input_image_shape.width};
   const std::size_t per_image = static_cast<std::size_t>(
       this->input_image_shape.height * this->input_image_shape.width * 3);
   this->input_buffer_.resize(per_image * count);
@@ -580,8 +615,12 @@ yolo_ros::engine::Model::run_batch(const std::vector<cv::Mat> &images) {
 void yolo_ros::engine::Model::preprocess_into(
     const cv::Mat &image, const std::vector<int64_t> &input_tensor_shape,
     std::size_t index) {
-  const int H = static_cast<int>(input_tensor_shape[2]);
-  const int W = static_cast<int>(input_tensor_shape[3]);
+  const int H =
+      static_cast<int>(this->input_channel_last_ ? input_tensor_shape[1]
+                                                 : input_tensor_shape[2]);
+  const int W =
+      static_cast<int>(this->input_channel_last_ ? input_tensor_shape[2]
+                                                 : input_tensor_shape[3]);
   cv::Mat resized_image = yolo_ros::yolo::utils::letterbox(
       image, cv::Size(W, H), cv::Scalar(114, 114, 114));
 
@@ -590,6 +629,18 @@ void yolo_ros::engine::Model::preprocess_into(
   }
 
   resized_image.convertTo(resized_image, CV_32FC3, 1.0 / 255.0);
+
+  if (this->input_channel_last_) {
+    // NHWC: the interleaved HWC image is already in the expected layout.
+    if (!resized_image.isContinuous()) {
+      resized_image = resized_image.clone();
+    }
+    const std::size_t per_image = static_cast<std::size_t>(H) * W * 3;
+    std::memcpy(this->input_buffer_.data() + index * per_image,
+                resized_image.ptr<float>(), per_image * sizeof(float));
+    return;
+  }
+
   std::vector<cv::Mat> chw(resized_image.channels());
 
   for (int c = 0; c < resized_image.channels(); ++c) {

@@ -205,3 +205,48 @@ The `dynamic_axes` entry is **required**: a static batch-1 export makes
 and silently degrades to motion-only. Use the weights BoT-SORT releases
 (`mot17_sbs_S50.pth`, MIT), not FastReID's own model zoo (no explicit weight
 license).
+
+## Qualcomm QNN (Hexagon NPU)
+
+The ONNX Runtime QNN execution provider runs QNN context-binary models on the
+Hexagon HTP. On the VENTUNO Q (QCS8275 / HTP v75) run the node with
+`provider: qnn` and a batch-1 model. The provider needs a source-built ONNX
+Runtime (see the [QNN build section](build.md#qnn-hexagon-npu-onnx-runtime-build)).
+
+1. Export the model with the Ultralytics
+   [QNN export](https://docs.ultralytics.com/integrations/qnn/), which
+   quantizes it (INT8 weights, 16-bit activations) and compiles a QNN context
+   binary locally into a self-contained `*_qnn.onnx` — no Qualcomm account or
+   cloud service required:
+
+   ```python
+   from ultralytics import YOLO
+
+   model = YOLO("yolo26s.pt")
+   model.export(format="qnn", name="iq-8275", imgsz=640)  # imgsz=224 for classify
+   ```
+
+   `name` selects the HTP/SoC target (`iq-8275` = QCS8275, HTP v75; the
+   default is `73`). The export installs `onnxruntime-qnn` on first use and
+   runs on Linux x86-64/ARM64 or Windows with Python >= 3.11, producing
+   `yolo26s_qnn.onnx` with the compiled context embedded.
+
+2. Deploy the exported `*_qnn.onnx`: it is already compiled for the target, so
+   the node loads it directly and nothing is compiled on the board. The
+   VENTUNO Q preset references it through `model_path` (placeholder
+   `/path/to/yolo26s_qnn.onnx`; set your own route) and sets
+   `qnn_context_cache_enable: false`:
+   `ros2 launch yolo_bringup yolo.launch.py params_file:=$(ros2 pkg prefix yolo_bringup)/share/yolo_bringup/config/yolo_qnn.yaml model_path:=/path/to/yolo26s_qnn.onnx`.
+   The preset ships `model_repo: ""` so the local `model_path` is used; a
+   params file that sets `model_repo` wins instead whenever its download
+   succeeds.
+
+3. Validate on-device with Ultralytics: with `onnxruntime-qnn` installed on
+   the board, `YOLO("yolo26s_qnn.onnx").val(data=...)` runs the context binary
+   through the QNN execution provider.
+
+QNN context binaries are specific to the SoC, QAIRT version and board image;
+regenerate the export after an OS/firmware upgrade. A plain quantized QDQ
+model (no embedded context) can still be used instead by leaving
+`qnn_context_cache_enable: true`: the node compiles it on first use under
+`~/.cache/yolo_ros/qnn_context/`.

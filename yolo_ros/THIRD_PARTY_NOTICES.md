@@ -163,3 +163,14 @@ using the ReID weights released by BoT-SORT (MIT, see the BoT-SORT notice):
 - License: Apache-2.0 (code)
 
 No FastReID source is bundled; only the exported ONNX model is consumed.
+
+## Qualcomm QNN execution provider and QAIRT
+
+The optional QNN execution provider (`provider: qnn`) uses the ONNX Runtime QNN
+provider together with the Qualcomm AI Runtime (QAIRT) / QNN libraries and
+headers. These are Qualcomm Technologies, Inc. products governed by their own
+license terms (see the QAIRT/QNN SDK). They are not bundled in this repository:
+`build_ort_from_source.sh --ep qnn` copies them locally from the board's system
+image or the SDK prefix passed to `--qnn-home` into the ONNX Runtime
+build/install prefix, and at run time the node loads them from there or from
+the system loader path.

@@ -123,9 +123,9 @@ struct YoloParams {
   std::string cache_dir; // HF cache dir, default ~/.cache/huggingface/hub
   /// @brief Re-download the model even when a cached copy exists.
   bool force_download = false; // re-download even if cached
-  /// @brief Execution provider preference: "auto" (CUDA -> CPU fallback chain)
-  /// or "tensorrt"/"trt" (TensorRT -> CUDA -> CPU), "cuda" (CUDA -> CPU),
-  /// "cpu" (case-insensitive).
+  /// @brief Execution provider preference: "auto" (CUDA -> CPU fallback chain),
+  /// "qnn" (QNN -> CPU), "tensorrt"/"trt" (TensorRT -> CUDA -> CPU), "cuda"
+  /// (CUDA -> CPU), "cpu" (case-insensitive).
   std::string provider = "auto";
   /// @brief Execution device; its ordinal (e.g. "cuda:0", "trt:1", "1") is
   /// passed as device_id to the CUDA and TensorRT execution providers.
@@ -141,6 +141,28 @@ struct YoloParams {
   /// @brief TensorRT: engine cache base directory (empty ->
   /// ~/.cache/yolo_ros/trt_engines).
   std::string trt_engine_cache_path;
+  /// @brief QNN (Hexagon NPU): HTP performance mode (e.g. "burst",
+  /// "sustained_high_performance").
+  std::string qnn_htp_performance_mode = "burst";
+  /// @brief QNN: Hexagon HTP architecture version (e.g. "73", "75", "79").
+  std::string qnn_htp_arch = "75";
+  /// @brief QNN: SoC model number (QCS8275 = 82).
+  std::string qnn_soc_model = "82";
+  /// @brief QNN: HTP backend library the EP loads (empty = let ONNX Runtime
+  /// resolve its own backend); point it at <sdk>/lib/<arch>/libQnnHtp.so for a
+  /// QAIRT SDK prefix.
+  std::string qnn_backend_path = "libQnnHtp.so";
+  /// @brief QNN: offload graph I/O quant/dequant to the CPU EP, keeping graph
+  /// inputs/outputs float32.
+  bool qnn_offload_graph_io_quantization = true;
+  /// @brief QNN: finalize float32 graphs at fp16 precision on the HTP (needed
+  /// to run non-quantized models on the NPU).
+  bool qnn_enable_htp_fp16_precision = false;
+  /// @brief QNN: cache the compiled context under qnn_context_cache_path.
+  bool qnn_context_cache_enable = true;
+  /// @brief QNN: context cache base directory (empty ->
+  /// ~/.cache/yolo_ros/qnn_context).
+  std::string qnn_context_cache_path;
   /// @brief Detection confidence threshold in [0, 1].
   float threshold;
   /// @brief IoU threshold for the C++ NMS.
