@@ -576,7 +576,13 @@ copy_header cpu_provider_factory.h optional
 if [[ "${EP}" == "cuda" ]]; then
   copy_header cuda_provider_factory.h optional
   if [[ "${USE_TENSORRT}" == "1" ]]; then
-    copy_header tensorrt_provider_factory.h required
+    # ORT >= 1.17 moved the header out of include/; only the legacy path
+    # (ort_compat.hpp under YOLO_ORT_LEGACY) needs it.
+    if version_ge "${ORT_VERSION}" 1.17; then
+      copy_header tensorrt_provider_factory.h optional
+    else
+      copy_header tensorrt_provider_factory.h required
+    fi
   fi
 fi
 

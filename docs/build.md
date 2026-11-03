@@ -131,8 +131,8 @@ provider through process-wide `ORT_TENSORRT_*` environment variables set from
 the `trt_fp16_enable` / `trt_engine_cache_enable` / `trt_engine_cache_path`
 parameters (`ORT_TENSORRT_FP16_ENABLE`, `ORT_TENSORRT_ENGINE_CACHE_ENABLE`,
 `ORT_TENSORRT_CACHE_PATH`). When the build has no provider — the x64 prebuilt
-tarball or an aarch64 `--no-tensorrt` prefix — `provider_chain()` drops
-TensorRT, logs that TensorRT is unavailable, and uses CUDA.
+tarball or an aarch64 `--no-tensorrt` prefix — `provider_chain()` silently
+drops TensorRT and uses CUDA; `Model` logs that TensorRT is unavailable.
 
 The TensorRT engine cache stores the engine plus a `.profile` file with the
 min/max ranges for dynamic shapes; a shape outside the cached profile

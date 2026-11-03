@@ -39,11 +39,11 @@ find_package(yolo_onnxruntime_vendor REQUIRED)
 # libonnxruntime.so and exports it through the version script only when
 # built with USE_TENSORRT, so the header is needed to compile and
 # lib/libonnxruntime_providers_tensorrt.so is needed because ORT loads the
-# provider at runtime. A header alone (a CUDA-only 1.6 source build still
-# installs one) is not enough. Do not use __has_include: a system ORT install
-# under /usr/include can mix header generations. The stub test target
-# overrides this to 1 for its compile check. The macro is only meaningful
-# together with YOLO_ORT_LEGACY (ORT_API_VERSION < 12).
+# provider at runtime. A header alone (the source build script copies it
+# only for USE_TENSORRT builds) is not enough. Do not use __has_include: a
+# system ORT install under /usr/include can mix header generations. The stub
+# test target overrides this to 1 for its compile check. The macro is only
+# meaningful together with YOLO_ORT_LEGACY (ORT_API_VERSION < 12).
 set(YOLO_ORT_LEGACY_HAS_TENSORRT 0)
 foreach(_ort_include IN LISTS yolo_onnxruntime_vendor_INCLUDE_DIRS)
   get_filename_component(_ort_prefix "${_ort_include}/.." ABSOLUTE)
