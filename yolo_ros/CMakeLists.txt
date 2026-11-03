@@ -18,6 +18,20 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(yolo_onnxruntime_vendor REQUIRED)
+
+# Detect the TensorRT provider header in the selected ORT prefix. Do not use
+# __has_include here: a system ORT install under /usr/include can mix header
+# generations. The stub test target overrides this to 1 for its compile check.
+set(YOLO_ORT_LEGACY_HAS_TENSORRT 0)
+foreach(_ort_include ${yolo_onnxruntime_vendor_INCLUDE_DIRS})
+  if(EXISTS "${_ort_include}/tensorrt_provider_factory.h")
+    set(YOLO_ORT_LEGACY_HAS_TENSORRT 1)
+  endif()
+endforeach()
+if(YOLO_ORT_LEGACY_HAS_TENSORRT)
+  add_compile_definitions(YOLO_ORT_LEGACY_HAS_TENSORRT=1)
+endif()
+
 find_package(yolo_hfhub_vendor REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(message_filters REQUIRED)
@@ -433,10 +447,13 @@ if(BUILD_TESTING)
   ament_add_gtest(test_ort_compat_legacy_trt
     test/test_ort_compat_legacy_trt.cpp
   )
-  # Put the stub header before the ONNX Runtime include dir so
-  # __has_include("tensorrt_provider_factory.h") sees it.
+  # Put the stub header before the ONNX Runtime include dir and force the
+  # legacy TRT branch on so the append path is compiled against the stub.
   target_include_directories(test_ort_compat_legacy_trt BEFORE PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/test/stub
+  )
+  target_compile_definitions(test_ort_compat_legacy_trt PRIVATE
+    YOLO_ORT_LEGACY_HAS_TENSORRT=1
   )
   target_link_libraries(test_ort_compat_legacy_trt
     ${yolo_onnxruntime_vendor_LIBRARIES}

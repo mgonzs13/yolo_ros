@@ -26,15 +26,14 @@
 #define YOLO_ORT_LEGACY 0
 #endif
 
-// A CUDA-only ORT 1.6 build has no TensorRT provider and does not export the
-// append symbol. Only compile the legacy TRT path when both the header and the
-// provider are present (the build script installs the header only for TRT
-// builds).
-#if YOLO_ORT_LEGACY && __has_include("tensorrt_provider_factory.h")
-#include "tensorrt_provider_factory.h"
-#define YOLO_ORT_LEGACY_HAS_TENSORRT 1
-#else
+// YOLO_ORT_LEGACY_HAS_TENSORRT is set by yolo_ros/CMakeLists.txt from the
+// selected ORT prefix. Do not use __has_include: a system ORT install under
+// /usr/include can otherwise mix header generations.
+#ifndef YOLO_ORT_LEGACY_HAS_TENSORRT
 #define YOLO_ORT_LEGACY_HAS_TENSORRT 0
+#endif
+#if YOLO_ORT_LEGACY && YOLO_ORT_LEGACY_HAS_TENSORRT
+#include "tensorrt_provider_factory.h"
 #endif
 
 namespace yolo_ros::engine::compat {
