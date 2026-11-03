@@ -19,17 +19,25 @@ find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(yolo_onnxruntime_vendor REQUIRED)
 
-# Detect the TensorRT provider header in the selected ORT prefix. Do not use
-# __has_include here: a system ORT install under /usr/include can mix header
+# Detect a usable TensorRT provider in the selected ORT prefix. The append
+# symbol lives in libonnxruntime_providers_tensorrt.so, so a header alone (a
+# CUDA-only 1.6 source build still installs one) is not enough. Do not use
+# __has_include: a system ORT install under /usr/include can mix header
 # generations. The stub test target overrides this to 1 for its compile check.
+# The macro is only meaningful together with YOLO_ORT_LEGACY
+# (ORT_API_VERSION < 12).
 set(YOLO_ORT_LEGACY_HAS_TENSORRT 0)
-foreach(_ort_include ${yolo_onnxruntime_vendor_INCLUDE_DIRS})
-  if(EXISTS "${_ort_include}/tensorrt_provider_factory.h")
+foreach(_ort_include IN LISTS yolo_onnxruntime_vendor_INCLUDE_DIRS)
+  get_filename_component(_ort_prefix "${_ort_include}/.." ABSOLUTE)
+  if(EXISTS "${_ort_include}/tensorrt_provider_factory.h" AND
+     EXISTS "${_ort_prefix}/lib/libonnxruntime_providers_tensorrt.so")
     set(YOLO_ORT_LEGACY_HAS_TENSORRT 1)
   endif()
 endforeach()
 if(YOLO_ORT_LEGACY_HAS_TENSORRT)
-  add_compile_definitions(YOLO_ORT_LEGACY_HAS_TENSORRT=1)
+  # add_definitions for CMake 3.10 (Ubuntu 18.04); add_compile_definitions
+  # needs 3.12.
+  add_definitions(-DYOLO_ORT_LEGACY_HAS_TENSORRT=1)
 endif()
 
 find_package(yolo_hfhub_vendor REQUIRED)
