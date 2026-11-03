@@ -77,9 +77,9 @@ const char *device_provider_name(const std::string &device);
 /// resolved (no -1 sentinel).
 /// @return The configured session options.
 /// @throws Ort::Exception if the provider cannot be appended (modern builds).
-/// @throws std::runtime_error on legacy builds (ONNX Runtime < 1.12) when
-/// TensorRT is requested: the legacy TensorRT refusal falls through the
-/// provider chain to CUDA/CPU.
+/// Legacy ONNX Runtime (< 1.12) appends TensorRT 7.1 through the 1.6 API and
+/// ORT_TENSORRT_* env vars; it throws std::runtime_error only when the build
+/// has no TensorRT provider, so the provider chain falls through to CUDA.
 Ort::SessionOptions build_session_options(Provider primary,
                                           const ProviderConfig &config);
 

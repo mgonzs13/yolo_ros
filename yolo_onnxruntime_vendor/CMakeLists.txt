@@ -92,9 +92,10 @@ else()
         endif()
 
         # Curated prebuilt combinations. CUDA 10.2 is the legacy path: ONNX
-        # Runtime 1.6.0 with the CUDA execution provider only (no TensorRT, no
-        # CUDA graph; cuDNN 8). CUDA 11 stops shipping C++ GPU tarballs after
-        # 1.18; CUDA 13 starts at 1.28. cuDNN major must match.
+        # Runtime 1.6.0, CUDA + TensorRT 7.1 when the prefix was built with
+        # --use_tensorrt; no CUDA graph. The prebuilt tarball is CUDA-only.
+        # CUDA 11 stops shipping C++ GPU tarballs after 1.18; CUDA 13 starts
+        # at 1.28. cuDNN major must match.
         if(ONNX_CUDA_MAJOR STREQUAL "10")
             set(_ort_default "1.6.0")
             set(_suffix_default "-gpu")
@@ -115,7 +116,8 @@ else()
             message(FATAL_ERROR
                 "Unsupported or undetected CUDA major version "
                 "('${ONNX_CUDA_MAJOR}'). Supported prebuilt combinations: "
-                "10 (ORT 1.6.0, CUDA EP only), 11 (ORT 1.18.0), "
+                "10 (ORT 1.6.0, CUDA; TensorRT 7.1 in a source build), "
+                "11 (ORT 1.18.0), "
                 "12 (ORT 1.20.0), 13 (ORT 1.28.0). Pass "
                 "-DONNX_CUDA_MAJOR=<major>, or build from source with "
                 "scripts/build_ort_from_source.sh and use "
@@ -135,8 +137,8 @@ else()
             "'${ONNX_GPU_SUFFIX}' (requires cuDNN ${_cudnn_default} at run time)")
         if(ONNX_CUDA_MAJOR STREQUAL "10")
             message(STATUS
-                "  CUDA 10.2 legacy path: CUDA execution provider only "
-                "(no TensorRT, no CUDA graph).")
+                "  CUDA 10.2 legacy path: CUDA (+ TensorRT if built); "
+                "no CUDA graph.")
         endif()
     else()
         if(NOT ONNXRUNTIME_VERSION)
