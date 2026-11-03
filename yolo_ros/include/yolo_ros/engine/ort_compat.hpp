@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -23,6 +24,17 @@
 #define YOLO_ORT_LEGACY 1
 #else
 #define YOLO_ORT_LEGACY 0
+#endif
+
+// A CUDA-only ORT 1.6 build has no TensorRT provider and does not export the
+// append symbol. Only compile the legacy TRT path when both the header and the
+// provider are present (the build script installs the header only for TRT
+// builds).
+#if YOLO_ORT_LEGACY && __has_include("tensorrt_provider_factory.h")
+#include "tensorrt_provider_factory.h"
+#define YOLO_ORT_LEGACY_HAS_TENSORRT 1
+#else
+#define YOLO_ORT_LEGACY_HAS_TENSORRT 0
 #endif
 
 namespace yolo_ros::engine::compat {
@@ -170,17 +182,32 @@ inline void append_cuda_provider(Ort::SessionOptions &options,
 #endif
 }
 
-/// @brief Append the TensorRT execution provider. Legacy ONNX Runtime builds
-/// (< 1.12) cannot carry the fp16/cache options this project needs, so the
-/// refusal throws and the provider chain falls through to CUDA.
+/// @brief Append the TensorRT execution provider. TensorRT 7.1 is appended
+/// through the ONNX Runtime 1.6 API when this build has the provider; otherwise
+/// the refusal throws and the provider chain falls through to CUDA. Modern
+/// ONNX Runtime builds use the V2 provider options.
 inline void append_tensorrt_provider(Ort::SessionOptions &options,
                                      const ProviderConfig &config) {
 #if YOLO_ORT_LEGACY
+#if YOLO_ORT_LEGACY_HAS_TENSORRT
+  setenv("ORT_TENSORRT_FP16_ENABLE", config.trt_fp16_enable ? "1" : "0", 1);
+  const bool cache_enabled =
+      config.trt_engine_cache_enable && !config.trt_engine_cache_path.empty();
+  setenv("ORT_TENSORRT_ENGINE_CACHE_ENABLE", cache_enabled ? "1" : "0", 1);
+  if (cache_enabled) {
+    setenv("ORT_TENSORRT_CACHE_PATH", config.trt_engine_cache_path.c_str(), 1);
+  } else {
+    unsetenv("ORT_TENSORRT_CACHE_PATH");
+  }
+  Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Tensorrt(
+      static_cast<OrtSessionOptions *>(options), config.device_id));
+#else
   (void)options;
   (void)config;
   throw std::runtime_error(
-      "TensorRT EP is not supported with ONNX Runtime < 1.12; use provider: "
-      "cuda");
+      "This ONNX Runtime 1.6 build has no TensorRT EP; rebuild with "
+      "--use_tensorrt or use provider: cuda");
+#endif
 #else
   OrtTensorRTProviderOptionsV2 *raw_trt_options = nullptr;
   Ort::ThrowOnError(

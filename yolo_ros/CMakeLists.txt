@@ -430,6 +430,19 @@ if(BUILD_TESTING)
   )
   set_tests_properties(test_ort_compat PROPERTIES TIMEOUT 300)
 
+  ament_add_gtest(test_ort_compat_legacy_trt
+    test/test_ort_compat_legacy_trt.cpp
+  )
+  # Put the stub header before the ONNX Runtime include dir so
+  # __has_include("tensorrt_provider_factory.h") sees it.
+  target_include_directories(test_ort_compat_legacy_trt BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/test/stub
+  )
+  target_link_libraries(test_ort_compat_legacy_trt
+    ${yolo_onnxruntime_vendor_LIBRARIES}
+  )
+  set_tests_properties(test_ort_compat_legacy_trt PROPERTIES TIMEOUT 60)
+
   ament_add_gtest(test_yolo26n
     test/test_yolo26n.cpp
     src/yolo/detect.cpp
