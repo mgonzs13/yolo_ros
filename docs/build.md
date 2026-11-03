@@ -102,7 +102,7 @@ yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.6.0 --ep cuda --cuda-
 ```
 
 The x86_64 prebuilt tarball is CUDA-only. On aarch64, `--ep cuda` builds CUDA
-+ TensorRT 7.1 by default (JetPack provides the TensorRT 7.1 runtime, i.e.
+and TensorRT 7.1 by default (JetPack provides the TensorRT 7.1 runtime, i.e.
 `libnvinfer.so.7` / `libnvonnxparsers.so.7`); pass `--no-tensorrt` for a
 CUDA-only prefix. Set `TENSORRT_HOME` when the TensorRT 7.1 headers and
 libraries are not in the default system library directory.
@@ -150,7 +150,7 @@ caches the engine, and the next one reloads it from the cache.
 
 ### TensorRT 10 runtime
 
-The ONNX Runtime TensorRT EP is built against TensorRT 10 for all the prebuilt releases the vendor selects (`libnvinfer.so.10` / `libnvonnxparser.so.10`):
+The ONNX Runtime TensorRT EP is built against TensorRT 10 for all prebuilt releases that ship the TensorRT EP (`libnvinfer.so.10` / `libnvonnxparser.so.10`):
 
 | ORT              | TensorRT |
 | ---------------- | -------- |
@@ -158,7 +158,7 @@ The ONNX Runtime TensorRT EP is built against TensorRT 10 for all the prebuilt r
 | 1.20.0 (CUDA 12) | 10.4     |
 | 1.28.0 (CUDA 13) | 10.x     |
 
-CUDA 10 / aarch64 is the exception: the ONNX Runtime 1.6.0 source build links the JetPack TensorRT 7.1 runtime (`libnvinfer.so.7` / `libnvonnxparsers.so.7`), not the TensorRT 10 packages.
+CUDA 10 is the exception: the x64 prebuilt ONNX Runtime 1.6 GPU tarball is CUDA-only (no TensorRT provider), and the aarch64 source build links the JetPack TensorRT 7.1 runtime (`libnvinfer.so.7` / `libnvonnxparsers.so.7`), not the TensorRT 10 packages.
 
 Install the versioned runtime packages, pinning the build tagged for the CUDA major when several are offered (`apt-cache madison libnvinfer10`); the helper script does this automatically:
 
@@ -178,7 +178,7 @@ CUDA 10 is the legacy path: ONNX Runtime 1.6.0 with CUDA + TensorRT 7.1 on aarch
 
 ## Custom ONNX Runtime
 
-`yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh` builds ONNX Runtime from source on x86_64 or aarch64 and packages it in the flat `lib/` + `include/` layout the vendor expects. Select the execution provider with `--ep` (`cpu`, or `cuda`, which also builds TensorRT — 7.1 for ONNX Runtime 1.6, 10 for >= 1.12 — unless `--no-tensorrt` is passed), then point the colcon build at the resulting prefix with `-DONNXRUNTIME_ROOT=<prefix>` — it takes precedence over the prebuilt download. The node still selects CPU/CUDA/TensorRT at run time via the `provider` parameter (see [Parameters](../README.md#parameters)).
+`yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh` builds ONNX Runtime from source on x86_64 or aarch64 and packages it in the flat `lib/` + `include/` layout the vendor expects. Select the execution provider with `--ep` (`cpu`, or `cuda`, which also builds TensorRT against the host's TensorRT version — JetPack 4's 7.1 for ONNX Runtime 1.6 on aarch64, TensorRT 10 for the 1.18+ releases — unless `--no-tensorrt` is passed), then point the colcon build at the resulting prefix with `-DONNXRUNTIME_ROOT=<prefix>` — it takes precedence over the prebuilt download. The node still selects CPU/CUDA/TensorRT at run time via the `provider` parameter (see [Parameters](../README.md#parameters)).
 
 ```shell
 # CPU build (x86_64 or aarch64); the prefix defaults to <package>/ort-<version>
@@ -194,7 +194,7 @@ A source build is heavy (tens of minutes and several GB of RAM). It reuses a pre
 
 `build_ort_from_source.sh <ort_version> [output_dir]` accepts these flags:
 
-- **`--ep cpu|cuda`** — execution provider to build (default `cpu`); `cuda` also builds TensorRT (7.1 for ONNX Runtime 1.6, 10 for >= 1.12) unless `--no-tensorrt` is passed, matching the node's provider chain.
+- **`--ep cpu|cuda`** — execution provider to build (default `cpu`); `cuda` also builds TensorRT against the host's TensorRT version (JetPack 4's 7.1 on the 1.6 legacy path; TensorRT 10 for the 1.18+ releases) unless `--no-tensorrt` is passed, matching the node's provider chain.
 - **`--no-tensorrt`** — build the CUDA provider without TensorRT (CUDA-only prefix); `ORT_USE_TENSORRT=0` is the environment equivalent.
 - **`--cuda-arch NN`** — CUDA architecture(s) for `--ep cuda` (Jetson Xavier `72`, Orin `87`; semicolon-separated for several, e.g. `"72;87"` (quote it)); auto-detected with `nvidia-smi` when available.
 - **`--rebuild`** — ignore a previous build and build again.

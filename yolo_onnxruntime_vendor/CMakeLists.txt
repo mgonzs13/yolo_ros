@@ -137,8 +137,8 @@ else()
             "'${ONNX_GPU_SUFFIX}' (requires cuDNN ${_cudnn_default} at run time)")
         if(ONNX_CUDA_MAJOR STREQUAL "10")
             message(STATUS
-                "  CUDA 10.2 legacy path: CUDA (+ TensorRT if built); "
-                "no CUDA graph.")
+                "  CUDA 10.2 legacy path: this prebuilt tarball is CUDA-only; "
+                "a source build adds TensorRT 7.1; no CUDA graph.")
         endif()
     else()
         if(NOT ONNXRUNTIME_VERSION)
