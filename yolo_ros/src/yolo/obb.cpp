@@ -9,6 +9,10 @@
 #include <array>
 #include <cmath>
 #include <vector>
+#if __has_include(<opencv2/geometry.hpp>)
+// OpenCV 5 moved contourArea() & co. from imgproc into the geometry module.
+#include <opencv2/geometry.hpp>
+#endif
 
 namespace yolo_ros::yolo {
 
