@@ -44,8 +44,8 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
 #if YOLO_ORT_LEGACY
   if (requested_provider == "auto" || requested_provider == "tensorrt" ||
       requested_provider == "trt") {
-    YOLO_LOG_INFO("ONNX Runtime 1.6 legacy build: ReID uses CUDA (no second "
-                  "TensorRT session).");
+    YOLO_LOG_INFO("legacy ONNX Runtime (< 1.12): ReID prefers CUDA (falls "
+                  "back to CPU if unavailable).");
   }
 #endif
 

@@ -161,7 +161,9 @@ case "${ORT_DISABLE_CONTRIB_OPS:-0}" in
 esac
 if [[ "${EP}" == "cuda" && "${ORT_DISABLE_CONTRIB_OPS:-0}" == "1" ]]; then
   echo "error: ORT_DISABLE_CONTRIB_OPS=1 is incompatible with --ep cuda:" >&2
-  echo "       the TensorRT execution provider needs contrib ops." >&2
+  echo "       the TensorRT execution provider needs contrib ops; the" >&2
+  echo "       restriction applies to any --ep cuda build and is kept" >&2
+  echo "       conservatively for --no-tensorrt." >&2
   exit 2
 fi
 if [[ -n "${ORT_PARALLEL:-}" && ! "${ORT_PARALLEL}" =~ ^[0-9]+$ ]]; then
@@ -528,9 +530,11 @@ rm -rf "${OUT_DIR}"
 mkdir -p "${OUT_DIR}/lib" "${OUT_DIR}/include"
 
 # Copy every produced library. The provider set differs across versions: 1.6
-# links the CUDA and TensorRT providers statically into libonnxruntime.so,
-# while >= 1.12 ships separate libonnxruntime_providers_*.so libraries.
-# Globbing keeps this version-agnostic.
+# links the CUDA provider statically into libonnxruntime.so but builds the
+# TensorRT provider as a separate shared library
+# (libonnxruntime_providers_tensorrt.so), while >= 1.12 ships separate
+# libonnxruntime_providers_*.so libraries for every provider. Globbing keeps
+# this version-agnostic.
 shopt -s nullglob
 built_libs=("${BUILD_DIR}"/libonnxruntime*.so*)
 shopt -u nullglob
@@ -572,7 +576,7 @@ copy_header cpu_provider_factory.h optional
 if [[ "${EP}" == "cuda" ]]; then
   copy_header cuda_provider_factory.h optional
   if [[ "${USE_TENSORRT}" == "1" ]]; then
-    copy_header tensorrt_provider_factory.h optional
+    copy_header tensorrt_provider_factory.h required
   fi
 fi
 

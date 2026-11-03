@@ -192,8 +192,11 @@ TEST(BuildSessionOptions, AvailableGpuProvidersDoNotThrow) {
 
 #if YOLO_ORT_LEGACY
 TEST(ReIdProvider, LegacyForcesCudaForAutoAndTensorRt) {
+  EXPECT_EQ(reid_provider_for_build(""), "cuda");
+  EXPECT_EQ(reid_provider_for_build("AUTO"), "cuda");
   EXPECT_EQ(reid_provider_for_build("auto"), "cuda");
   EXPECT_EQ(reid_provider_for_build("tensorrt"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("TRT"), "cuda");
   EXPECT_EQ(reid_provider_for_build("trt"), "cuda");
   EXPECT_EQ(reid_provider_for_build("cuda"), "cuda");
   EXPECT_EQ(reid_provider_for_build("cpu"), "cpu");

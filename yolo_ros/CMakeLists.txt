@@ -3,9 +3,15 @@ project(yolo_ros)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Ubuntu 18.04's GCC 7/8 needs the separate filesystem library for
+# Ubuntu 18.04's GCC 8 needs the separate filesystem library for
 # std::filesystem (used by the provider/engine code). GCC 9+ moved it into
 # libstdc++.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+   AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8)
+  message(FATAL_ERROR
+    "GCC 8+ is required for std::filesystem; on Ubuntu 18.04 install "
+    "g++-8 and build with CXX=g++-8 CC=gcc-8, or use the Ubuntu 20.04 rootfs.")
+endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
   link_libraries(stdc++fs)
@@ -28,13 +34,16 @@ find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(yolo_onnxruntime_vendor REQUIRED)
 
-# Detect a usable TensorRT provider in the selected ORT prefix. The append
-# symbol lives in libonnxruntime_providers_tensorrt.so, so a header alone (a
-# CUDA-only 1.6 source build still installs one) is not enough. Do not use
-# __has_include: a system ORT install under /usr/include can mix header
-# generations. The stub test target overrides this to 1 for its compile check.
-# The macro is only meaningful together with YOLO_ORT_LEGACY
-# (ORT_API_VERSION < 12).
+# Detect a usable TensorRT provider in the selected ORT prefix. ORT 1.6
+# defines OrtSessionOptionsAppendExecutionProvider_Tensorrt in
+# libonnxruntime.so and exports it through the version script only when
+# built with USE_TENSORRT, so the header is needed to compile and
+# lib/libonnxruntime_providers_tensorrt.so is needed because ORT loads the
+# provider at runtime. A header alone (a CUDA-only 1.6 source build still
+# installs one) is not enough. Do not use __has_include: a system ORT install
+# under /usr/include can mix header generations. The stub test target
+# overrides this to 1 for its compile check. The macro is only meaningful
+# together with YOLO_ORT_LEGACY (ORT_API_VERSION < 12).
 set(YOLO_ORT_LEGACY_HAS_TENSORRT 0)
 foreach(_ort_include IN LISTS yolo_onnxruntime_vendor_INCLUDE_DIRS)
   get_filename_component(_ort_prefix "${_ort_include}/.." ABSOLUTE)

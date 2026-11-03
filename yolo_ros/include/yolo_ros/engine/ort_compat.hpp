@@ -204,8 +204,8 @@ inline void append_tensorrt_provider(Ort::SessionOptions &options,
   (void)options;
   (void)config;
   throw std::runtime_error(
-      "This ONNX Runtime 1.6 build has no TensorRT EP; rebuild with "
-      "--use_tensorrt or use provider: cuda");
+      "This ONNX Runtime 1.6 build has no TensorRT EP; drop --no-tensorrt "
+      "(or rebuild ONNX Runtime with --use_tensorrt)");
 #endif
 #else
   OrtTensorRTProviderOptionsV2 *raw_trt_options = nullptr;
