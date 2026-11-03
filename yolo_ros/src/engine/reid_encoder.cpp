@@ -36,6 +36,19 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
     requested = "auto";
   }
 
+#if YOLO_ORT_LEGACY
+  const std::string requested_provider = requested;
+#endif
+  requested = reid_provider_for_build(requested);
+
+#if YOLO_ORT_LEGACY
+  if (requested_provider == "auto" || requested_provider == "tensorrt" ||
+      requested_provider == "trt") {
+    YOLO_LOG_INFO("ONNX Runtime 1.6 legacy build: ReID uses CUDA (no second "
+                  "TensorRT session).");
+  }
+#endif
+
   const std::vector<Provider> chain =
       provider_chain(requested, available_providers());
   const int device_id = parse_device_id(device);
