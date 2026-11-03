@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.10)
 project(yolo_ros)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Ubuntu 18.04's GCC 7/8 needs the separate filesystem library for
+# std::filesystem (used by the provider/engine code). GCC 9+ moved it into
+# libstdc++.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+   AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
+  link_libraries(stdc++fs)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
