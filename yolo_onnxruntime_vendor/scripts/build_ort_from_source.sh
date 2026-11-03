@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Build ONNX Runtime (any version) from source, for the CPU or CUDA execution
-# provider (plus TensorRT on ONNX Runtime >= 1.12), and package it in the flat
+# provider (plus TensorRT by default for --ep cuda), and package it in the flat
 # layout consumed by yolo_onnxruntime_vendor (point that package at the result
 # with -DONNXRUNTIME_ROOT=<output_dir>).
 #
@@ -18,17 +18,18 @@
 #
 # Options:
 #   --ep <cpu|cuda>   execution provider to build (default: cpu). "cuda" also
-#                     builds the TensorRT provider for ONNX Runtime >= 1.12
-#                     (matching the node's TensorRT -> CUDA -> CPU provider
-#                     chain); older releases build CUDA only.
+#                     builds the TensorRT provider unless --no-tensorrt is given.
+#   --no-tensorrt     build the CUDA provider without TensorRT (CUDA-only prefix;
+#                     also settable with ORT_USE_TENSORRT=0).
 #   --cuda-arch <NN>  CUDA architecture for --ep cuda (Jetson Xavier 72,
 #                     Orin 87). Auto-detected with nvidia-smi when available.
 #   --rebuild         ignore any previous build and build again.
 #   --dry-run         print the ONNX Runtime build command and exit.
 #   -h, --help        show this help.
 #
-# ORT_EP and ORT_CUDA_ARCH are honoured as fallbacks for --ep / --cuda-arch;
-# ORT_CUDA_ARCH is only read when the EP is cuda.
+# ORT_EP, ORT_CUDA_ARCH and ORT_USE_TENSORRT are honoured as fallbacks for
+# --ep / --cuda-arch / --no-tensorrt; ORT_CUDA_ARCH is only read when the EP is
+# cuda, and ORT_USE_TENSORRT is forced to 0 when the EP is not cuda.
 #
 # Source acquisition (first match wins):
 #   ORT_SOURCE_DIR=<path>     an existing onnxruntime source tree (contains build.sh)
@@ -50,7 +51,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $(basename "$0") <ort_version> [output_dir] [--ep cpu|cuda] [--cuda-arch NN] [--rebuild] [--dry-run]" >&2
+  echo "usage: $(basename "$0") <ort_version> [output_dir] [--ep cpu|cuda] [--no-tensorrt] [--cuda-arch NN] [--rebuild] [--dry-run]" >&2
 }
 
 help() {
@@ -66,9 +67,9 @@ usage: $(basename "$0") <ort_version> [output_dir] [options]
 
 options:
   --ep <cpu|cuda>   execution provider to build (default: cpu). "cuda" also
-                    builds the TensorRT provider for ONNX Runtime >= 1.12
-                    (matching the node's TensorRT -> CUDA -> CPU provider
-                    chain); older releases build CUDA only.
+                    builds the TensorRT provider unless --no-tensorrt is given.
+  --no-tensorrt     build the CUDA provider without TensorRT (CUDA-only prefix;
+                    also settable with ORT_USE_TENSORRT=0).
   --cuda-arch <NN>  CUDA architecture for --ep cuda (Jetson Xavier 72,
                     Orin 87). Auto-detected with nvidia-smi when available.
   --rebuild         ignore any previous build and build again.
@@ -77,6 +78,7 @@ options:
 
 environment:
   ORT_EP / ORT_CUDA_ARCH          fallbacks for --ep / --cuda-arch
+  ORT_USE_TENSORRT                fallback for --no-tensorrt (0 disables it)
   ORT_SOURCE_DIR                  existing onnxruntime source tree (build.sh)
   ORT_SOURCE_TARBALL              tarball whose top level contains onnxruntime/
   ORT_BUILD_DIR                   work dir (default <package>/ort-<version>-build)
@@ -87,13 +89,15 @@ environment:
   ORT_DISABLE_CONTRIB_OPS         default 0; 1 is incompatible with --ep cuda
   ORT_MIN_CMAKE                   override the CMake version check
   CUDA_HOME / CUDNN_HOME / TENSORRT_HOME   prefixes used by --ep cuda
-                                           (TENSORRT_HOME only for ORT >= 1.12)
+                                           (TENSORRT_HOME only when TensorRT
+                                           is built)
 EOF
 }
 
 ORIG_ARGS=("$@")
 EP="${ORT_EP:-cpu}"
 CUDA_ARCH="${ORT_CUDA_ARCH:-}"
+USE_TENSORRT="${ORT_USE_TENSORRT:-1}"
 REBUILD=0
 DRY_RUN=0
 positional=()
@@ -105,6 +109,7 @@ while [[ $# -gt 0 ]]; do
     --cuda-arch)
       [[ $# -ge 2 ]] || { echo "error: --cuda-arch needs a value" >&2; exit 2; }
       CUDA_ARCH="$2"; shift 2 ;;
+    --no-tensorrt) USE_TENSORRT=0; shift ;;
     --rebuild) REBUILD=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) help; exit 0 ;;
@@ -136,6 +141,14 @@ fi
 case "${EP}" in
   cpu|cuda) ;;
   *) echo "error: unsupported --ep '${EP}' (supported: cpu, cuda)" >&2; exit 2 ;;
+esac
+
+if [[ "${EP}" != "cuda" ]]; then
+  USE_TENSORRT=0
+fi
+case "${USE_TENSORRT}" in
+  0|1) ;;
+  *) echo "error: ORT_USE_TENSORRT must be 0 or 1, got '${USE_TENSORRT}'" >&2; exit 2 ;;
 esac
 
 case "${ORT_DISABLE_UNUSED_OPS:-1}" in
@@ -218,6 +231,7 @@ if [[ ${REBUILD} -eq 0 && -f "${OUT_DIR}/lib/libonnxruntime.so" && -f "${STAMP}"
    && grep -qx "ep=${EP}" "${STAMP}" \
    && grep -qx "arch=${ARCH}" "${STAMP}" \
    && grep -qx "cuda_arch=${CUDA_ARCH}" "${STAMP}" \
+   && grep -qx "tensorrt=${USE_TENSORRT}" "${STAMP}" \
    && grep -qx "extra_defines=${ORT_CMAKE_EXTRA_DEFINES:-}" "${STAMP}"; then
   echo "==> Reusing existing ONNX Runtime ${ORT_VERSION} build (${EP}) at ${OUT_DIR}"
   echo "    (pass --rebuild to force a rebuild)"
@@ -381,8 +395,8 @@ fi
 }
 
 if [[ "${EP}" == "cuda" ]]; then
-  if version_ge "${ORT_VERSION}" 1.12; then
-    echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda: CUDA ${CUDA_HOME}," \
+  if [[ "${USE_TENSORRT}" == "1" ]]; then
+    echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda + TensorRT: CUDA ${CUDA_HOME}," \
       "TRT ${TRT_HOME}, arch ${CUDA_ARCH})"
   else
     echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda only: CUDA ${CUDA_HOME}," \
@@ -449,11 +463,10 @@ if [[ "${EP}" == "cuda" ]]; then
   build_cmd+=(
     --use_cuda --cuda_home "${CUDA_HOME}" --cudnn_home "${CUDNN_HOME}"
   )
-  if version_ge "${ORT_VERSION}" 1.12; then
+  if [[ "${USE_TENSORRT}" == "1" ]]; then
     build_cmd+=(--use_tensorrt --tensorrt_home "${TRT_HOME}")
   else
-    echo "warning: ONNX Runtime ${ORT_VERSION} is a legacy build (< 1.12);" \
-      "building CUDA only (TensorRT EP disabled)." >&2
+    echo "warning: building CUDA without TensorRT (--no-tensorrt)." >&2
   fi
 fi
 # build.py < 1.16 defines --cmake_extra_defines without action="append", so a
@@ -515,9 +528,9 @@ rm -rf "${OUT_DIR}"
 mkdir -p "${OUT_DIR}/lib" "${OUT_DIR}/include"
 
 # Copy every produced library. The provider set differs across versions: 1.6
-# links the CUDA provider statically into libonnxruntime.so, while >= 1.12
-# ships separate libonnxruntime_providers_*.so libraries (the TensorRT provider
-# is not built below 1.12). Globbing keeps this version-agnostic.
+# links the CUDA and TensorRT providers statically into libonnxruntime.so,
+# while >= 1.12 ships separate libonnxruntime_providers_*.so libraries.
+# Globbing keeps this version-agnostic.
 shopt -s nullglob
 built_libs=("${BUILD_DIR}"/libonnxruntime*.so*)
 shopt -u nullglob
@@ -558,7 +571,9 @@ copy_header provider_options.h optional
 copy_header cpu_provider_factory.h optional
 if [[ "${EP}" == "cuda" ]]; then
   copy_header cuda_provider_factory.h optional
-  copy_header tensorrt_provider_factory.h optional
+  if [[ "${USE_TENSORRT}" == "1" ]]; then
+    copy_header tensorrt_provider_factory.h optional
+  fi
 fi
 
 for notice in LICENSE ThirdPartyNotices.txt; do
@@ -575,6 +590,7 @@ done
   echo "ep=${EP}"
   echo "arch=${ARCH}"
   echo "cuda_arch=${CUDA_ARCH}"
+  echo "tensorrt=${USE_TENSORRT}"
   echo "extra_defines=${ORT_CMAKE_EXTRA_DEFINES:-}"
 } > "${STAMP}"
 
