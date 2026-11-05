@@ -28,7 +28,6 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
-#include <filesystem>
 #include <fstream>
 #include <map>
 #include <numeric>
@@ -199,19 +198,9 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
 
     if (provider == Provider::TensorRt) {
       if (config.trt_engine_cache_enable) {
-        std::error_code cache_error;
-        bool cache_has_entries = false;
-        for (const auto &entry : std::filesystem::directory_iterator(
-                 config.trt_engine_cache_path, cache_error)) {
-          (void)entry;
-          cache_has_entries = true;
-          break;
-        }
-
-        YOLO_LOG_INFO("TensorRT engine cache: %s (%s)",
-                      config.trt_engine_cache_path.c_str(),
-                      cache_has_entries ? "existing entries; may reuse"
-                                        : "empty; compiling now");
+        YOLO_LOG_INFO("TensorRT engine cache: %s (existing engines are reused; "
+                      "the first run compiles the engine and can take minutes)",
+                      config.trt_engine_cache_path.c_str());
       } else {
         YOLO_LOG_INFO("TensorRT engine cache disabled; compiling now.");
       }

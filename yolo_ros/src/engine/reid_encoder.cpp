@@ -8,7 +8,6 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
-#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -81,19 +80,10 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
 
     if (primary == Provider::TensorRt) {
       if (config.trt_engine_cache_enable) {
-        std::error_code cache_error;
-        bool cache_has_entries = false;
-        for (const auto &entry : std::filesystem::directory_iterator(
-                 config.trt_engine_cache_path, cache_error)) {
-          (void)entry;
-          cache_has_entries = true;
-          break;
-        }
-
-        YOLO_LOG_INFO("ReID TensorRT engine cache: %s (%s)",
-                      config.trt_engine_cache_path.c_str(),
-                      cache_has_entries ? "existing entries; may reuse"
-                                        : "empty; compiling now");
+        YOLO_LOG_INFO("ReID TensorRT engine cache: %s (existing engines are "
+                      "reused; the first run compiles the engine and can take "
+                      "minutes)",
+                      config.trt_engine_cache_path.c_str());
       } else {
         YOLO_LOG_INFO("ReID TensorRT engine cache disabled; compiling now.");
       }
