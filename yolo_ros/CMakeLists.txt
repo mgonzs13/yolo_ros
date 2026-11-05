@@ -98,12 +98,16 @@ if("$ENV{ROS_DISTRO}" STREQUAL "foxy" OR "$ENV{ROS_DISTRO}" STREQUAL "galactic")
   # Foxy and Galactic predate the NodeType template argument in
   # message_filters::Subscriber and only accept rclcpp::Node instances.
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMESSAGE_FILTERS_LEGACY_API")
-  # cv_bridge only exports the cv_bridge::cv_bridge imported target since
-  # Humble; Foxy and Galactic export the legacy ${cv_bridge_LIBRARIES} variable.
+endif()
+
+# Prefer the imported target when the installed cv_bridge provides one. Some
+# Galactic/Foxy builds export only the legacy variables and no target; keep
+# those as a fallback.
+if(TARGET cv_bridge::cv_bridge)
+  set(CV_BRIDGE_TARGET cv_bridge::cv_bridge)
+else()
   set(CV_BRIDGE_TARGET ${cv_bridge_LIBRARIES})
   include_directories(${cv_bridge_INCLUDE_DIRS})
-else()
-  set(CV_BRIDGE_TARGET cv_bridge::cv_bridge)
 endif()
 if("$ENV{ROS_DISTRO}" STREQUAL "foxy")
   # Foxy's rclcpp::QoS::reliability() only accepts
