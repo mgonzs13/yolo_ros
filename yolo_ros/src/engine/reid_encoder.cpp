@@ -5,8 +5,10 @@
 #include "yolo_ros/engine/reid_encoder.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -23,6 +25,11 @@ namespace yolo_ros::engine {
 ReIDEncoder::ReIDEncoder(const std::string &model_path,
                          const std::string &provider, const std::string &device)
     : env_(ORT_LOGGING_LEVEL_WARNING, "yolo_reid") {
+  const auto load_start = std::chrono::steady_clock::now();
+  YOLO_LOG_INFO("Loading ReID model: %s (requested provider='%s', "
+                "device='%s')",
+                model_path.c_str(), provider.c_str(), device.c_str());
+
   std::string requested = yolo_ros::utils::to_lower(provider);
 
   if (requested.empty()) {
@@ -57,6 +64,9 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
   // yet fail to build the session, so construction lives inside the loop.
   std::string last_error;
 
+  YOLO_LOG_INFO("Initializing ReID ONNX Runtime session; TensorRT may compile "
+                "an engine and this can take several minutes.");
+
   for (const Provider primary : chain) {
     ProviderConfig config;
     config.device_id = device_id;
@@ -69,16 +79,51 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
       }
     }
 
+    if (primary == Provider::TensorRt) {
+      if (config.trt_engine_cache_enable) {
+        std::error_code cache_error;
+        bool cache_has_entries = false;
+        for (const auto &entry : std::filesystem::directory_iterator(
+                 config.trt_engine_cache_path, cache_error)) {
+          (void)entry;
+          cache_has_entries = true;
+          break;
+        }
+
+        YOLO_LOG_INFO("ReID TensorRT engine cache: %s (%s)",
+                      config.trt_engine_cache_path.c_str(),
+                      cache_has_entries ? "existing entries; may reuse"
+                                        : "empty; compiling now");
+      } else {
+        YOLO_LOG_INFO("ReID TensorRT engine cache disabled; compiling now.");
+      }
+    }
+
+    YOLO_LOG_INFO("Creating ReID %s session for %s...",
+                  provider_name(primary), model_path.c_str());
+    const auto provider_start = std::chrono::steady_clock::now();
+
     try {
       this->session_options_ = build_session_options(primary, config);
       this->session_ =
           Ort::Session(this->env_, model_path.c_str(), this->session_options_);
       this->active_provider_ = provider_name(primary);
+
+      const double provider_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                        provider_start)
+              .count();
+      YOLO_LOG_INFO("ReID %s session ready in %.2f s.",
+                    provider_name(primary), provider_seconds);
       break;
     } catch (const std::exception &e) {
       last_error = e.what();
-      YOLO_LOG_WARN("ReID execution provider %s failed to initialize: %s",
-                    provider_name(primary), e.what());
+      const double provider_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                        provider_start)
+              .count();
+      YOLO_LOG_WARN("ReID execution provider %s failed after %.2f s: %s",
+                    provider_name(primary), provider_seconds, e.what());
     }
   }
 
@@ -132,9 +177,13 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
                      this->input_width_ * 3);
   this->memory_info_ =
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  YOLO_LOG_INFO("ReID encoder %s loaded (%dx%d, provider %s).",
+  const double load_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                    load_start)
+          .count();
+  YOLO_LOG_INFO("ReID encoder %s loaded (%dx%d, provider %s, total %.2f s).",
                 model_path.c_str(), this->input_width_, this->input_height_,
-                this->active_provider_.c_str());
+                this->active_provider_.c_str(), load_seconds);
 }
 
 ReIDEncoder::~ReIDEncoder() {}

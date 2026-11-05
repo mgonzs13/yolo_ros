@@ -27,6 +27,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <numeric>
@@ -114,6 +116,12 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   this->iou_threshold = params.iou;
   std::string model_path = params.model_path;
 
+  const auto load_start = std::chrono::steady_clock::now();
+  YOLO_LOG_INFO("Loading model: %s (task=%s, requested provider='%s', "
+                "device='%s')",
+                model_path.c_str(), task.c_str(), params.provider.c_str(),
+                params.device.c_str());
+
   if (n_threads <= 0) {
     n_threads = yolo_ros::utils::num_math_threads();
   }
@@ -169,6 +177,9 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   std::string last_error;
   std::string trt_cache_path;
 
+  YOLO_LOG_INFO("Initializing ONNX Runtime session; TensorRT may compile an "
+                "engine and this can take several minutes on the first run.");
+
   for (const Provider provider : chain) {
     ProviderConfig config;
     config.n_threads = n_threads;
@@ -186,16 +197,51 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
       }
     }
 
+    if (provider == Provider::TensorRt) {
+      if (config.trt_engine_cache_enable) {
+        std::error_code cache_error;
+        bool cache_has_entries = false;
+        for (const auto &entry : std::filesystem::directory_iterator(
+                 config.trt_engine_cache_path, cache_error)) {
+          (void)entry;
+          cache_has_entries = true;
+          break;
+        }
+
+        YOLO_LOG_INFO("TensorRT engine cache: %s (%s)",
+                      config.trt_engine_cache_path.c_str(),
+                      cache_has_entries ? "existing entries; may reuse"
+                                        : "empty; compiling now");
+      } else {
+        YOLO_LOG_INFO("TensorRT engine cache disabled; compiling now.");
+      }
+    }
+
+    YOLO_LOG_INFO("Creating %s session for %s...", provider_name(provider),
+                  model_path.c_str());
+    const auto provider_start = std::chrono::steady_clock::now();
+
     try {
       this->session_options = build_session_options(provider, config);
       this->session =
           Ort::Session(this->env, model_path.c_str(), this->session_options);
       this->active_provider_ = provider_name(provider);
+
+      const double provider_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                        provider_start)
+              .count();
+      YOLO_LOG_INFO("%s session ready in %.2f s.", provider_name(provider),
+                    provider_seconds);
       break;
     } catch (const std::exception &e) {
       last_error = e.what();
-      YOLO_LOG_WARN("Execution provider %s failed to initialize: %s",
-                    provider_name(provider), e.what());
+      const double provider_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                        provider_start)
+              .count();
+      YOLO_LOG_WARN("Execution provider %s failed after %.2f s: %s",
+                    provider_name(provider), provider_seconds, e.what());
     }
   }
 
@@ -371,7 +417,12 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
                                     : std::string("dynamic");
   const std::string trt_cache_suffix =
       trt_cache_path.empty() ? std::string() : " (" + trt_cache_path + ")";
-  YOLO_LOG_INFO("Model loaded: %s", model_path.c_str());
+  const double load_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                    load_start)
+          .count();
+  YOLO_LOG_INFO("Model loaded: %s (total %.2f s)", model_path.c_str(),
+                load_seconds);
   YOLO_LOG_INFO("  task=%s  model_type='%s'  provider=%s  device='%s' (id=%d)  "
                 "n_threads=%d",
                 task.c_str(), params.model_type.c_str(),
