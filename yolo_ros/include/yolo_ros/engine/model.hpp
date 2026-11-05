@@ -158,6 +158,11 @@ private:
 
   /// @brief True when inference goes through CUDA graph replay.
   bool cuda_graph_{false};
+  /// @brief TensorRT engine cache directory; empty when caching is disabled.
+  std::string trt_cache_path_;
+  /// @brief True until the first session.Run(); TensorRT builds a dynamic-shape
+  /// engine lazily on that call, which can take minutes.
+  bool first_inference_{true};
 #if !YOLO_ORT_LEGACY
   /// @brief CUDA device ordinal of the graph input buffer.
   int device_id_{0};

@@ -78,17 +78,6 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
       }
     }
 
-    if (primary == Provider::TensorRt) {
-      if (config.trt_engine_cache_enable) {
-        YOLO_LOG_INFO("ReID TensorRT engine cache: %s (existing engines are "
-                      "reused; the first run compiles the engine and can take "
-                      "minutes)",
-                      config.trt_engine_cache_path.c_str());
-      } else {
-        YOLO_LOG_INFO("ReID TensorRT engine cache disabled; compiling now.");
-      }
-    }
-
     YOLO_LOG_INFO("Creating ReID %s session for %s...",
                   provider_name(primary), model_path.c_str());
     const auto provider_start = std::chrono::steady_clock::now();
