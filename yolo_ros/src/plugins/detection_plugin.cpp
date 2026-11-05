@@ -180,6 +180,9 @@ void DetectionPlugin::deactivate() {
     this->scheduler_.reset();
   }
 
+  // The Model owns first_inference_ and trt_cache_path_. Destroying it here
+  // guarantees that a reactivation logs the first inference again and starts
+  // from fresh model/cache state.
   this->model_.reset();
 }
 
