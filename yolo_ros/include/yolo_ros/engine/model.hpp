@@ -16,8 +16,7 @@
 #else
 #include <cv_bridge/cv_bridge.hpp>
 #endif
-
-#include <onnxruntime_cxx_api.h>
+#include "yolo_ros/engine/onnxruntime.hpp"
 #include <opencv2/opencv.hpp>
 
 #include <cstddef>

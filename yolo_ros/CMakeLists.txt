@@ -17,7 +17,7 @@ find_package(yolo_msgs REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(yolo_onnxruntime_vendor REQUIRED)
+find_package(onnxruntime_vendor REQUIRED)
 find_package(yolo_hfhub_vendor REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(message_filters REQUIRED)
@@ -76,7 +76,6 @@ endif()
 include_directories(
   include
   ${OpenCV_INCLUDE_DIRS}
-  ${yolo_onnxruntime_vendor_INCLUDE_DIRS}
 )
 
 # Shared library with the framework and the engine/task/tracking/3D sources.
@@ -131,7 +130,7 @@ target_link_libraries(yolo_ros_core
   ${yolo_msgs_TARGETS}
   ${CV_BRIDGE_TARGET}
   ament_index_cpp::ament_index_cpp
-  ${yolo_onnxruntime_vendor_LIBRARIES}
+  onnxruntime::onnxruntime
   ${yolo_hfhub_vendor_TARGETS}
   ${OpenCV_LIBS}
 )
@@ -167,7 +166,7 @@ target_link_libraries(yolo_ros_plugins
   message_filters::message_filters
   ${yolo_msgs_TARGETS}
   ${CV_BRIDGE_TARGET}
-  ${yolo_onnxruntime_vendor_LIBRARIES}
+  onnxruntime::onnxruntime
   ${yolo_hfhub_vendor_TARGETS}
   ament_index_cpp::ament_index_cpp
   ${OpenCV_LIBS}
@@ -204,6 +203,7 @@ ament_export_dependencies(
   geometry_msgs
   yolo_msgs
   ament_index_cpp
+  onnxruntime_vendor
 )
 
 install(FILES
@@ -351,7 +351,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_utils
     ${yolo_msgs_TARGETS}
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    onnxruntime::onnxruntime
     ${OpenCV_LIBS}
   )
 
@@ -366,7 +366,7 @@ if(BUILD_TESTING)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test>
   )
   target_link_libraries(test_provider
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    onnxruntime::onnxruntime
   )
 
   ament_add_gtest(test_tracking
@@ -390,7 +390,7 @@ if(BUILD_TESTING)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test>
   )
   target_link_libraries(test_tracking
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    onnxruntime::onnxruntime
     ${OpenCV_LIBS}
   )
 
@@ -437,7 +437,7 @@ if(BUILD_TESTING)
     ${CV_BRIDGE_TARGET}
     ament_index_cpp::ament_index_cpp
     ${yolo_msgs_TARGETS}
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    onnxruntime::onnxruntime
     ${yolo_hfhub_vendor_TARGETS}
     ${OpenCV_LIBS}
     CURL::libcurl
@@ -471,7 +471,7 @@ if(BUILD_TESTING)
     ${CV_BRIDGE_TARGET}
     ament_index_cpp::ament_index_cpp
     ${yolo_msgs_TARGETS}
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    onnxruntime::onnxruntime
     ${yolo_hfhub_vendor_TARGETS}
     ${OpenCV_LIBS}
     CURL::libcurl
@@ -500,7 +500,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_model_factory
     ${yolo_msgs_TARGETS}
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    onnxruntime::onnxruntime
     ${CV_BRIDGE_TARGET}
   )
 endif()

@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "yolo_ros/engine/model.hpp"
-
-#include "onnxruntime_cxx_api.h"
+#include "yolo_ros/engine/onnxruntime.hpp"
 
 #if defined(YOLO_ROS_HAS_CUDA_RUNTIME)
 #include <cuda_runtime_api.h>

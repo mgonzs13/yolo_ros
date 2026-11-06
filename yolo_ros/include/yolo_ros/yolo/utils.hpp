@@ -11,8 +11,8 @@
 
 #include <vector>
 
-#include "onnxruntime_cxx_api.h"
 #include "yolo_msgs/msg/bounding_box2_d.hpp"
+#include "yolo_ros/engine/onnxruntime.hpp"
 #include <algorithm>
 #include <opencv2/opencv.hpp>
 

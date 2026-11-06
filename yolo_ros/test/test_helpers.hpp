@@ -4,11 +4,10 @@
 #ifndef YOLO_ROS__TEST__TEST_HELPERS_HPP_
 #define YOLO_ROS__TEST__TEST_HELPERS_HPP_
 
+#include "yolo_ros/engine/onnxruntime.hpp"
 #include <cstdint>
 #include <utility>
 #include <vector>
-
-#include "onnxruntime_cxx_api.h"
 
 namespace yolo_ros::test {
 
