@@ -8,12 +8,11 @@
 #ifndef YOLO_ROS__ENGINE__REID_ENCODER_HPP_
 #define YOLO_ROS__ENGINE__REID_ENCODER_HPP_
 
+#include "yolo_ros/engine/onnxruntime.hpp"
 #include <array>
+#include <opencv2/core.hpp>
 #include <string>
 #include <vector>
-
-#include <core/session/onnxruntime_cxx_api.h>
-#include <opencv2/core.hpp>
 
 /// @addtogroup yolo_engine
 /// @{

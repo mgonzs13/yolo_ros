@@ -7,8 +7,7 @@
 
 #ifndef YOLO_ROS__ENGINE__PROVIDER_HPP_
 #define YOLO_ROS__ENGINE__PROVIDER_HPP_
-
-#include <core/session/onnxruntime_cxx_api.h>
+#include "yolo_ros/engine/onnxruntime.hpp"
 #include <string>
 #include <unordered_map>
 #include <vector>
