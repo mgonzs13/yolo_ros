@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "onnxruntime_cxx_api.h"
+#include <core/session/onnxruntime_cxx_api.h>
 
 namespace yolo_ros::test {
 

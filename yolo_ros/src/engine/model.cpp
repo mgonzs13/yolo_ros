@@ -3,7 +3,7 @@
 
 #include "yolo_ros/engine/model.hpp"
 
-#include "onnxruntime_cxx_api.h"
+#include <core/session/onnxruntime_cxx_api.h>
 
 #if defined(YOLO_ROS_HAS_CUDA_RUNTIME)
 #include <cuda_runtime_api.h>

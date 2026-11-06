@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include <onnxruntime_cxx_api.h>
+#include <core/session/onnxruntime_cxx_api.h>
 #include <opencv2/core.hpp>
 
 /// @addtogroup yolo_engine

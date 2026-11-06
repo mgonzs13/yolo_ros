@@ -17,7 +17,7 @@
 #include <cv_bridge/cv_bridge.hpp>
 #endif
 
-#include <onnxruntime_cxx_api.h>
+#include <core/session/onnxruntime_cxx_api.h>
 #include <opencv2/opencv.hpp>
 
 #include <cstddef>
