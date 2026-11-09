@@ -30,6 +30,7 @@ Overrides (all as `colcon build --cmake-args`):
 - **`ONNX_GPU_SUFFIX=...`** — override the tarball suffix for versions outside the table.
 - **`ONNXRUNTIME_URL=...`** — full tarball URL; skips version/suffix selection entirely.
 - **`ONNXRUNTIME_ROOT=...`** — a locally built ONNX Runtime prefix (takes precedence over any download).
+- **`AMENT_VENDOR_POLICY=NEVER_VENDOR`** — do not download or install ONNX Runtime; use an installed one found with `find_package(onnxruntime)`, in line with most vendor packages.
 
 ### cuDNN runtime
 
