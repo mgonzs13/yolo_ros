@@ -402,10 +402,9 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   const std::string batch_str = this->fixed_batch_ > 0
                                     ? std::to_string(this->fixed_batch_)
                                     : std::string("dynamic");
-  const double load_seconds =
-      std::chrono::duration<double>(std::chrono::steady_clock::now() -
-                                    load_start)
-          .count();
+  const double load_seconds = std::chrono::duration<double>(
+                                  std::chrono::steady_clock::now() - load_start)
+                                  .count();
   YOLO_LOG_INFO("Model loaded: %s (total %.2f s)", model_path.c_str(),
                 load_seconds);
   YOLO_LOG_INFO("  task=%s  model_type='%s'  provider=%s  device='%s' (id=%d)  "
@@ -572,8 +571,8 @@ yolo_ros::engine::Model::detect_batch(const std::vector<cv::Mat> &images) {
   // A fixed axis forces its own chunk size. A partial final chunk is padded by
   // repeating its last image and the padded results are dropped, so a stock
   // batch-1 model keeps working.
-  const std::size_t chunk = resolve_batch_chunk(
-      this->fixed_batch_, this->pad_to_batch_, count);
+  const std::size_t chunk =
+      resolve_batch_chunk(this->fixed_batch_, this->pad_to_batch_, count);
   results.reserve(count);
 
   for (std::size_t start = 0; start < count; start += chunk) {

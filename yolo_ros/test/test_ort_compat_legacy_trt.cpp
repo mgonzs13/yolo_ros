@@ -16,8 +16,9 @@ namespace compat = yolo_ros::engine::compat;
 static int g_trt_append_calls = 0;
 static int g_trt_append_device_id = -1;
 
-extern "C" OrtStatus *OrtSessionOptionsAppendExecutionProvider_Tensorrt(
-    OrtSessionOptions *, int device_id) noexcept {
+extern "C" OrtStatus *
+OrtSessionOptionsAppendExecutionProvider_Tensorrt(OrtSessionOptions *,
+                                                  int device_id) noexcept {
   ++g_trt_append_calls;
   g_trt_append_device_id = device_id;
   return nullptr; // success

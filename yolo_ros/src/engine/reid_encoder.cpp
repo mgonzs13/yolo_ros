@@ -78,8 +78,8 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
       }
     }
 
-    YOLO_LOG_INFO("Creating ReID %s session for %s...",
-                  provider_name(primary), model_path.c_str());
+    YOLO_LOG_INFO("Creating ReID %s session for %s...", provider_name(primary),
+                  model_path.c_str());
     const auto provider_start = std::chrono::steady_clock::now();
 
     try {
@@ -92,8 +92,8 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
           std::chrono::duration<double>(std::chrono::steady_clock::now() -
                                         provider_start)
               .count();
-      YOLO_LOG_INFO("ReID %s session ready in %.2f s.",
-                    provider_name(primary), provider_seconds);
+      YOLO_LOG_INFO("ReID %s session ready in %.2f s.", provider_name(primary),
+                    provider_seconds);
       break;
     } catch (const std::exception &e) {
       last_error = e.what();
@@ -156,10 +156,9 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
                      this->input_width_ * 3);
   this->memory_info_ =
       Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  const double load_seconds =
-      std::chrono::duration<double>(std::chrono::steady_clock::now() -
-                                    load_start)
-          .count();
+  const double load_seconds = std::chrono::duration<double>(
+                                  std::chrono::steady_clock::now() - load_start)
+                                  .count();
   YOLO_LOG_INFO("ReID encoder %s loaded (%dx%d, provider %s, total %.2f s).",
                 model_path.c_str(), this->input_width_, this->input_height_,
                 this->active_provider_.c_str(), load_seconds);

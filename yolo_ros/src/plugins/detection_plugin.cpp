@@ -110,8 +110,7 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
     RCLCPP_WARN(node.get_logger(),
                 "pad_to_batch (%d) exceeds max_batch_size (%zu); clamping",
                 this->yolo_params_.pad_to_batch, this->max_batch_size_);
-    this->yolo_params_.pad_to_batch =
-        static_cast<int>(this->max_batch_size_);
+    this->yolo_params_.pad_to_batch = static_cast<int>(this->max_batch_size_);
   }
 }
 
