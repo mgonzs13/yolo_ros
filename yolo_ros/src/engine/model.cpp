@@ -259,6 +259,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
 
     this->fixed_batch_ =
         input_tensor_shape_vec[0] > 0 ? input_tensor_shape_vec[0] : 0;
+    this->pad_to_batch_ = std::max<int64_t>(0, params.pad_to_batch);
 
     const InputShape resolved = resolve_input_shape(
         input_tensor_shape_vec, params.img_width, params.img_height);
@@ -426,6 +427,16 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
                 this->input_is_rgb_ ? "rgb" : "bgr", batch_str.c_str(),
                 this->input_image_shape.width, this->input_image_shape.height);
 
+  if (this->pad_to_batch_ > 0) {
+    if (this->fixed_batch_ > 0) {
+      YOLO_LOG_INFO("  batch padding: ignored; model has a fixed batch of %lld",
+                    static_cast<long long>(this->fixed_batch_));
+    } else {
+      YOLO_LOG_INFO("  batch padding: dynamic batch padded to %lld image(s)",
+                    static_cast<long long>(this->pad_to_batch_));
+    }
+  }
+
   for (std::size_t i = 0; i < this->num_output_nodes; ++i) {
     // Keep the TypeInfo alive: the ConstTensorTypeAndShapeInfo view points into
     // it, so binding it to a temporary leaves the shape dangling.
@@ -556,12 +567,13 @@ yolo_ros::engine::Model::detect_batch(const std::vector<cv::Mat> &images) {
     return results;
   }
 
-  // A dynamic batch axis accepts any count; a fixed axis forces the chunk
-  // size. A partial final chunk is padded by repeating its last image and the
-  // padded results are dropped, so a stock batch-1 model keeps working.
-  const std::size_t chunk = this->fixed_batch_ > 0
-                                ? static_cast<std::size_t>(this->fixed_batch_)
-                                : count;
+  // A dynamic batch axis accepts any count, but TensorRT profiles it from the
+  // observed min/max; padding to a stable size keeps the cached engine valid.
+  // A fixed axis forces its own chunk size. A partial final chunk is padded by
+  // repeating its last image and the padded results are dropped, so a stock
+  // batch-1 model keeps working.
+  const std::size_t chunk = resolve_batch_chunk(
+      this->fixed_batch_, this->pad_to_batch_, count);
   results.reserve(count);
 
   for (std::size_t start = 0; start < count; start += chunk) {

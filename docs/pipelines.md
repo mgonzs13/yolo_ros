@@ -29,6 +29,7 @@ The whole pipeline lives in a single params file: the node-level `cameras` list 
       model_repo: unileon-robotics/YOLO26-ONNX
       model_filename: dynamic/yolo26m.onnx # dynamic-batch export
       max_batch_size: 8
+      pad_to_batch: 2 # optional: pin the TensorRT profile to the camera count
     tracking:
       plugin: yolo_ros/TrackingPlugin
       cameras: ["cam0", "cam1"]

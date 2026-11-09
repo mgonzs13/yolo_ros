@@ -79,6 +79,43 @@ TEST_F(DetectionPluginTest, NegativeMaxBatchSizeIsClamped) {
   EXPECT_EQ(plugin.max_batch_size(), 1u);
 }
 
+TEST_F(DetectionPluginTest, ReadsPadToBatchParam) {
+  auto node =
+      std::make_shared<rclcpp_lifecycle::LifecycleNode>("detection_test");
+
+  yolo_ros::DetectionPlugin plugin;
+  plugin.declare_params(*node, "det.");
+  node->set_parameter(rclcpp::Parameter("det.pad_to_batch", 4));
+  plugin.get_params(*node, "det.");
+
+  EXPECT_EQ(plugin.pad_to_batch(), 4);
+}
+
+TEST_F(DetectionPluginTest, PadToBatchIsClampedToMaxBatchSize) {
+  auto node =
+      std::make_shared<rclcpp_lifecycle::LifecycleNode>("detection_test");
+
+  yolo_ros::DetectionPlugin plugin;
+  plugin.declare_params(*node, "det.");
+  node->set_parameter(rclcpp::Parameter("det.max_batch_size", 2));
+  node->set_parameter(rclcpp::Parameter("det.pad_to_batch", 4));
+  plugin.get_params(*node, "det.");
+
+  EXPECT_EQ(plugin.pad_to_batch(), 2);
+}
+
+TEST_F(DetectionPluginTest, NegativePadToBatchDisablesPadding) {
+  auto node =
+      std::make_shared<rclcpp_lifecycle::LifecycleNode>("detection_test");
+
+  yolo_ros::DetectionPlugin plugin;
+  plugin.declare_params(*node, "det.");
+  node->set_parameter(rclcpp::Parameter("det.pad_to_batch", -3));
+  plugin.get_params(*node, "det.");
+
+  EXPECT_EQ(plugin.pad_to_batch(), 0);
+}
+
 TEST_F(DetectionPluginTest, NegativeMaxDetIsClamped) {
   auto node =
       std::make_shared<rclcpp_lifecycle::LifecycleNode>("detection_test");

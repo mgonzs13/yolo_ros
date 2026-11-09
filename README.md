@@ -255,6 +255,8 @@ debug:
 
 `DetectionPlugin` runs directly on the single-camera case and batches (up to `max_batch_size`) when it selects several cameras; the shared model must be a dynamic-batch ONNX export (the mirror's `dynamic/` files are). Outputs stay camera-prefixed (`cam0/detections`, `cam1/detections`, ...). See the [multi-camera pipelines guide](docs/pipelines.md) for the full example and the batching-scaling numbers.
 
+With TensorRT, ONNX Runtime 1.6 only reuses a cached engine when the input batch size is inside the optimization profile saved with it. The scheduler produces variable batch sizes (the first frame often arrives alone), so the engine can be rebuilt for several minutes on the first inference. Set `pad_to_batch` to a stable size (usually the camera count, e.g. `4`) to keep the profile valid and the cached engine reusable.
+
 ### Topics
 
 All output topics are published under the launch namespace (default `yolo`) and are **camera-prefixed**: a camera named `cam0` publishes under `/<namespace>/cam0/`. Whether a topic exists depends on the `plugins` chain and on the camera being in each plugin's `cameras` list:
@@ -331,6 +333,7 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 - **max_det**: Maximum number of detections per image (default: `300`).
 - **cameras**: Cameras to run inference on; omit the list to select every defined camera (never write `cameras: []`). Detection is first in the chain, so it can select any defined camera. One camera uses the direct path, several run the dynamic-batch path.
 - **max_batch_size**: Maximum batch size for the multi-camera path (default: `8`).
+- **pad_to_batch**: Pad every dynamic-batch inference to this size (default: `0`, disabled; clamped to `max_batch_size`). A fixed batch size keeps the TensorRT optimization profile valid, so the cached engine is reused instead of rebuilt when the camera batch size varies. Use it with a dynamic-batch export, e.g. `pad_to_batch: 4` for four cameras. Ignored for models with a fixed batch axis, which always use the batch size baked into the graph.
 - **n_threads**: CPU execution-provider threads; `-1` (or any value <= 0) = auto: performance cores on hybrid CPUs, otherwise physical cores (default: `-1`).
 - **max_fps**: Cap the inference/publish rate in Hz; `0` = unlimited (default: `0`).
 - **img_width** / **img_height**: Network input size for models exported with a dynamic input (`dynamic=True`) (defaults: `640`/`480`). Models with a static input keep the size baked into the ONNX graph (a warning is logged when the parameters differ); non-positive values fail configure and values not divisible by 32 log a warning.
