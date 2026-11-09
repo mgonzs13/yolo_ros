@@ -319,32 +319,41 @@ Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic m
 
 #### Detection plugin (`detection.*`, `yolo_ros/DetectionPlugin`)
 
-Parameters are grouped into model/inference settings and execution-provider settings.
+Parameters are grouped into general settings and per-provider settings.
 
 ##### General parameters
 
 - **model_type**: Pipeline to run: `YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify` or `auto` (default: `auto`, which infers the task from the model file name: `-seg`/`segment`, `-pose`/`pose`, `-obb`/`obb`, `-cls`/`classify`).
 - **model_path**: Path to the ONNX model (default: empty; the shipped configs set `model_repo`/`model_filename` instead).
 - **model_repo** / **model_filename** / **force_download** / **cache_dir**: Hugging Face Hub download (used instead of `model_path` when set; defaults: empty / empty / `false` / `~/.cache/huggingface/hub`). The shipped configs default to the `unileon-robotics/YOLO26-ONNX` mirror; clear `model_repo` to fall back to the local `model_path`.
+- **provider**: Execution provider: `auto` (CUDA → CPU fallback chain), or force `tensorrt`/`trt` (TensorRT → CUDA → CPU), `cuda` (CUDA → CPU), `cpu` (default: `auto`).
+- **device**: CUDA/TensorRT device ordinal, e.g. `cuda:0`, `trt:1`, `1` (default: `cuda:0`). The `cuda:`/`trt:` prefix is accepted but `provider` selects the execution provider.
 - **cameras**: Cameras to run inference on; omit the list to select every defined camera (never write `cameras: []`). Detection is first in the chain, so it can select any defined camera. One camera uses the direct path, several run the dynamic-batch path.
 - **threshold**: Detection confidence threshold (default: `0.7`).
 - **iou**: IoU threshold for the C++ NMS applied to raw-output exports (detection without a baked-NMS head, segmentation, pose and OBB); it has no effect on exports that bake NMS into the graph (default: `0.45`).
 - **max_det**: Maximum number of detections per image (default: `300`).
 - **max_batch_size**: Maximum batch size for the multi-camera path (default: `8`). The scheduler drains up to this many camera frames per inference; smaller batches are padded only when `pad_to_batch` is set.
+- **pad_to_batch**: Pad every dynamic-batch inference to this size (default: `0`, disabled; clamped to `max_batch_size`). The batch is padded by repeating its last image, and padded results are dropped. Use it when the camera batch size varies from cycle to cycle; it applies with any provider. Ignored for models with a fixed batch axis, which always use the batch size baked into the graph. See the TensorRT section for the engine-cache benefit.
 - **max_fps**: Cap the inference/publish rate in Hz; `0` = unlimited (default: `0`).
 - **img_width** / **img_height**: Network input size for models exported with a dynamic input (`dynamic=True`) (defaults: `640`/`480`). Models with a static input keep the size baked into the ONNX graph (a warning is logged when the parameters differ); non-positive values fail configure and values not divisible by 32 log a warning.
 - **top_k**: Classification only — number of top classes to publish (default: `5`).
 
-##### Execution provider parameters
+The provider-specific parameters below apply only when the matching provider is selected. `auto` tries CUDA and then CPU; TensorRT is used only when requested explicitly.
 
-- **provider**: Execution provider: `auto` (CUDA → CPU fallback chain), or force `tensorrt`/`trt` (TensorRT → CUDA → CPU), `cuda` (CUDA → CPU), `cpu` (default: `auto`).
-- **device**: CUDA/TensorRT device ordinal, e.g. `cuda:0`, `trt:1`, `1` (default: `cuda:0`). The `cuda:`/`trt:` prefix is accepted but `provider` selects the execution provider.
-- **n_threads**: CPU execution-provider threads; `-1` (or any value <= 0) = auto: performance cores on hybrid CPUs, otherwise physical cores (default: `-1`). Only used by the CPU provider; CUDA and TensorRT sessions run with a single ONNX Runtime intra-op thread.
-- **cuda_graph_enable**: Capture the fixed-shape model as a CUDA graph on the CUDA provider, cutting per-kernel launch overhead (default: `true`). Only applies to fixed-batch models; dynamic-batch exports, CPU and TensorRT sessions keep the plain path.
+##### TensorRT provider parameters (`provider: tensorrt` or `trt`)
+
 - **trt_fp16_enable**: TensorRT FP16 precision (default: `true`). The flag is part of the engine cache name, so toggling it builds and caches a separate engine.
 - **trt_engine_cache_enable**: Persist built TensorRT engines (default: `true`). With a dynamic batch axis the engine is built on the first inference and can take several minutes.
 - **trt_engine_cache_path**: TensorRT engine cache base directory; empty → `~/.cache/yolo_ros/trt_engines/<model>` (default: empty).
-- **pad_to_batch**: Pad every dynamic-batch inference to this size (default: `0`, disabled; clamped to `max_batch_size`). A fixed batch size keeps the TensorRT optimization profile valid, so the cached engine is reused instead of rebuilt when the camera batch size varies. Use it with a dynamic-batch export, e.g. `pad_to_batch: 4` for four cameras. Ignored for models with a fixed batch axis, which always use the batch size baked into the graph.
+- **pad_to_batch**: Recommended with a dynamic-batch export. ONNX Runtime 1.6's TensorRT provider learns the optimization profile from the batch sizes it observes and rebuilds the engine whenever a new size falls outside the saved `[min,max]` range. Padding every inference to a fixed size (e.g. `4` with four cameras) keeps that profile stable, so the cached engine is reused instead of rebuilt: no multi-minute stall when the first frame arrives alone or when the camera batch size changes. On a cold cache it also collapses the usual `[1,1]` then `[1,4]` sequence into a single `[4,4]` build. Same syntax and default as in General parameters.
+
+##### CUDA provider parameters (`provider: cuda`)
+
+- **cuda_graph_enable**: Capture the fixed-shape model as a CUDA graph on the CUDA provider, cutting per-kernel launch overhead (default: `true`). Only applies to fixed-batch models; dynamic-batch exports keep the plain path.
+
+##### CPU provider parameters (`provider: cpu`)
+
+- **n_threads**: CPU execution-provider threads; `-1` (or any value <= 0) = auto: performance cores on hybrid CPUs, otherwise physical cores (default: `-1`). Only used by the CPU provider; CUDA and TensorRT sessions run with a single ONNX Runtime intra-op thread.
 
 #### Tracking plugin (`tracking.*`, `yolo_ros/TrackingPlugin`)
 
