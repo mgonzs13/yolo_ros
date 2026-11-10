@@ -146,7 +146,7 @@ Models are exported for one task — **detection** (`detect`), **instance segmen
 
 Run from the workspace root (so the workspace is sourced as an overlay). `yolo.launch.py` starts one `yolo_node` executable that loads every pipeline stage as a **pluginlib** plugin; a single YAML file defines the whole pipeline — the node-level `cameras`, the ordered `plugins` chain and every plugin's parameters. The task is selected by the **model**, not by a separate executable or launch.
 
-The `plugins` parameter is an ordered list of plugin instance names; each instance selects its pluginlib class with a `<instance>.plugin` parameter, and the instance name is the prefix of every parameter the plugin reads (`detection.*` for `yolo_ros/DetectionPlugin`, `tracking.*` for `yolo_ros/TrackingPlugin`, `detection3d.*` for `yolo_ros/Detect3DPlugin`, `debug.*` for `yolo_ros/DebugPlugin`). The list order **is** the data-flow chain: the first plugin must be `yolo_ros/DetectionPlugin`, no plugin type may appear twice and `yolo_ros/DebugPlugin` must be last. Each plugin also takes a `cameras` list selecting which cameras it processes and consumes the previous plugin's output for each camera; every camera a plugin selects must also be selected by the previous plugin in the chain (the first plugin consumes the camera frames directly), otherwise configure fails with `plugin '<instance>': camera '<cam>' is not produced by plugin '<previous instance>'`. Omit a plugin's `cameras` key to process every defined camera, and never write `cameras: []` (see the YAML note below). The plugins exchange data in memory over typed **blackboard channels** and each runs on its own worker thread. `yolo.launch.py` is a thin loader: it passes its YAML params file plus scalar command-line overrides and makes no topic remaps. The default `config/yolo.yaml` looks like:
+The `plugins` parameter is an ordered list of plugin instance names; each instance selects its pluginlib class with a `<instance>.plugin` parameter, and the instance name is the prefix of every parameter the plugin reads (`detection.*` for `yolo_ros/DetectionPlugin`, `tracking.*` for `yolo_ros/TrackingPlugin`, `detection3d.*` for `yolo_ros/Detect3DPlugin`, `debug.*` for `yolo_ros/DebugPlugin`). The list order **is** the data-flow chain: the first plugin must be `yolo_ros/DetectionPlugin`, no plugin type may appear twice and `yolo_ros/DebugPlugin` must be last. Each plugin also takes a `cameras` list selecting which cameras it processes and consumes the previous plugin's output for each camera; every camera a plugin selects must also be selected by the previous plugin in the chain (the first plugin consumes the camera frames directly), otherwise configure fails with <code>plugin '&lt;instance&gt;': camera '&lt;cam&gt;' is not produced by plugin '&lt;previous instance&gt;'</code>. Omit a plugin's `cameras` key to process every defined camera, and never write `cameras: []` (see the YAML note below). The plugins exchange data in memory over typed **blackboard channels** and each runs on its own worker thread. `yolo.launch.py` is a thin loader: it passes its YAML params file plus scalar command-line overrides and makes no topic remaps. The default `config/yolo.yaml` looks like:
 
 ```yaml
 /yolo/yolo_node:
@@ -261,11 +261,11 @@ With TensorRT, ONNX Runtime 1.6 only reuses a cached engine when the input batch
 
 All output topics are published under the launch namespace (default `yolo`) and are **camera-prefixed**: a camera named `cam0` publishes under `/<namespace>/cam0/`. Whether a topic exists depends on the `plugins` chain and on the camera being in each plugin's `cameras` list:
 
-- **<cam>/detections**: Objects detected by YOLO using the camera's RGB images. Each object contains a bounding box and a class name, plus a mask or a list of keypoints for segmentation/pose models.
-- **<cam>/tracking**: Objects detected and tracked by ByteTrack (or BoT-SORT with `tracking.tracker_type: botsort`). Each object is assigned a stable tracking ID.
-- **<cam>/detections_3d**: 3D objects detected by `detection3d`. YOLO results are used to crop the depth image and create 3D bounding boxes and keypoints.
-- **<cam>/debug_image**: Debug image showing the detected and tracked objects. It can be visualized with `rqt_image_view` or `rviz2`.
-- **<cam>/debug_bb_markers** / **<cam>/debug_kp_markers**: RViz `MarkerArray`s built from the debug plugin's input detection stream; they carry content when `detection3d` precedes debug in the chain (`bbox3d`/`keypoints3d` data).
+- **&lt;cam&gt;/detections**: Objects detected by YOLO using the camera's RGB images. Each object contains a bounding box and a class name, plus a mask or a list of keypoints for segmentation/pose models.
+- **&lt;cam&gt;/tracking**: Objects detected and tracked by ByteTrack (or BoT-SORT with `tracking.tracker_type: botsort`). Each object is assigned a stable tracking ID.
+- **&lt;cam&gt;/detections_3d**: 3D objects detected by `detection3d`. YOLO results are used to crop the depth image and create 3D bounding boxes and keypoints.
+- **&lt;cam&gt;/debug_image**: Debug image showing the detected and tracked objects. It can be visualized with `rqt_image_view` or `rviz2`.
+- **&lt;cam&gt;/debug_bb_markers** / **&lt;cam&gt;/debug_kp_markers**: RViz `MarkerArray`s built from the debug plugin's input detection stream; they carry content when `detection3d` precedes debug in the chain (`bbox3d`/`keypoints3d` data).
 
 Synchronized camera frames and the inter-plugin blackboard channels are in-process only — the topics above are the only ROS outputs.
 
@@ -311,9 +311,9 @@ If you change `namespace:=`, update the matching config block names for any valu
 
 The node-level `cameras` parameter lists the camera names. Each name declares its own fields:
 
-- **<cam>.rgb_topic** (required): RGB `sensor_msgs/Image` topic.
-- **<cam>.depth_topic** / **<cam>.depth_info_topic**: optional depth image and its `sensor_msgs/CameraInfo`; they must be set together (setting only one is a configure error).
-- **<cam>.image_reliability** / **<cam>.depth_reliability**: QoS reliability as an integer: `0`=system default, `1`=Reliable, `2`=Best Effort (defaults: `2`).
+- **&lt;cam&gt;.rgb_topic** (required): RGB `sensor_msgs/Image` topic.
+- **&lt;cam&gt;.depth_topic** / **&lt;cam&gt;.depth_info_topic**: optional depth image and its `sensor_msgs/CameraInfo`; they must be set together (setting only one is a configure error).
+- **&lt;cam&gt;.image_reliability** / **&lt;cam&gt;.depth_reliability**: QoS reliability as an integer: `0`=system default, `1`=Reliable, `2`=Best Effort (defaults: `2`).
 
 Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic may be used by two cameras. Camera frames are synchronized and stay in-process, so these topics are the node's only ROS subscriptions.
 
