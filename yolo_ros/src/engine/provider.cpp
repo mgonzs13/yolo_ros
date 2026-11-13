@@ -122,6 +122,16 @@ const char *device_provider_name(const std::string &device) {
   return "";
 }
 
+std::string reid_provider_for_build(const std::string &requested) {
+  const std::string key = yolo_ros::utils::to_lower(requested);
+#if YOLO_ORT_LEGACY
+  if (key.empty() || key == "auto" || key == "tensorrt" || key == "trt") {
+    return "cuda";
+  }
+#endif
+  return requested;
+}
+
 Ort::SessionOptions build_session_options(Provider primary,
                                           const ProviderConfig &config) {
   Ort::SessionOptions options;

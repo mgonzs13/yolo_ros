@@ -47,6 +47,13 @@ std::vector<Provider> available_providers();
 std::vector<Provider> provider_chain(const std::string &requested,
                                      const std::vector<Provider> &available);
 
+/// @brief Provider string the ReID encoder should use for this build.
+/// Legacy ONNX Runtime (< 1.12) maps "auto"/"tensorrt"/"trt" to "cuda" so ReID
+/// does not open a second TensorRT session with process-wide env vars.
+/// @param[in] requested Requested provider string.
+/// @return The provider string to pass to provider_chain().
+std::string reid_provider_for_build(const std::string &requested);
+
 /// @brief Lower-case name of @p provider.
 /// @param[in] provider Provider to name.
 /// @return "cpu", "cuda" or "tensorrt".
@@ -70,9 +77,9 @@ const char *device_provider_name(const std::string &device);
 /// resolved (no -1 sentinel).
 /// @return The configured session options.
 /// @throws Ort::Exception if the provider cannot be appended (modern builds).
-/// @throws std::runtime_error on legacy builds (ONNX Runtime < 1.12) when
-/// TensorRT is requested: the legacy TensorRT refusal falls through the
-/// provider chain to CUDA/CPU.
+/// Legacy ONNX Runtime (< 1.12) appends TensorRT 7.1 through the 1.6 API and
+/// ORT_TENSORRT_* env vars; it throws std::runtime_error only when the build
+/// has no TensorRT provider, so the provider chain falls through to CUDA.
 Ort::SessionOptions build_session_options(Provider primary,
                                           const ProviderConfig &config);
 

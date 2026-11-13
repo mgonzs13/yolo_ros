@@ -29,6 +29,32 @@
 /// @addtogroup yolo_engine
 /// @{
 namespace yolo_ros::engine {
+
+/// @brief Number of images sent to the session per call.
+///
+/// A fixed model batch always wins because the graph requires that exact
+/// shape. For a dynamic batch, @p pad_to_batch forces a fixed chunk size (the
+/// final group is padded by repeating its last image) so the TensorRT
+/// optimization profile stays stable; 0 keeps the exact image count.
+/// @param fixed_batch Batch size baked into the model (0 = dynamic axis).
+/// @param pad_to_batch Requested padded batch size (0 = no padding).
+/// @param count Number of real images in the request.
+/// @return Images per session call; 0 only when @p count is 0 and no padding
+/// is requested.
+inline std::size_t resolve_batch_chunk(int64_t fixed_batch,
+                                       int64_t pad_to_batch,
+                                       std::size_t count) {
+  if (fixed_batch > 0) {
+    return static_cast<std::size_t>(fixed_batch);
+  }
+
+  if (pad_to_batch > 0) {
+    return static_cast<std::size_t>(pad_to_batch);
+  }
+
+  return count;
+}
+
 /// @brief Base class for a single ONNX Runtime YOLO model.
 ///
 /// Owns the ONNX Runtime environment, session and the reusable input buffer.
@@ -68,6 +94,10 @@ public:
   /// @return true when the session uses CUDA graph replay.
   bool using_cuda_graph() const { return this->cuda_graph_; }
 
+  /// @brief Configured batch padding for a dynamic batch axis.
+  /// @return Images per inference batch, or 0 when padding is disabled.
+  int64_t pad_to_batch() const { return this->pad_to_batch_; }
+
   /// @brief Confidence threshold for detections, in [0, 1]. @see detect()
   float conf_threshold{0.5}; // Confidence threshold for detections
   /// @brief IoU threshold used by the C++ NMS, in [0, 1]. @see detect()
@@ -85,6 +115,8 @@ protected:
 private:
   /// @brief Fixed batch size read from the graph; 0 when the axis is dynamic.
   int64_t fixed_batch_ = 0;
+  /// @brief Requested padding for a dynamic batch axis; 0 = send exact count.
+  int64_t pad_to_batch_ = 0;
   /// @brief Letterbox @p image into slice @p index of the reused batch buffer.
   /// @param[in] image BGR image to preprocess.
   /// @param[in] input_tensor_shape Batch shape to write into.
@@ -158,6 +190,11 @@ private:
 
   /// @brief True when inference goes through CUDA graph replay.
   bool cuda_graph_{false};
+  /// @brief TensorRT engine cache directory; empty when caching is disabled.
+  std::string trt_cache_path_;
+  /// @brief True until the first session.Run(); TensorRT builds a dynamic-shape
+  /// engine lazily on that call, which can take minutes.
+  bool first_inference_{true};
 #if !YOLO_ORT_LEGACY
   /// @brief CUDA device ordinal of the graph input buffer.
   int device_id_{0};

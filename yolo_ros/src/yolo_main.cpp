@@ -13,6 +13,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "yolo_ros/node/yolo_node.hpp"
 
+/// @brief Initialize ROS 2, configure the YoloNode and spin until shutdown.
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
 

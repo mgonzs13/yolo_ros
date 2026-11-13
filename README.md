@@ -93,13 +93,18 @@ sudo ldconfig
 
 If startup reports `Using execution provider: cpu`, or the CUDA provider fails with `cuDNN is unavailable or disabled ... dlopen failed for libcudnn.so`, the runtime libraries are missing or the wrong major — install the cuDNN matching the table (cuDNN 8 for CUDA 10/11, cuDNN 9 for CUDA 12/13, with the CUDA-major-specific package).
 
-For `provider: tensorrt`, the ONNX Runtime builds need the TensorRT **10** runtime (`libnvinfer.so.10`, `libnvonnxparser.so.10`): install `libnvinfer10` and `libnvonnxparsers10`, or run the script with `--tensorrt`. The `tensorrt` meta package may point at a newer major (TensorRT 11) and will not satisfy it; in that case the provider logs `Failed to load library .../libonnxruntime_providers_tensorrt.so ... libnvinfer.so.10: cannot open shared object file` and `provider: tensorrt` falls back to CUDA. The CUDA 10 / ONNX Runtime 1.6 legacy path has no TensorRT EP.
+For `provider: tensorrt`, the modern prebuilt ONNX Runtime builds need the TensorRT **10** runtime (`libnvinfer.so.10`, `libnvonnxparser.so.10`): install `libnvinfer10` and `libnvonnxparsers10`, or run the script with `--tensorrt`. The `tensorrt` meta package may point at a newer major (TensorRT 11) and will not satisfy it; in that case the provider logs `Failed to load library .../libonnxruntime_providers_tensorrt.so ... libnvinfer.so.10: cannot open shared object file` and `provider: tensorrt` falls back to CUDA. The x64 prebuilt ONNX Runtime 1.6 GPU tarball is CUDA-only; the aarch64
+source build described in [docs/build.md](docs/build.md#cuda-10-legacy) adds
+the TensorRT 7.1 provider, which uses the JetPack TensorRT 7.1 runtime
+(`libnvinfer.so.7`, `libnvonnxparsers.so.7`) instead of the TensorRT 10
+packages.
 
 `-DONNX_GPU=ON` detects the CUDA major (`CUDA_VERSION` env, `$CUDA_HOME/version.json`, `/usr/local/cuda*/version.json`, then `nvcc`) and downloads the matching ONNX Runtime GPU build with its cuDNN major; the host also needs an NVIDIA driver and the same CUDA series at run time. Override the selection with `-DONNX_CUDA_MAJOR=10|11|12|13`, `-DONNXRUNTIME_VERSION=...`, `-DONNX_GPU_SUFFIX=...` or a full `-DONNXRUNTIME_URL=...`. TensorRT is opt-in: the default `provider: auto` runs on the CUDA execution provider and falls back to CPU; set `provider: tensorrt` to prefer the TensorRT EP (TensorRT → CUDA → CPU) when it is installed. `provider` and `device` are chosen at runtime — see [Parameters](#parameters). The prebuilt GPU tarballs are x64-only and cover only the table above; on aarch64 or for any other CUDA/cuDNN combination build from source (see the [build guide](docs/build.md)).
 
 CUDA 10.2 (JetPack 4 / old drivers) is supported on ROS 2 Galactic through
-ONNX Runtime 1.6.0 with the CUDA execution provider only — TensorRT and CUDA
-Graph are unavailable on that path. See [docs/build.md](docs/build.md#cuda-10-legacy).
+ONNX Runtime 1.6.0. On aarch64 the source build provides CUDA + TensorRT 7.1;
+the x64 prebuilt GPU tarball is CUDA-only. CUDA Graph is unavailable on this
+path. See [docs/build.md](docs/build.md#cuda-10-legacy).
 
 Launch from the workspace root so relative source paths resolve.
 
@@ -141,7 +146,7 @@ Models are exported for one task — **detection** (`detect`), **instance segmen
 
 Run from the workspace root (so the workspace is sourced as an overlay). `yolo.launch.py` starts one `yolo_node` executable that loads every pipeline stage as a **pluginlib** plugin; a single YAML file defines the whole pipeline — the node-level `cameras`, the ordered `plugins` chain and every plugin's parameters. The task is selected by the **model**, not by a separate executable or launch.
 
-The `plugins` parameter is an ordered list of plugin instance names; each instance selects its pluginlib class with a `<instance>.plugin` parameter, and the instance name is the prefix of every parameter the plugin reads (`detection.*` for `yolo_ros/DetectionPlugin`, `tracking.*` for `yolo_ros/TrackingPlugin`, `detection3d.*` for `yolo_ros/Detect3DPlugin`, `debug.*` for `yolo_ros/DebugPlugin`). The list order **is** the data-flow chain: the first plugin must be `yolo_ros/DetectionPlugin`, no plugin type may appear twice and `yolo_ros/DebugPlugin` must be last. Each plugin also takes a `cameras` list selecting which cameras it processes and consumes the previous plugin's output for each camera; every camera a plugin selects must also be selected by the previous plugin in the chain (the first plugin consumes the camera frames directly), otherwise configure fails with `plugin '<instance>': camera '<cam>' is not produced by plugin '<previous instance>'`. Omit a plugin's `cameras` key to process every defined camera, and never write `cameras: []` (see the YAML note below). The plugins exchange data in memory over typed **blackboard channels** and each runs on its own worker thread. `yolo.launch.py` is a thin loader: it passes its YAML params file plus scalar command-line overrides and makes no topic remaps. The default `config/yolo.yaml` looks like:
+The `plugins` parameter is an ordered list of plugin instance names; each instance selects its pluginlib class with a `<instance>.plugin` parameter, and the instance name is the prefix of every parameter the plugin reads (`detection.*` for `yolo_ros/DetectionPlugin`, `tracking.*` for `yolo_ros/TrackingPlugin`, `detection3d.*` for `yolo_ros/Detect3DPlugin`, `debug.*` for `yolo_ros/DebugPlugin`). The list order **is** the data-flow chain: the first plugin must be `yolo_ros/DetectionPlugin`, no plugin type may appear twice and `yolo_ros/DebugPlugin` must be last. Each plugin also takes a `cameras` list selecting which cameras it processes and consumes the previous plugin's output for each camera; every camera a plugin selects must also be selected by the previous plugin in the chain (the first plugin consumes the camera frames directly), otherwise configure fails with <code>plugin '&lt;instance&gt;': camera '&lt;cam&gt;' is not produced by plugin '&lt;previous instance&gt;'</code>. Omit a plugin's `cameras` key to process every defined camera, and never write `cameras: []` (see the YAML note below). The plugins exchange data in memory over typed **blackboard channels** and each runs on its own worker thread. `yolo.launch.py` is a thin loader: it passes its YAML params file plus scalar command-line overrides and makes no topic remaps. The default `config/yolo.yaml` looks like:
 
 ```yaml
 /yolo/yolo_node:
@@ -250,15 +255,17 @@ debug:
 
 `DetectionPlugin` runs directly on the single-camera case and batches (up to `max_batch_size`) when it selects several cameras; the shared model must be a dynamic-batch ONNX export (the mirror's `dynamic/` files are). Outputs stay camera-prefixed (`cam0/detections`, `cam1/detections`, ...). See the [multi-camera pipelines guide](docs/pipelines.md) for the full example and the batching-scaling numbers.
 
+With TensorRT, ONNX Runtime 1.6 only reuses a cached engine when the input batch size is inside the optimization profile saved with it. The scheduler produces variable batch sizes (the first frame often arrives alone), so the engine can be rebuilt for several minutes on the first inference. Set `pad_to_batch` to a stable size (usually the camera count, e.g. `4`) to keep the profile valid and the cached engine reusable.
+
 ### Topics
 
 All output topics are published under the launch namespace (default `yolo`) and are **camera-prefixed**: a camera named `cam0` publishes under `/<namespace>/cam0/`. Whether a topic exists depends on the `plugins` chain and on the camera being in each plugin's `cameras` list:
 
-- **<cam>/detections**: Objects detected by YOLO using the camera's RGB images. Each object contains a bounding box and a class name, plus a mask or a list of keypoints for segmentation/pose models.
-- **<cam>/tracking**: Objects detected and tracked by ByteTrack (or BoT-SORT with `tracking.tracker_type: botsort`). Each object is assigned a stable tracking ID.
-- **<cam>/detections_3d**: 3D objects detected by `detection3d`. YOLO results are used to crop the depth image and create 3D bounding boxes and keypoints.
-- **<cam>/debug_image**: Debug image showing the detected and tracked objects. It can be visualized with `rqt_image_view` or `rviz2`.
-- **<cam>/debug_bb_markers** / **<cam>/debug_kp_markers**: RViz `MarkerArray`s built from the debug plugin's input detection stream; they carry content when `detection3d` precedes debug in the chain (`bbox3d`/`keypoints3d` data).
+- **&lt;cam&gt;/detections**: Objects detected by YOLO using the camera's RGB images. Each object contains a bounding box and a class name, plus a mask or a list of keypoints for segmentation/pose models.
+- **&lt;cam&gt;/tracking**: Objects detected and tracked by ByteTrack (or BoT-SORT with `tracking.tracker_type: botsort`). Each object is assigned a stable tracking ID.
+- **&lt;cam&gt;/detections_3d**: 3D objects detected by `detection3d`. YOLO results are used to crop the depth image and create 3D bounding boxes and keypoints.
+- **&lt;cam&gt;/debug_image**: Debug image showing the detected and tracked objects. It can be visualized with `rqt_image_view` or `rviz2`.
+- **&lt;cam&gt;/debug_bb_markers** / **&lt;cam&gt;/debug_kp_markers**: RViz `MarkerArray`s built from the debug plugin's input detection stream; they carry content when `detection3d` precedes debug in the chain (`bbox3d`/`keypoints3d` data).
 
 Synchronized camera frames and the inter-plugin blackboard channels are in-process only — the topics above are the only ROS outputs.
 
@@ -304,32 +311,49 @@ If you change `namespace:=`, update the matching config block names for any valu
 
 The node-level `cameras` parameter lists the camera names. Each name declares its own fields:
 
-- **<cam>.rgb_topic** (required): RGB `sensor_msgs/Image` topic.
-- **<cam>.depth_topic** / **<cam>.depth_info_topic**: optional depth image and its `sensor_msgs/CameraInfo`; they must be set together (setting only one is a configure error).
-- **<cam>.image_reliability** / **<cam>.depth_reliability**: QoS reliability as an integer: `0`=system default, `1`=Reliable, `2`=Best Effort (defaults: `2`).
+- **&lt;cam&gt;.rgb_topic** (required): RGB `sensor_msgs/Image` topic.
+- **&lt;cam&gt;.depth_topic** / **&lt;cam&gt;.depth_info_topic**: optional depth image and its `sensor_msgs/CameraInfo`; they must be set together (setting only one is a configure error).
+- **&lt;cam&gt;.image_reliability** / **&lt;cam&gt;.depth_reliability**: QoS reliability as an integer: `0`=system default, `1`=Reliable, `2`=Best Effort (defaults: `2`).
 
 Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic may be used by two cameras. Camera frames are synchronized and stay in-process, so these topics are the node's only ROS subscriptions.
 
 #### Detection plugin (`detection.*`, `yolo_ros/DetectionPlugin`)
+
+Parameters are grouped into general settings and per-provider settings.
+
+##### General parameters
 
 - **model_type**: Pipeline to run: `YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify` or `auto` (default: `auto`, which infers the task from the model file name: `-seg`/`segment`, `-pose`/`pose`, `-obb`/`obb`, `-cls`/`classify`).
 - **model_path**: Path to the ONNX model (default: empty; the shipped configs set `model_repo`/`model_filename` instead).
 - **model_repo** / **model_filename** / **force_download** / **cache_dir**: Hugging Face Hub download (used instead of `model_path` when set; defaults: empty / empty / `false` / `~/.cache/huggingface/hub`). The shipped configs default to the `unileon-robotics/YOLO26-ONNX` mirror; clear `model_repo` to fall back to the local `model_path`.
 - **provider**: Execution provider: `auto` (CUDA → CPU fallback chain), or force `tensorrt`/`trt` (TensorRT → CUDA → CPU), `cuda` (CUDA → CPU), `cpu` (default: `auto`).
 - **device**: CUDA/TensorRT device ordinal, e.g. `cuda:0`, `trt:1`, `1` (default: `cuda:0`). The `cuda:`/`trt:` prefix is accepted but `provider` selects the execution provider.
-- **cuda_graph_enable**: Capture the fixed-shape model as a CUDA graph on the CUDA provider, cutting per-kernel launch overhead (default: `true`). Only applies to fixed-batch models; dynamic-batch exports, CPU and TensorRT sessions keep the plain path.
-- **trt_fp16_enable**: TensorRT FP16 precision (default: `true`).
-- **trt_engine_cache_enable**: Persist built TensorRT engines (default: `true`).
-- **trt_engine_cache_path**: TensorRT engine cache base directory; empty → `~/.cache/yolo_ros/trt_engines/<model>` (default: empty).
+- **cameras**: Cameras to run inference on; omit the list to select every defined camera (never write `cameras: []`). Detection is first in the chain, so it can select any defined camera. One camera uses the direct path, several run the dynamic-batch path.
 - **threshold**: Detection confidence threshold (default: `0.7`).
 - **iou**: IoU threshold for the C++ NMS applied to raw-output exports (detection without a baked-NMS head, segmentation, pose and OBB); it has no effect on exports that bake NMS into the graph (default: `0.45`).
 - **max_det**: Maximum number of detections per image (default: `300`).
-- **cameras**: Cameras to run inference on; omit the list to select every defined camera (never write `cameras: []`). Detection is first in the chain, so it can select any defined camera. One camera uses the direct path, several run the dynamic-batch path.
-- **max_batch_size**: Maximum batch size for the multi-camera path (default: `8`).
-- **n_threads**: CPU execution-provider threads; `-1` (or any value <= 0) = auto: performance cores on hybrid CPUs, otherwise physical cores (default: `-1`).
+- **max_batch_size**: Maximum batch size for the multi-camera path (default: `8`). The scheduler drains up to this many camera frames per inference; smaller batches are padded only when `pad_to_batch` is set.
+- **pad_to_batch**: Pad every dynamic-batch inference to this size (default: `0`, disabled; clamped to `max_batch_size`). The batch is padded by repeating its last image, and padded results are dropped. Use it when the camera batch size varies from cycle to cycle; it applies with any provider. Ignored for models with a fixed batch axis, which always use the batch size baked into the graph. See the TensorRT section for the engine-cache benefit.
 - **max_fps**: Cap the inference/publish rate in Hz; `0` = unlimited (default: `0`).
 - **img_width** / **img_height**: Network input size for models exported with a dynamic input (`dynamic=True`) (defaults: `640`/`480`). Models with a static input keep the size baked into the ONNX graph (a warning is logged when the parameters differ); non-positive values fail configure and values not divisible by 32 log a warning.
 - **top_k**: Classification only — number of top classes to publish (default: `5`).
+
+The provider-specific parameters below apply only when the matching provider is selected. `auto` tries CUDA and then CPU; TensorRT is used only when requested explicitly.
+
+##### TensorRT provider parameters (`provider: tensorrt` or `trt`)
+
+- **trt_fp16_enable**: TensorRT FP16 precision (default: `true`). The flag is part of the engine cache name, so toggling it builds and caches a separate engine.
+- **trt_engine_cache_enable**: Persist built TensorRT engines (default: `true`). With a dynamic batch axis the engine is built on the first inference and can take several minutes.
+- **trt_engine_cache_path**: TensorRT engine cache base directory; empty → `~/.cache/yolo_ros/trt_engines/<model>` (default: empty).
+- **pad_to_batch**: Recommended with a dynamic-batch export. ONNX Runtime 1.6's TensorRT provider learns the optimization profile from the batch sizes it observes and rebuilds the engine whenever a new size falls outside the saved `[min,max]` range. Padding every inference to a fixed size (e.g. `4` with four cameras) keeps that profile stable, so the cached engine is reused instead of rebuilt: no multi-minute stall when the first frame arrives alone or when the camera batch size changes. On a cold cache it also collapses the usual `[1,1]` then `[1,4]` sequence into a single `[4,4]` build. Same syntax and default as in General parameters.
+
+##### CUDA provider parameters (`provider: cuda`)
+
+- **cuda_graph_enable**: Capture the fixed-shape model as a CUDA graph on the CUDA provider, cutting per-kernel launch overhead (default: `true`). Only applies to fixed-batch models; dynamic-batch exports keep the plain path.
+
+##### CPU provider parameters (`provider: cpu`)
+
+- **n_threads**: CPU execution-provider threads; `-1` (or any value <= 0) = auto: performance cores on hybrid CPUs, otherwise physical cores (default: `-1`). Only used by the CPU provider; CUDA and TensorRT sessions run with a single ONNX Runtime intra-op thread.
 
 #### Tracking plugin (`tracking.*`, `yolo_ros/TrackingPlugin`)
 

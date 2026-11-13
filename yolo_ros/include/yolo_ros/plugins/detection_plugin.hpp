@@ -78,6 +78,11 @@ public:
   /// @return The clamped cap on published detections (0 drops all of them).
   int max_det() const { return this->yolo_params_.max_det; }
 
+  /// @brief Effective batch padding after clamping in get_params()
+  /// (diagnostics).
+  /// @return Images per inference batch, or 0 when padding is disabled.
+  int pad_to_batch() const { return this->yolo_params_.pad_to_batch; }
+
   /// @brief Configured network input width (diagnostics).
   int img_width() const { return this->yolo_params_.img_width; }
   /// @brief Configured network input height (diagnostics).

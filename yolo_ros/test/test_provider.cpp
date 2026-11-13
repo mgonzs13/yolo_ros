@@ -191,11 +191,21 @@ TEST(BuildSessionOptions, AvailableGpuProvidersDoNotThrow) {
 }
 
 #if YOLO_ORT_LEGACY
-TEST(BuildSessionOptions, LegacyTensorRtRefusal) {
-  ProviderConfig config;
-  config.n_threads = 1;
-  EXPECT_THROW(build_session_options(Provider::TensorRt, config),
-               std::runtime_error);
+TEST(ReIdProvider, LegacyForcesCudaForAutoAndTensorRt) {
+  EXPECT_EQ(reid_provider_for_build(""), "cuda");
+  EXPECT_EQ(reid_provider_for_build("AUTO"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("auto"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("tensorrt"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("TRT"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("trt"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("cuda"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("cpu"), "cpu");
+}
+#else
+TEST(ReIdProvider, ModernKeepsRequestedProvider) {
+  EXPECT_EQ(reid_provider_for_build("auto"), "auto");
+  EXPECT_EQ(reid_provider_for_build("tensorrt"), "tensorrt");
+  EXPECT_EQ(reid_provider_for_build("cpu"), "cpu");
 }
 #endif
 

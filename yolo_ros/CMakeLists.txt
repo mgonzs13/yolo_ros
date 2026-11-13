@@ -2,6 +2,21 @@ cmake_minimum_required(VERSION 3.10)
 project(yolo_ros)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Ubuntu 18.04's GCC 8 needs the separate filesystem library for
+# std::filesystem (used by the provider/engine code). GCC 9+ moved it into
+# libstdc++.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+   AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8)
+  message(FATAL_ERROR
+    "GCC 8+ is required for std::filesystem; on Ubuntu 18.04 install "
+    "g++-8 and build with CXX=g++-8 CC=gcc-8, or use the Ubuntu 20.04 rootfs.")
+endif()
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+   AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
+  link_libraries(stdc++fs)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -18,6 +33,31 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(yolo_onnxruntime_vendor REQUIRED)
+
+# Detect a usable TensorRT provider in the selected ORT prefix. ORT 1.6
+# defines OrtSessionOptionsAppendExecutionProvider_Tensorrt in
+# libonnxruntime.so and exports it through the version script only when
+# built with USE_TENSORRT, so the header is needed to compile and
+# lib/libonnxruntime_providers_tensorrt.so is needed because ORT loads the
+# provider at runtime. A header alone (the source build script copies it
+# only for USE_TENSORRT builds) is not enough. Do not use __has_include: a
+# system ORT install under /usr/include can mix header generations. The stub
+# test target overrides this to 1 for its compile check. The macro is only
+# meaningful together with YOLO_ORT_LEGACY (ORT_API_VERSION < 12).
+set(YOLO_ORT_LEGACY_HAS_TENSORRT 0)
+foreach(_ort_include IN LISTS yolo_onnxruntime_vendor_INCLUDE_DIRS)
+  get_filename_component(_ort_prefix "${_ort_include}/.." ABSOLUTE)
+  if(EXISTS "${_ort_include}/tensorrt_provider_factory.h" AND
+     EXISTS "${_ort_prefix}/lib/libonnxruntime_providers_tensorrt.so")
+    set(YOLO_ORT_LEGACY_HAS_TENSORRT 1)
+  endif()
+endforeach()
+if(YOLO_ORT_LEGACY_HAS_TENSORRT)
+  # add_definitions for CMake 3.10 (Ubuntu 18.04); add_compile_definitions
+  # needs 3.12.
+  add_definitions(-DYOLO_ORT_LEGACY_HAS_TENSORRT=1)
+endif()
+
 find_package(yolo_hfhub_vendor REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(message_filters REQUIRED)
@@ -58,12 +98,16 @@ if("$ENV{ROS_DISTRO}" STREQUAL "foxy" OR "$ENV{ROS_DISTRO}" STREQUAL "galactic")
   # Foxy and Galactic predate the NodeType template argument in
   # message_filters::Subscriber and only accept rclcpp::Node instances.
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMESSAGE_FILTERS_LEGACY_API")
-  # cv_bridge only exports the cv_bridge::cv_bridge imported target since
-  # Humble; Foxy and Galactic export the legacy ${cv_bridge_LIBRARIES} variable.
+endif()
+
+# Prefer the imported target when the installed cv_bridge provides one. Some
+# Galactic/Foxy builds export only the legacy variables and no target; keep
+# those as a fallback.
+if(TARGET cv_bridge::cv_bridge)
+  set(CV_BRIDGE_TARGET cv_bridge::cv_bridge)
+else()
   set(CV_BRIDGE_TARGET ${cv_bridge_LIBRARIES})
   include_directories(${cv_bridge_INCLUDE_DIRS})
-else()
-  set(CV_BRIDGE_TARGET cv_bridge::cv_bridge)
 endif()
 if("$ENV{ROS_DISTRO}" STREQUAL "foxy")
   # Foxy's rclcpp::QoS::reliability() only accepts
@@ -429,6 +473,22 @@ if(BUILD_TESTING)
     JPEG::JPEG
   )
   set_tests_properties(test_ort_compat PROPERTIES TIMEOUT 300)
+
+  ament_add_gtest(test_ort_compat_legacy_trt
+    test/test_ort_compat_legacy_trt.cpp
+  )
+  # Put the stub header before the ONNX Runtime include dir and force the
+  # legacy TRT branch on so the append path is compiled against the stub.
+  target_include_directories(test_ort_compat_legacy_trt BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/test/stub
+  )
+  target_compile_definitions(test_ort_compat_legacy_trt PRIVATE
+    YOLO_ORT_LEGACY_HAS_TENSORRT=1
+  )
+  target_link_libraries(test_ort_compat_legacy_trt
+    ${yolo_onnxruntime_vendor_LIBRARIES}
+  )
+  set_tests_properties(test_ort_compat_legacy_trt PROPERTIES TIMEOUT 60)
 
   ament_add_gtest(test_yolo26n
     test/test_yolo26n.cpp

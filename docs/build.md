@@ -101,6 +101,12 @@ yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.6.0 --ep cuda --cuda-
 # Nano: 53, TX2: 62, Xavier: 72
 ```
 
+The x86_64 prebuilt tarball is CUDA-only. On aarch64, `--ep cuda` builds CUDA
+and TensorRT 7.1 by default (JetPack provides the TensorRT 7.1 runtime, i.e.
+`libnvinfer.so.7` / `libnvonnxparsers.so.7`); pass `--no-tensorrt` for a
+CUDA-only prefix. Set `TENSORRT_HOME` when the TensorRT 7.1 headers and
+libraries are not in the default system library directory.
+
 ONNX Runtime 1.7-1.11 are CUDA 11 builds, so keep `ONNXRUNTIME_VERSION=1.6.0`
 for CUDA 10: overriding it with a newer release on a CUDA 10 host produces a
 library that cannot load.
@@ -115,27 +121,50 @@ legacy code path on a modern host, configure a clean build directory with
 copy-pasted, the vendor still selects the CUDA 10.2-linked GPU tarball and the
 link fails.
 
-The legacy path has hard limits: only the CUDA execution provider is available
-(TensorRT and its fp16/engine-cache options are not), CUDA Graph is disabled
-(`cuda_graph_enable` is ignored with a warning), cuDNN 8 is required, and models
-must be exported with `opset <= 13` (the mirror's `opset=12` exports are the
-tested combination). ROS 2 Galactic (Ubuntu 20.04) is the supported distribution
-for this stack; JetPack 4 ships Ubuntu 18.04 by default, so a community 20.04
-rootfs (or equivalent) is required to run Galactic.
+With TensorRT 7.1 the provider chain is TensorRT → CUDA → CPU: TensorRT is
+appended first and CUDA handles nodes TensorRT 7 cannot parse at session
+build time, while `provider: cuda` skips TensorRT entirely. Dynamic-shape
+TensorRT engines are built at first inference; a build failure there is not
+retried by the provider loop. Use `provider: cuda` or a `--no-tensorrt` build
+if you hit it; verify on the robot. ONNX Runtime 1.6 configures the
+provider through process-wide `ORT_TENSORRT_*` environment variables set from
+the `trt_fp16_enable` / `trt_engine_cache_enable` / `trt_engine_cache_path`
+parameters (`ORT_TENSORRT_FP16_ENABLE`, `ORT_TENSORRT_ENGINE_CACHE_ENABLE`,
+`ORT_TENSORRT_CACHE_PATH`). When the build has no provider — the x64 prebuilt
+tarball or an aarch64 `--no-tensorrt` prefix — `provider_chain()` silently
+drops TensorRT and uses CUDA; `Model` logs that TensorRT is unavailable.
+
+The TensorRT engine cache stores the engine plus a `.profile` file with the
+min/max ranges for dynamic shapes; a shape outside the cached profile
+rebuilds the engine.
+
+The legacy path has hard limits: CUDA Graph is disabled (`cuda_graph_enable` is
+ignored with a warning), cuDNN 8 is required, and models must be exported with
+`opset <= 13` (the mirror's `opset=12` exports are the tested combination)
+without a baked `nms=True`. ROS 2 Galactic (Ubuntu 20.04) is the supported
+distribution for this stack; JetPack 4 ships Ubuntu 18.04 by default, so a
+community 20.04 rootfs (or equivalent) is required to run Galactic. Ubuntu
+18.04 also needs GCC 8+ for `std::filesystem`: install `g++-8` and build the
+whole colcon workspace with `CXX=g++-8 CC=gcc-8` (or select it with
+`update-alternatives`), not just the ONNX Runtime build script.
 
 Manual check on a CUDA 10.2 device: set `provider: cuda`, confirm the startup
 log prints `Using execution provider: cuda`, and run `yolo.launch.py` end-to-end
-with an opset-12 model.
+with an opset-12 model. On the aarch64 source build, set `provider: tensorrt`
+and confirm `Using execution provider: tensorrt`; the first run builds and
+caches the engine, and the next one reloads it from the cache.
 
 ### TensorRT 10 runtime
 
-The ONNX Runtime TensorRT EP is built against TensorRT 10 for all the releases the vendor selects (`libnvinfer.so.10` / `libnvonnxparser.so.10`):
+The ONNX Runtime TensorRT EP is built against TensorRT 10 for all prebuilt releases that ship the TensorRT EP (`libnvinfer.so.10` / `libnvonnxparser.so.10`):
 
 | ORT              | TensorRT |
 | ---------------- | -------- |
 | 1.18.0 (CUDA 11) | 10.0     |
 | 1.20.0 (CUDA 12) | 10.4     |
 | 1.28.0 (CUDA 13) | 10.x     |
+
+CUDA 10 is the exception: the x64 prebuilt ONNX Runtime 1.6 GPU tarball is CUDA-only (no TensorRT provider), and the aarch64 source build links the JetPack TensorRT 7.1 runtime (`libnvinfer.so.7` / `libnvonnxparsers.so.7`), not the TensorRT 10 packages.
 
 Install the versioned runtime packages, pinning the build tagged for the CUDA major when several are offered (`apt-cache madison libnvinfer10`); the helper script does this automatically:
 
@@ -151,11 +180,11 @@ TensorRT 10 requires compute capability 7.5+ (Turing or newer); the helper scrip
 
 Or use the script: `sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --tensorrt`. Do **not** install the `tensorrt` meta package: it may point at a newer major (TensorRT 11), which does not satisfy the `libnvinfer.so.10` soname. A missing runtime logs `Failed to load library .../libonnxruntime_providers_tensorrt.so ... libnvinfer.so.10: cannot open shared object file` and `provider: tensorrt` falls back to CUDA.
 
-CUDA 10 is the legacy path (ONNX Runtime 1.6.0, CUDA EP only) and keeps its x86_64 prebuilt tarball; CUDA 11 has no C++ GPU tarball after ONNX Runtime 1.18, CUDA 13 starts at 1.28, and the prebuilt GPU tarballs are x64-only. For aarch64 (JetPack), a custom ONNX Runtime, or offline installs, use the source build below.
+CUDA 10 is the legacy path: ONNX Runtime 1.6.0 with CUDA + TensorRT 7.1 on aarch64, while the x64 prebuilt tarball is CUDA-only; CUDA 11 has no C++ GPU tarball after ONNX Runtime 1.18, CUDA 13 starts at 1.28, and the prebuilt GPU tarballs are x64-only. For aarch64 (JetPack), a custom ONNX Runtime, or offline installs, use the source build below.
 
 ## Custom ONNX Runtime
 
-`yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh` builds ONNX Runtime from source on x86_64 or aarch64 and packages it in the flat `lib/` + `include/` layout the vendor expects. Select the execution provider with `--ep` (`cpu`, or `cuda`, which also builds TensorRT for ONNX Runtime >= 1.12; older releases build CUDA only), then point the colcon build at the resulting prefix with `-DONNXRUNTIME_ROOT=<prefix>` — it takes precedence over the prebuilt download. The node still selects CPU/CUDA/TensorRT at run time via the `provider` parameter (see [Parameters](../README.md#parameters)).
+`yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh` builds ONNX Runtime from source on x86_64 or aarch64 and packages it in the flat `lib/` + `include/` layout the vendor expects. Select the execution provider with `--ep` (`cpu`, or `cuda`, which also builds TensorRT against the host's TensorRT version — JetPack 4's 7.1 for ONNX Runtime 1.6 on aarch64, the TensorRT 10 prebuilts for 1.18+ — unless `--no-tensorrt` is passed), then point the colcon build at the resulting prefix with `-DONNXRUNTIME_ROOT=<prefix>` — it takes precedence over the prebuilt download. The node still selects CPU/CUDA/TensorRT at run time via the `provider` parameter (see [Parameters](../README.md#parameters)).
 
 ```shell
 # CPU build (x86_64 or aarch64); the prefix defaults to <package>/ort-<version>
@@ -171,7 +200,8 @@ A source build is heavy (tens of minutes and several GB of RAM). It reuses a pre
 
 `build_ort_from_source.sh <ort_version> [output_dir]` accepts these flags:
 
-- **`--ep cpu|cuda`** — execution provider to build (default `cpu`); `cuda` also builds TensorRT for ONNX Runtime >= 1.12 (older releases build CUDA only), matching the node's provider chain.
+- **`--ep cpu|cuda`** — execution provider to build (default `cpu`); `cuda` also builds TensorRT against the host's TensorRT version (JetPack 4's 7.1 on the 1.6 legacy path; the TensorRT 10 prebuilts for 1.18+) unless `--no-tensorrt` is passed, matching the node's provider chain.
+- **`--no-tensorrt`** — build the CUDA provider without TensorRT (CUDA-only prefix); `ORT_USE_TENSORRT=0` is the environment equivalent.
 - **`--cuda-arch NN`** — CUDA architecture(s) for `--ep cuda` (Jetson Xavier `72`, Orin `87`; semicolon-separated for several, e.g. `"72;87"` (quote it)); auto-detected with `nvidia-smi` when available.
 - **`--rebuild`** — ignore a previous build and build again.
 - **`--dry-run`** — print the assembled `build.sh` command and exit.
@@ -184,9 +214,9 @@ Environment knobs (the CLI flags win over `ORT_EP` / `ORT_CUDA_ARCH`):
 - **`ORT_PARALLEL`** — concurrent compile jobs for `build.sh` (`--parallel N`); unset = all cores. Lower it if a CUDA build exhausts RAM.
 - **`ORT_CMAKE_EXTRA_DEFINES`** — extra space-separated `--cmake_extra_defines`. `--ep cuda` on ONNX Runtime >= 1.11 defaults to `onnxruntime_USE_FLASH_ATTENTION=OFF onnxruntime_USE_MEMORY_EFFICIENT_ATTENTION=OFF`: the detection/segmentation/pose/OBB pipelines don't use the CUDA attention kernels, and dropping them roughly halves the CUDA provider build. Override to re-enable (e.g. for attention-based models such as YOLOv12).
 - **`ORT_OPS_CONFIG`** — reduced-ops config passed to `--include_ops_by_config` (default `<source>/reduced_ops.config`; set it empty for the full kernel set).
-- **`ORT_DISABLE_UNUSED_OPS`** (default `1`) / **`ORT_DISABLE_CONTRIB_OPS`** (default `0`) — extra kernel pruning. `ORT_DISABLE_CONTRIB_OPS=1` is **incompatible with `--ep cuda`**: the TensorRT execution provider needs contrib ops, so the script refuses the combination up front.
+- **`ORT_DISABLE_UNUSED_OPS`** (default `1`) / **`ORT_DISABLE_CONTRIB_OPS`** (default `0`) — extra kernel pruning. `ORT_DISABLE_CONTRIB_OPS=1` is **incompatible with `--ep cuda`**: the TensorRT execution provider needs contrib ops, and the script applies the restriction to any `--ep cuda` build, conservatively also with `--no-tensorrt`, so it refuses the combination up front.
 - **`ORT_MIN_CMAKE`** — override the CMake version check (ONNX Runtime 1.16+ needs CMake ≥ 3.26; `--ep cuda` on ORT < 1.16 needs ≥ 3.18).
-- **`CUDA_HOME` / `CUDNN_HOME` / `TENSORRT_HOME`** — `--ep cuda` only. `CUDA_HOME` is a toolkit prefix (`include/` + `lib/`); the `CUDNN_HOME`/`TENSORRT_HOME` defaults resolve to the system library directories (`/usr/lib/<arch>-linux-gnu`), which carry no headers — set them explicitly when ORT's configure needs the development files. `TENSORRT_HOME` is only used for ONNX Runtime >= 1.12.
+- **`CUDA_HOME` / `CUDNN_HOME` / `TENSORRT_HOME`** — `--ep cuda` only. `CUDA_HOME` is a toolkit prefix (`include/` + `lib/`); the `CUDNN_HOME`/`TENSORRT_HOME` defaults resolve to the system library directories (`/usr/lib/<arch>-linux-gnu`), which carry no headers — set them explicitly when ORT's configure needs the development files. `TENSORRT_HOME` is used whenever TensorRT is built (`--ep cuda` without `--no-tensorrt`).
 
 On x86_64 with CUDA + TensorRT the two prefix defaults usually need overriding: `CUDNN_HOME` (the runtime `libcudnn9-cuda-12` package ships no headers — add `libcudnn9-dev-cuda-12`) and `TENSORRT_HOME` (TensorRT lives under the CUDA toolkit, e.g. `/usr/local/cuda-12.6/targets/x86_64-linux`). CMake ≥ 3.26 must be on `PATH`:
 
@@ -204,7 +234,7 @@ The fixed `build.sh` recipe is `--config Release --update --build --build_shared
 
 GPU inference on an aarch64 Jetson (Xavier, Orin) needs an ONNX Runtime built with CUDA + TensorRT — the prebuilt GPU tarball is x64-only. `yolo_onnxruntime_vendor/scripts/` ships two tools for that, each documented in its own file header:
 
-- **`build_ort_from_source.sh`** — runs on the robot and builds ONNX Runtime from source into a flat `lib/` + `include/` prefix: `build_ort_from_source.sh <version> --ep cuda --cuda-arch <NN>` (Xavier `72`, Orin `87`). For CUDA 10 / JetPack 4 use `build_ort_from_source.sh 1.6.0 --ep cuda --cuda-arch 53|62|72` (Nano/TX2/Xavier): that legacy build yields a CUDA-EP-only ONNX Runtime. It reuses a previous build of the same version/EP/architecture (the reuse stamp also covers the CUDA architecture and extra CMake defines) unless you pass `--rebuild`.
+- **`build_ort_from_source.sh`** — runs on the robot and builds ONNX Runtime from source into a flat `lib/` + `include/` prefix: `build_ort_from_source.sh <version> --ep cuda --cuda-arch <NN>` (Xavier `72`, Orin `87`). For CUDA 10 / JetPack 4 use `build_ort_from_source.sh 1.6.0 --ep cuda --cuda-arch 53|62|72` (Nano/TX2/Xavier): that legacy build yields CUDA + TensorRT 7.1 unless `--no-tensorrt` is passed. It reuses a previous build of the same version/EP/architecture (the reuse stamp also covers the CUDA architecture and extra CMake defines) unless you pass `--rebuild`.
 - **`prepare_offline_bundle.sh`** — runs on an internet-connected host and produces a self-contained tarball for a robot with no network: the ONNX Runtime source tree with its submodules, the mirrored CMake dependency archives, the ONNX models, a bundled CMake (ONNX Runtime 1.16+ needs CMake ≥ 3.26, while JetPack 6 / Ubuntu 22.04 ship 3.22) and all the helper scripts (the CMake dependency mirror is only used by ONNX Runtime 1.16+; older releases skip it). It prints the exact copy-paste sequence for the robot when it finishes.
 
 Extract the bundle **outside** the colcon workspace — it carries `COLCON_IGNORE` markers so colcon does not treat the ONNX Runtime tree as a package. The robot build also passes `-DFETCHCONTENT_SOURCE_DIR_YOLO_HFHUB=<bundle>/huggingface-hub-cpp` so `yolo_hfhub_vendor` does not fetch `huggingface-hub-cpp` from the network.
