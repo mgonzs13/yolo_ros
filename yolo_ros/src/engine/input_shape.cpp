@@ -16,8 +16,15 @@ InputShape resolve_input_shape(const std::vector<int64_t> &graph_shape,
     return shape;
   }
 
-  const int64_t graph_height = graph_shape[2];
-  const int64_t graph_width = graph_shape[3];
+  // A channel axis of 3 in the last dimension (and not in the second) marks a
+  // channel-last graph (NHWC), as produced by the Ultralytics QNN exports;
+  // anything else keeps the ONNX-standard NCHW layout.
+  shape.channel_last = graph_shape[3] == 3 && graph_shape[1] != 3;
+
+  const int64_t graph_height =
+      shape.channel_last ? graph_shape[1] : graph_shape[2];
+  const int64_t graph_width =
+      shape.channel_last ? graph_shape[2] : graph_shape[3];
 
   if (graph_width > 0) {
     shape.width = static_cast<int>(graph_width);

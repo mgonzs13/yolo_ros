@@ -60,7 +60,7 @@ fake_factory(const std::shared_ptr<yolo_ros::test::FakePluginLog> &log) {
 
 class PluginHostTest : public ::testing::Test {
 protected:
-  static void SetUpTestSuite() {
+  static void SetUpTestCase() {
     if (!rclcpp::ok()) {
       rclcpp::init(0, nullptr);
     }
@@ -104,11 +104,13 @@ TEST_F(PluginHostTest, ReconfigureAfterCleanupReappliesOverrides) {
   EXPECT_EQ(fixture.node->get_parameter("p.value").as_int(), 11);
   first.cleanup();
 
-  // Simulate a value changed while inactive: Jazzy cannot undeclare the
-  // statically typed parameter, so the override must be reapplied on the next
-  // configure.
-  fixture.node->set_parameter(rclcpp::Parameter("p.value", 42));
-  EXPECT_EQ(fixture.node->get_parameter("p.value").as_int(), 42);
+  // Simulate a value changed while inactive: Foxy allows undeclaring the
+  // statically typed parameter, so it is gone after cleanup; on the other
+  // distributions the override must be reapplied on the next configure.
+  if (fixture.node->has_parameter("p.value")) {
+    fixture.node->set_parameter(rclcpp::Parameter("p.value", 42));
+    EXPECT_EQ(fixture.node->get_parameter("p.value").as_int(), 42);
+  }
 
   auto second_log = std::make_shared<yolo_ros::test::FakePluginLog>();
   yolo_ros::PluginHost second(*fixture.node, fixture.blackboard, fixture.topics,

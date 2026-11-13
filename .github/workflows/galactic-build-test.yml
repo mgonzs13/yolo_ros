@@ -1,0 +1,35 @@
+name: Galactic Build and Test
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+
+jobs:
+  galactic_build_and_test:
+    runs-on: ubuntu-latest
+    container:
+      image: ros:galactic
+    steps:
+      - name: Update installed packages
+        shell: bash
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get -y upgrade
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Build and Test
+        uses: ros-tooling/action-ros-ci@v0.4
+        with:
+          package-name: yolo_bringup yolo_ros
+          target-ros2-distro: galactic
+          skip-tests: false
+          coverage-result: false
+          colcon-defaults: |
+            {
+              "test": {
+                "parallel-workers" : 1
+              }
+            }

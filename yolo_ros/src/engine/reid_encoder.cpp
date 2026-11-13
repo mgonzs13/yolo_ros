@@ -36,7 +36,7 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
   }
 
   if (requested != "auto" && requested != "cpu" && requested != "cuda" &&
-      requested != "tensorrt" && requested != "trt") {
+      requested != "tensorrt" && requested != "trt" && requested != "qnn") {
     YOLO_LOG_WARN("Unknown ReID provider \"%s\"; using auto.",
                   provider.c_str());
     requested = "auto";
@@ -70,6 +70,15 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
     ProviderConfig config;
     config.device_id = device_id;
 
+    std::string session_model_path = model_path;
+
+    if (primary == Provider::Qnn) {
+      const QnnModelPath qnn = resolve_qnn_model_path("", model_path, true);
+      session_model_path = qnn.model_path;
+      config.qnn_context_cache_enable = qnn.generate;
+      config.qnn_context_cache_path = qnn.context_path;
+    }
+
     if (primary == Provider::TensorRt && config.trt_engine_cache_enable) {
       config.trt_engine_cache_path = engine_cache_dir("", model_path);
 
@@ -84,8 +93,8 @@ ReIDEncoder::ReIDEncoder(const std::string &model_path,
 
     try {
       this->session_options_ = build_session_options(primary, config);
-      this->session_ =
-          Ort::Session(this->env_, model_path.c_str(), this->session_options_);
+      this->session_ = Ort::Session(this->env_, session_model_path.c_str(),
+                                    this->session_options_);
       this->active_provider_ = provider_name(primary);
 
       const double provider_seconds =

@@ -1,0 +1,37 @@
+# VENTUNO Q preset: detection and tracking on the Hexagon NPU (QCS8275).
+# The QNN artifact is exported with Ultralytics
+# (`model.export(format="qnn", name="75", imgsz=640,480)`); the exported
+# *_qnn.onnx embeds the compiled HTP context binary, so nothing is compiled on
+# the board. Point model_path at the exported file (model_repo is empty so the
+# local file wins; it can also be overridden as model_path:=... on the command
+# line). See docs/models.md ("Qualcomm QNN (Hexagon NPU)").
+#
+# IMPORTANT: rclcpp loads `--params-file` sections by the node's fully
+# qualified name, so the block key includes the launch namespace (default
+# "yolo"). If you change `namespace:=`, update the block name to match.
+/yolo/yolo_node:
+  ros__parameters:
+    plugins: ["detection", "tracking", "debug"]
+    cameras: ["cam0"]
+    cam0:
+      rgb_topic: /camera/rgb/image_raw
+      image_reliability: 1
+    detection:
+      plugin: yolo_ros/DetectionPlugin
+      model_repo: unileon-robotics/YOLO26-ONNX
+      model_filename: qnn/yolo26s_qnn.onnx
+      provider: qnn
+      device: qnn:0
+      max_batch_size: 1
+      qnn_htp_performance_mode: burst
+      # Hexagon target defaults to the VENTUNO Q (HTP v75, QCS8275/SoC 82);
+      # override qnn_htp_arch/qnn_soc_model for another board.
+      qnn_context_cache_enable: false
+      cameras: ["cam0"]
+    tracking:
+      plugin: yolo_ros/TrackingPlugin
+      cameras: ["cam0"]
+      tracker_type: bytetrack
+    debug:
+      plugin: yolo_ros/DebugPlugin
+      cameras: ["cam0"]

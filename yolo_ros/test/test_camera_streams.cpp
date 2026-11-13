@@ -22,7 +22,7 @@ using namespace std::chrono_literals;
 
 class CameraStreamsTest : public ::testing::Test {
 protected:
-  static void SetUpTestSuite() {
+  static void SetUpTestCase() {
     if (!rclcpp::ok()) {
       rclcpp::init(0, nullptr);
     }

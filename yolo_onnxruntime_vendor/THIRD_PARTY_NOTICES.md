@@ -28,3 +28,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Qualcomm QNN (QAIRT)
+
+ONNX Runtime builds produced with `scripts/build_ort_from_source.sh --ep qnn`
+include the QNN execution provider and copy the Qualcomm AI Runtime (QAIRT)
+libraries (`libQnn*.so`) from the SDK prefix into the installed package. The
+QNN execution provider and those libraries are Qualcomm Technologies products
+governed by Qualcomm's own license terms and are not bundled in this
+repository; they come from the board image (e.g. `/usr/lib` on the VENTUNO Q)
+or from a QAIRT SDK prefix supplied by the user.

@@ -48,7 +48,7 @@ public:
 
 class YoloNodeTest : public ::testing::Test {
 protected:
-  static void SetUpTestSuite() {
+  static void SetUpTestCase() {
     if (!rclcpp::ok()) {
       rclcpp::init(0, nullptr);
     }

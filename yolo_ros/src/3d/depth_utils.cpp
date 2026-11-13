@@ -10,6 +10,10 @@
 #include <random>
 
 #include <opencv2/imgproc.hpp>
+#if __has_include(<opencv2/geometry.hpp>)
+// OpenCV 5 moved boundingRect() & co. from imgproc into the geometry module.
+#include <opencv2/geometry.hpp>
+#endif
 
 namespace yolo_ros::depth {
 

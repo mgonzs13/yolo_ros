@@ -77,12 +77,26 @@ def _description(name):
 
 
 def _declared(name):
-    return {
-        argument.name
-        for argument, _ in _description(
-            name
-        ).get_launch_arguments_with_include_launch_description_actions()
-    }
+    description = _description(name)
+    collect = getattr(
+        description, "get_launch_arguments_with_include_launch_description_actions", None
+    )
+    if collect is not None:
+        arguments = collect()
+    else:
+        # Foxy and Galactic only expose the arguments declared directly in the
+        # description, which is all this launch file declares.
+        arguments = [(argument, None) for argument in description.get_launch_arguments()]
+    return {argument.name for argument, _ in arguments}
+
+
+def _param_files(node):
+    """Parameter file substitutions of a Node, across launch_ros versions."""
+    entry = node._Node__parameters[0]
+    if hasattr(entry, "param_file"):
+        return list(entry.param_file)
+    # Foxy and Galactic store (param_files, overrides) as a two-tuple.
+    return list(entry)
 
 
 def _single_node(module, configs, params_file=None):
@@ -161,7 +175,7 @@ def test_yolo_launch_layers_instance_prefixed_overrides(bringup_share):
     configs = {"namespace": "yolo", "threshold": "0.5"}
     params_file = LaunchConfiguration("params_file")
     node = _single_node(_load("yolo"), configs, params_file)
-    assert node._Node__parameters[0].param_file[0] is params_file
+    assert _param_files(node)[0] is params_file
     params = _node_params(node)
     assert params == {"detection.threshold": pytest.approx(0.5)}
     assert "detection.plugin" not in params
