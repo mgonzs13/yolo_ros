@@ -8,9 +8,11 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "yolo_ros/engine/ort_compat.hpp"
 #include "yolo_ros/engine/provider.hpp"
 
 namespace yolo_ros::engine {
@@ -201,6 +203,25 @@ TEST(BuildSessionOptions, AvailableGpuProvidersDoNotThrow) {
     });
   }
 }
+
+#if YOLO_ORT_LEGACY
+TEST(ReIdProvider, LegacyForcesCudaForAutoAndTensorRt) {
+  EXPECT_EQ(reid_provider_for_build(""), "cuda");
+  EXPECT_EQ(reid_provider_for_build("AUTO"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("auto"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("tensorrt"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("TRT"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("trt"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("cuda"), "cuda");
+  EXPECT_EQ(reid_provider_for_build("cpu"), "cpu");
+}
+#else
+TEST(ReIdProvider, ModernKeepsRequestedProvider) {
+  EXPECT_EQ(reid_provider_for_build("auto"), "auto");
+  EXPECT_EQ(reid_provider_for_build("tensorrt"), "tensorrt");
+  EXPECT_EQ(reid_provider_for_build("cpu"), "cpu");
+}
+#endif
 
 TEST(QnnContextPath, CreatesModelContextFile) {
   const std::filesystem::path base =

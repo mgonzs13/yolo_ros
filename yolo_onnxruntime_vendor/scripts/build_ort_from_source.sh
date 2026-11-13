@@ -2,10 +2,10 @@
 # Copyright (c) 2026 Alejandro González Cantón
 # SPDX-License-Identifier: MIT
 #
-# Build ONNX Runtime (any version) from source, for the CPU, CUDA (+TensorRT) or
-# QNN (HTP) execution provider, and package it in the flat layout consumed by
-# yolo_onnxruntime_vendor (point that package at the result with
-# -DONNXRUNTIME_ROOT=<output_dir>).
+# Build ONNX Runtime (any version) from source, for the CPU, CUDA (+TensorRT by
+# default for --ep cuda) or QNN (HTP) execution provider, and package it in the
+# flat layout consumed by yolo_onnxruntime_vendor (point that package at the
+# result with -DONNXRUNTIME_ROOT=<output_dir>).
 #
 # Runs on x86_64 and aarch64. It can work fully offline when given a source tree
 # prepared by scripts/prepare_offline_bundle.sh (see that script for the
@@ -19,9 +19,11 @@
 #
 # Options:
 #   --ep <cpu|cuda|qnn>   execution provider to build (default: cpu). "cuda" also
-#                         builds the TensorRT provider, matching the node's
-#                         TensorRT -> CUDA -> CPU provider chain; "qnn" builds
-#                         the QNN execution provider with the HTP backend.
+#                         builds the TensorRT provider unless --no-tensorrt is
+#                         given; "qnn" builds the QNN execution provider with the
+#                         HTP backend.
+#   --no-tensorrt         build the CUDA provider without TensorRT (CUDA-only
+#                         prefix; also settable with ORT_USE_TENSORRT=0).
 #   --qnn-home DIR        QAIRT/QNN SDK prefix (contains include/QNN/QnnInterface.h)
 #   --cuda-arch <NN>      CUDA architecture for --ep cuda (Jetson Xavier 72,
 #                         Orin 87). Auto-detected with nvidia-smi when available.
@@ -29,8 +31,9 @@
 #   --dry-run         print the ONNX Runtime build command and exit.
 #   -h, --help        show this help.
 #
-# ORT_EP and ORT_CUDA_ARCH are honoured as fallbacks for --ep / --cuda-arch;
-# ORT_CUDA_ARCH is only read when the EP is cuda.
+# ORT_EP, ORT_CUDA_ARCH and ORT_USE_TENSORRT are honoured as fallbacks for
+# --ep / --cuda-arch / --no-tensorrt; ORT_CUDA_ARCH is only read when the EP is
+# cuda, and ORT_USE_TENSORRT is forced to 0 when the EP is not cuda.
 #
 # Source acquisition (first match wins):
 #   ORT_SOURCE_DIR=<path>     an existing onnxruntime source tree (contains build.sh)
@@ -42,7 +45,8 @@
 #   QNN_HOME / QNN_SDK_ROOT / QAIRT_SDK_ROOT (QNN SDK prefix for --ep qnn),
 #   ORT_PARALLEL (concurrent compile jobs; unset = all cores),
 #   ORT_CMAKE_EXTRA_DEFINES (space-separated extra --cmake_extra_defines; for
-#   --ep cuda it defaults to "onnxruntime_USE_FLASH_ATTENTION=OFF
+#   --ep cuda on ONNX Runtime >= 1.11 it defaults to
+#   "onnxruntime_USE_FLASH_ATTENTION=OFF
 #   onnxruntime_USE_MEMORY_EFFICIENT_ATTENTION=OFF" since the detection family
 #   doesn't use the CUDA attention kernels; override to re-enable),
 #   ORT_OPS_CONFIG (default: <source>/reduced_ops.config; empty disables the
@@ -52,7 +56,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $(basename "$0") <ort_version> [output_dir] [--ep cpu|cuda|qnn] [--qnn-home DIR] [--cuda-arch NN] [--rebuild] [--dry-run]" >&2
+  echo "usage: $(basename "$0") <ort_version> [output_dir] [--ep cpu|cuda|qnn] [--no-tensorrt] [--qnn-home DIR] [--cuda-arch NN] [--rebuild] [--dry-run]" >&2
 }
 
 help() {
@@ -68,9 +72,11 @@ usage: $(basename "$0") <ort_version> [output_dir] [options]
 
 options:
   --ep <cpu|cuda|qnn> execution provider to build (default: cpu). "cuda" also
-                      builds the TensorRT provider, matching the node's
-                      TensorRT -> CUDA -> CPU provider chain; "qnn" builds the
-                      QNN execution provider with the HTP backend.
+                      builds the TensorRT provider unless --no-tensorrt is given;
+                      "qnn" builds the QNN execution provider with the HTP
+                      backend.
+  --no-tensorrt     build the CUDA provider without TensorRT (CUDA-only prefix;
+                    also settable with ORT_USE_TENSORRT=0).
   --qnn-home DIR    QAIRT/QNN SDK prefix (contains include/QNN/QnnInterface.h);
                     defaults to \$QNN_HOME, \$QNN_SDK_ROOT, \$QAIRT_SDK_ROOT or /usr
   --cuda-arch <NN>  CUDA architecture for --ep cuda (Jetson Xavier 72,
@@ -81,6 +87,7 @@ options:
 
 environment:
   ORT_EP / ORT_CUDA_ARCH          fallbacks for --ep / --cuda-arch
+  ORT_USE_TENSORRT                fallback for --no-tensorrt (0 disables it)
   QNN_HOME / QNN_SDK_ROOT / QAIRT_SDK_ROOT   QNN SDK prefix fallbacks for --ep qnn
   ORT_SOURCE_DIR                  existing onnxruntime source tree (build.sh)
   ORT_SOURCE_TARBALL              tarball whose top level contains onnxruntime/
@@ -92,12 +99,15 @@ environment:
   ORT_DISABLE_CONTRIB_OPS         default 0; 1 is incompatible with --ep cuda
   ORT_MIN_CMAKE                   override the CMake version check
   CUDA_HOME / CUDNN_HOME / TENSORRT_HOME   prefixes used by --ep cuda
+                                           (TENSORRT_HOME only when TensorRT
+                                           is built)
 EOF
 }
 
 ORIG_ARGS=("$@")
 EP="${ORT_EP:-cpu}"
 CUDA_ARCH="${ORT_CUDA_ARCH:-}"
+USE_TENSORRT="${ORT_USE_TENSORRT:-1}"
 QNN_HOME="${QNN_HOME:-${QNN_SDK_ROOT:-${QAIRT_SDK_ROOT:-}}}"
 QNN_ARCH_ABI=""
 REBUILD=0
@@ -111,6 +121,7 @@ while [[ $# -gt 0 ]]; do
     --cuda-arch)
       [[ $# -ge 2 ]] || { echo "error: --cuda-arch needs a value" >&2; exit 2; }
       CUDA_ARCH="$2"; shift 2 ;;
+    --no-tensorrt) USE_TENSORRT=0; shift ;;
     --qnn-home)
       [[ $# -ge 2 ]] || { echo "error: --qnn-home needs a value" >&2; exit 2; }
       QNN_HOME="$2"; shift 2 ;;
@@ -147,6 +158,14 @@ case "${EP}" in
   *) echo "error: unsupported --ep '${EP}' (supported: cpu, cuda, qnn)" >&2; exit 2 ;;
 esac
 
+if [[ "${EP}" != "cuda" ]]; then
+  USE_TENSORRT=0
+fi
+case "${USE_TENSORRT}" in
+  0|1) ;;
+  *) echo "error: ORT_USE_TENSORRT must be 0 or 1, got '${USE_TENSORRT}'" >&2; exit 2 ;;
+esac
+
 # QNN_HOME only participates in qnn builds (mirrors CUDA_ARCH); ignore it
 # otherwise so a stale environment does not perturb the reuse stamp.
 if [[ "${EP}" != "qnn" ]]; then
@@ -164,7 +183,9 @@ case "${ORT_DISABLE_CONTRIB_OPS:-0}" in
 esac
 if [[ "${EP}" == "cuda" && "${ORT_DISABLE_CONTRIB_OPS:-0}" == "1" ]]; then
   echo "error: ORT_DISABLE_CONTRIB_OPS=1 is incompatible with --ep cuda:" >&2
-  echo "       the TensorRT execution provider needs contrib ops." >&2
+  echo "       the TensorRT execution provider needs contrib ops; the" >&2
+  echo "       restriction applies to any --ep cuda build and is kept" >&2
+  echo "       conservatively for --no-tensorrt." >&2
   exit 2
 fi
 if [[ -n "${ORT_PARALLEL:-}" && ! "${ORT_PARALLEL}" =~ ^[0-9]+$ ]]; then
@@ -180,6 +201,8 @@ elif [[ -n "${CUDA_ARCH}" && ! "${CUDA_ARCH}" =~ ^[0-9]+(;[0-9]+)*$ ]]; then
   echo "error: --cuda-arch must be a compute capability like 72 or 87, got '${CUDA_ARCH}'" >&2
   exit 2
 fi
+
+version_ge() { [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }
 
 # --- QNN SDK (only for the qnn EP) --------------------------------------------
 # On the VENTUNO Q, install the QNN headers and runtime from apt:
@@ -208,11 +231,13 @@ if [[ "${EP}" == "qnn" ]]; then
 fi
 
 # --- Default CMake defines ----------------------------------------------------
-# A --ep cuda build disables the CUDA attention kernels by default: the
-# detection / segmentation / pose / OBB pipelines don't use them, and skipping
-# them roughly halves the CUDA provider build. Override ORT_CMAKE_EXTRA_DEFINES
-# to re-enable them (e.g. attention-based models such as YOLOv12).
-if [[ "${EP}" == "cuda" && -z "${ORT_CMAKE_EXTRA_DEFINES:-}" ]]; then
+# A --ep cuda build on ONNX Runtime >= 1.11 disables the CUDA attention kernels
+# by default: the detection / segmentation / pose / OBB pipelines don't use
+# them, and skipping them roughly halves the CUDA provider build. Override
+# ORT_CMAKE_EXTRA_DEFINES to re-enable them (e.g. attention-based models such
+# as YOLOv12). Older releases have no such kernels and get no defines.
+if [[ "${EP}" == "cuda" && -z "${ORT_CMAKE_EXTRA_DEFINES:-}" ]] \
+   && version_ge "${ORT_VERSION}" 1.11; then
   ORT_CMAKE_EXTRA_DEFINES="onnxruntime_USE_FLASH_ATTENTION=OFF onnxruntime_USE_MEMORY_EFFICIENT_ATTENTION=OFF"
 fi
 
@@ -256,6 +281,7 @@ if [[ ${REBUILD} -eq 0 && -f "${OUT_DIR}/lib/libonnxruntime.so" && -f "${STAMP}"
    && grep -qx "ep=${EP}" "${STAMP}" \
    && grep -qx "arch=${ARCH}" "${STAMP}" \
    && grep -qx "cuda_arch=${CUDA_ARCH}" "${STAMP}" \
+   && grep -qx "tensorrt=${USE_TENSORRT}" "${STAMP}" \
    && grep -qx "qnn_home=${QNN_HOME:-}" "${STAMP}" \
    && grep -qx "extra_defines=${ORT_CMAKE_EXTRA_DEFINES:-}" "${STAMP}"; then
   echo "==> Reusing existing ONNX Runtime ${ORT_VERSION} build (${EP}) at ${OUT_DIR}"
@@ -288,7 +314,6 @@ fi
 # is too old). Older ONNX Runtime builds accept much older CMake, but a CUDA
 # build passes CMAKE_CUDA_ARCHITECTURES / CMAKE_CUDA_HOST_COMPILER, which CMake
 # only understands from 3.18 on.
-version_ge() { [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }
 min_cmake=3.13
 if version_ge "${ORT_VERSION}" 1.16; then
   min_cmake=3.26
@@ -421,8 +446,13 @@ fi
 }
 
 if [[ "${EP}" == "cuda" ]]; then
-  echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda: CUDA ${CUDA_HOME}," \
-    "TRT ${TRT_HOME}, arch ${CUDA_ARCH})"
+  if [[ "${USE_TENSORRT}" == "1" ]]; then
+    echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda + TensorRT: CUDA ${CUDA_HOME}," \
+      "TRT ${TRT_HOME}, arch ${CUDA_ARCH})"
+  else
+    echo "==> Building ONNX Runtime ${ORT_VERSION} (cuda only: CUDA ${CUDA_HOME}," \
+      "arch ${CUDA_ARCH})"
+  fi
 elif [[ "${EP}" == "qnn" ]]; then
   echo "==> Building ONNX Runtime ${ORT_VERSION} (qnn: HTP, SDK ${QNN_HOME})"
 else
@@ -485,8 +515,12 @@ fi
 if [[ "${EP}" == "cuda" ]]; then
   build_cmd+=(
     --use_cuda --cuda_home "${CUDA_HOME}" --cudnn_home "${CUDNN_HOME}"
-    --use_tensorrt --tensorrt_home "${TRT_HOME}"
   )
+  if [[ "${USE_TENSORRT}" == "1" ]]; then
+    build_cmd+=(--use_tensorrt --tensorrt_home "${TRT_HOME}")
+  else
+    echo "warning: building CUDA without TensorRT (--no-tensorrt)." >&2
+  fi
 fi
 if [[ "${EP}" == "qnn" ]]; then
   if ! supports_build_flag --use_qnn; then
@@ -558,8 +592,11 @@ rm -rf "${OUT_DIR}"
 mkdir -p "${OUT_DIR}/lib" "${OUT_DIR}/include"
 
 # Copy every produced library. The provider set differs across versions: 1.6
-# links CUDA into the TensorRT provider, while >= 1.12 ships a separate
-# libonnxruntime_providers_cuda.so. Globbing keeps this version-agnostic.
+# links the CUDA provider statically into libonnxruntime.so but builds the
+# TensorRT provider as a separate shared library
+# (libonnxruntime_providers_tensorrt.so), while >= 1.12 ships separate
+# libonnxruntime_providers_*.so libraries for every provider. Globbing keeps
+# this version-agnostic.
 shopt -s nullglob
 built_libs=("${BUILD_DIR}"/libonnxruntime*.so*)
 shopt -u nullglob
@@ -642,7 +679,15 @@ copy_header provider_options.h optional
 copy_header cpu_provider_factory.h optional
 if [[ "${EP}" == "cuda" ]]; then
   copy_header cuda_provider_factory.h optional
-  copy_header tensorrt_provider_factory.h optional
+  if [[ "${USE_TENSORRT}" == "1" ]]; then
+    # ORT >= 1.17 moved the header out of include/; only the legacy path
+    # (ort_compat.hpp under YOLO_ORT_LEGACY) needs it.
+    if version_ge "${ORT_VERSION}" 1.17; then
+      copy_header tensorrt_provider_factory.h optional
+    else
+      copy_header tensorrt_provider_factory.h required
+    fi
+  fi
 fi
 
 for notice in LICENSE ThirdPartyNotices.txt; do
@@ -659,6 +704,7 @@ done
   echo "ep=${EP}"
   echo "arch=${ARCH}"
   echo "cuda_arch=${CUDA_ARCH}"
+  echo "tensorrt=${USE_TENSORRT}"
   echo "qnn_home=${QNN_HOME:-}"
   echo "extra_defines=${ORT_CMAKE_EXTRA_DEFINES:-}"
 } > "${STAMP}"

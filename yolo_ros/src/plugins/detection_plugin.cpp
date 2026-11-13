@@ -55,6 +55,7 @@ void DetectionPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
   node.declare_parameter<int>(prefix + "img_height", 480);
   node.declare_parameter<int>(prefix + "top_k", 5);
   node.declare_parameter<int>(prefix + "max_batch_size", 8);
+  node.declare_parameter<int>(prefix + "pad_to_batch", 0);
 }
 
 void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
@@ -123,6 +124,10 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
 
   node.get_parameter(prefix + "top_k", this->yolo_params_.top_k);
 
+  int pad_to_batch = 0;
+  node.get_parameter(prefix + "pad_to_batch", pad_to_batch);
+  this->yolo_params_.pad_to_batch = std::max(0, pad_to_batch);
+
   int max_batch_size = 8;
   node.get_parameter(prefix + "max_batch_size", max_batch_size);
 
@@ -136,6 +141,14 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
   }
 
   this->max_batch_size_ = static_cast<std::size_t>(std::max(1, max_batch_size));
+
+  if (this->yolo_params_.pad_to_batch >
+      static_cast<int>(this->max_batch_size_)) {
+    RCLCPP_WARN(node.get_logger(),
+                "pad_to_batch (%d) exceeds max_batch_size (%zu); clamping",
+                this->yolo_params_.pad_to_batch, this->max_batch_size_);
+    this->yolo_params_.pad_to_batch = static_cast<int>(this->max_batch_size_);
+  }
 }
 
 bool DetectionPlugin::setup(PluginContext &ctx) {
@@ -217,6 +230,9 @@ void DetectionPlugin::deactivate() {
     this->scheduler_.reset();
   }
 
+  // The Model owns first_inference_ and trt_cache_path_. Destroying it here
+  // guarantees that a reactivation logs the first inference again and starts
+  // from fresh model/cache state.
   this->model_.reset();
 }
 

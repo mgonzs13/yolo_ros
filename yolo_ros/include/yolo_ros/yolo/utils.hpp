@@ -176,6 +176,11 @@ struct YoloParams {
   int max_fps; // cap on the inference/publish rate in Hz; 0 = unlimited
                // (process every received frame). Frames are dropped by the
                // node, the subscription stays live.
+  /// @brief Pad each inference batch to this size when the model batch axis is
+  /// dynamic (0 = send the exact image count). A stable batch size keeps the
+  /// TensorRT optimization profile valid, so the cached engine is reused
+  /// instead of rebuilt. Ignored for models with a fixed batch axis.
+  int pad_to_batch = 0;
   /// @brief Network input width for dynamic-input models.
   int img_width = 640;
   /// @brief Network input height for dynamic-input models.
