@@ -177,8 +177,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   std::string last_error;
   std::string trt_cache_path;
 
-  YOLO_LOG_INFO("Initializing ONNX Runtime session; TensorRT may compile an "
-                "engine and this can take several minutes on the first run.");
+  YOLO_LOG_INFO("Initializing ONNX Runtime session");
 
   for (const Provider provider : chain) {
     ProviderConfig config;
@@ -266,6 +265,11 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
   // ORT may still fall back node-by-node to CUDA.
   YOLO_LOG_INFO("Using execution provider: %s", this->active_provider_.c_str());
   this->trt_cache_path_ = trt_cache_path;
+
+  if (this->active_provider_ == "tensorrt") {
+    YOLO_LOG_INFO("TensorRT may compile an "
+                  "engine and this can take several minutes on the first run.");
+  }
 
   // Read the input shape first: a fixed batch axis is a prerequisite for CUDA
   // graph capture (dynamic shapes invalidate a captured graph).
