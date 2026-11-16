@@ -179,7 +179,7 @@ void TrackingPlugin::process(
   }
 
   // Camera-motion compensation needs the current frame; decode it only when
-  // the active tracker actually consumes it (BoT-SORT with gmc_method !=
+  // the active tracker actually consumes it (BoT-SORT with gmc.method !=
   // none).
   cv::Mat image;
 

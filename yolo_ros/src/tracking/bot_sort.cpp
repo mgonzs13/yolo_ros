@@ -26,7 +26,7 @@ BotSort::BotSort(const BotSortParams &params)
   if (!this->params_.with_reid) {
     return;
   } else if (this->params_.reid_model.empty()) {
-    YOLO_LOG_WARN("with_reid is set but reid_model is empty; running the "
+    YOLO_LOG_WARN("reid.enable is set but reid.model is empty; running the "
                   "tracker without appearance association.");
     return;
   }

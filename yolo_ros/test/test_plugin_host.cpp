@@ -32,7 +32,7 @@ struct HostFixture {
     std::vector<rclcpp::Parameter> parameters;
 
     for (const auto &camera : cameras) {
-      parameters.emplace_back(camera + ".rgb_topic", "/" + camera + "/image");
+      parameters.emplace_back(camera + ".rgb.topic", "/" + camera + "/image");
     }
 
     parameters.insert(parameters.end(), extra.begin(), extra.end());
@@ -214,7 +214,7 @@ TEST_F(PluginHostTest, MissingPluginFieldFailsConfigure) {
 TEST_F(PluginHostTest, WiresChainInOrder) {
   rclcpp::NodeOptions options;
   options.parameter_overrides(
-      {rclcpp::Parameter("cam0.rgb_topic", "/camera0/image"),
+      {rclcpp::Parameter("cam0.rgb.topic", "/camera0/image"),
        rclcpp::Parameter("det.plugin", "yolo_ros/DetectionPlugin"),
        rclcpp::Parameter("dbg.plugin", "yolo_ros/DebugPlugin")});
   auto node =
@@ -311,7 +311,7 @@ TEST_F(PluginHostTest, RejectsChainViolations) {
   {
     rclcpp::NodeOptions options;
     options.parameter_overrides(
-        {rclcpp::Parameter("cam0.rgb_topic", "/camera0/image"),
+        {rclcpp::Parameter("cam0.rgb.topic", "/camera0/image"),
          rclcpp::Parameter("p.plugin", "yolo_ros/TrackingPlugin")});
     auto node =
         std::make_shared<rclcpp_lifecycle::LifecycleNode>("host_test", options);
@@ -331,7 +331,7 @@ TEST_F(PluginHostTest, RejectsChainViolations) {
   {
     rclcpp::NodeOptions options;
     options.parameter_overrides(
-        {rclcpp::Parameter("cam0.rgb_topic", "/camera0/image"),
+        {rclcpp::Parameter("cam0.rgb.topic", "/camera0/image"),
          rclcpp::Parameter("p.plugin", "yolo_ros/DetectionPlugin"),
          rclcpp::Parameter("q.plugin", "yolo_ros/DetectionPlugin")});
     auto node =
@@ -352,7 +352,7 @@ TEST_F(PluginHostTest, RejectsChainViolations) {
   {
     rclcpp::NodeOptions options;
     options.parameter_overrides(
-        {rclcpp::Parameter("cam0.rgb_topic", "/camera0/image"),
+        {rclcpp::Parameter("cam0.rgb.topic", "/camera0/image"),
          rclcpp::Parameter("p.plugin", "yolo_ros/DetectionPlugin"),
          rclcpp::Parameter("q.plugin", "yolo_ros/DebugPlugin"),
          rclcpp::Parameter("r.plugin", "yolo_ros/DetectionPlugin")});

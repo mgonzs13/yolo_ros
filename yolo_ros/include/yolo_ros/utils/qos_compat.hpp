@@ -16,7 +16,7 @@
 
 namespace yolo_ros::utils {
 
-/// @brief Map the image_reliability parameter to the local reliability type.
+/// @brief Map the camera reliability parameter to the local reliability type.
 /// @param value 0 = system default, 1 = reliable, anything else = best effort.
 #if defined(RCLCPP_LEGACY_QOS)
 inline rmw_qos_reliability_policy_t reliability_policy_from_int(int value) {

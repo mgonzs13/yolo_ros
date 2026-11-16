@@ -62,10 +62,75 @@ def test_types_are_converted():
         }
     )
     overrides = build_overrides(context, DET)
-    assert overrides["detection.model_path"] == "/x.onnx"
-    assert overrides["detection.threshold"] == pytest.approx(0.5)
-    assert overrides["detection.max_det"] == 300
-    assert overrides["detection.force_download"] is False
+    assert overrides["detection.model.path"] == "/x.onnx"
+    assert overrides["detection.inference.threshold"] == pytest.approx(0.5)
+    assert overrides["detection.inference.max_det"] == 300
+    assert overrides["detection.model.force_download"] is False
+
+
+def test_params_use_namespaced_names():
+    detection = {spec.name for spec in launch_params.PLUGIN_PARAMS[DET]}
+    assert {
+        "model.type",
+        "model.path",
+        "model.repo",
+        "model.filename",
+        "model.cache_dir",
+        "model.force_download",
+        "inference.threshold",
+        "inference.iou",
+        "inference.max_det",
+        "inference.max_fps",
+        "inference.top_k",
+        "input.width",
+        "input.height",
+        "batch.max_size",
+        "batch.pad_to",
+        "cpu.n_threads",
+        "trt.fp16_enable",
+        "trt.engine_cache_enable",
+        "trt.engine_cache_path",
+        "cuda.graph_enable",
+        "qnn.htp_performance_mode",
+        "qnn.htp_arch",
+        "qnn.soc_model",
+        "qnn.backend_path",
+        "qnn.offload_graph_io_quantization",
+        "qnn.enable_htp_fp16_precision",
+        "qnn.context_cache_enable",
+        "qnn.context_cache_path",
+    } <= detection
+    assert "model_path" not in detection
+    assert "threshold" not in detection
+    assert "qnn_htp_arch" not in detection
+
+    tracking = {spec.name for spec in launch_params.PLUGIN_PARAMS[TRACK]}
+    assert {
+        "track.high_thresh",
+        "track.low_thresh",
+        "track.new_thresh",
+        "track.buffer",
+        "track.match_thresh",
+        "track.fuse_score",
+        "gmc.method",
+        "gmc.downscale",
+        "reid.enable",
+        "reid.model",
+        "reid.proximity_thresh",
+        "reid.appearance_thresh",
+        "reid.provider",
+        "reid.device",
+    } <= tracking
+    assert "track_high_thresh" not in tracking
+    assert "with_reid" not in tracking
+
+    detection3d = {spec.name for spec in launch_params.PLUGIN_PARAMS[D3D]}
+    assert {
+        "target_frame",
+        "depth.units_divisor",
+        "orientation.enable",
+        "orientation.min_seg_points",
+    } == detection3d
 
 
 def test_empty_values_are_omitted():
@@ -85,7 +150,7 @@ def test_bool_variants():
         ("off", False),
     ]:
         context = FakeContext({"force_download": raw})
-        assert build_overrides(context, DET)["detection.force_download"] is expected
+        assert build_overrides(context, DET)["detection.model.force_download"] is expected
 
 
 def test_invalid_value_raises_with_arg_name():
@@ -131,9 +196,9 @@ def test_structural_params_are_not_in_catalogue():
 def test_shared_arg_applied_to_each_target_plugin():
     context = FakeContext({"provider": "cpu", "device": "cpu:0"})
     assert build_overrides(context, DET)["detection.provider"] == "cpu"
-    assert build_overrides(context, TRACK)["tracking.provider"] == "cpu"
+    assert build_overrides(context, TRACK)["tracking.reid.provider"] == "cpu"
     assert build_overrides(context, DET)["detection.device"] == "cpu:0"
-    assert build_overrides(context, TRACK)["tracking.device"] == "cpu:0"
+    assert build_overrides(context, TRACK)["tracking.reid.device"] == "cpu:0"
     # Neither the 3D nor the debug plugin declares provider/device.
     assert build_overrides(context, D3D) == {}
     assert build_overrides(context, DBG) == {}
@@ -165,7 +230,7 @@ def test_build_all_overrides_merges_plugins():
         }
     )
     overrides = build_all_overrides(context, [DET, TRACK, DBG])
-    assert overrides["detection.threshold"] == pytest.approx(0.5)
+    assert overrides["detection.inference.threshold"] == pytest.approx(0.5)
     assert overrides["tracking.tracker_type"] == "botsort"
     assert overrides["debug.marker_lifetime"] == pytest.approx(1.5)
     assert "detection.plugin" not in overrides
@@ -264,14 +329,14 @@ def test_qnn_overrides_are_detection_only():
         }
     )
     overrides = build_overrides(context, DET)
-    assert overrides["detection.qnn_htp_performance_mode"] == "sustained_high_performance"
-    assert overrides["detection.qnn_htp_arch"] == "73"
-    assert overrides["detection.qnn_soc_model"] == "79"
-    assert overrides["detection.qnn_backend_path"] == "/opt/qairt/lib/libQnnHtp.so"
-    assert overrides["detection.qnn_offload_graph_io_quantization"] is False
-    assert overrides["detection.qnn_enable_htp_fp16_precision"] is True
-    assert overrides["detection.qnn_context_cache_enable"] is False
-    assert overrides["detection.qnn_context_cache_path"] == "/tmp/qnn"
+    assert overrides["detection.qnn.htp_performance_mode"] == "sustained_high_performance"
+    assert overrides["detection.qnn.htp_arch"] == "73"
+    assert overrides["detection.qnn.soc_model"] == "79"
+    assert overrides["detection.qnn.backend_path"] == "/opt/qairt/lib/libQnnHtp.so"
+    assert overrides["detection.qnn.offload_graph_io_quantization"] is False
+    assert overrides["detection.qnn.enable_htp_fp16_precision"] is True
+    assert overrides["detection.qnn.context_cache_enable"] is False
+    assert overrides["detection.qnn.context_cache_path"] == "/tmp/qnn"
     assert build_overrides(context, TRACK) == {}
     assert build_overrides(context, D3D) == {}
     assert build_overrides(context, DBG) == {}

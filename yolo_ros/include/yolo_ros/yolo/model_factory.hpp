@@ -17,10 +17,10 @@
 /// @{
 namespace yolo_ros::yolo {
 
-/// @brief YOLO task selected by `model_type` and the model filename.
+/// @brief YOLO task selected by `model.type` and the model filename.
 enum class ModelTask { Detect, Segment, Pose, Obb, Classify };
 
-/// @brief Resolve the task from an explicit `model_type` or the file name.
+/// @brief Resolve the task from an explicit `model.type` or the file name.
 /// @param[in] model_type Explicit type ("auto"/"" uses the file-name
 /// heuristic).
 /// @param[in] model_path Model path used by the heuristic.

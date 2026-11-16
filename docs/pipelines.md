@@ -16,30 +16,36 @@ The whole pipeline lives in a single params file: the node-level `cameras` list 
     plugins: ["detection", "tracking", "detection3d", "debug"]
     cameras: ["cam0", "cam1"]
     cam0:
-      rgb_topic: /cam0/color/image_raw
-      depth_topic: /cam0/depth/image_raw # optional pair, set together
-      depth_info_topic: /cam0/depth/camera_info
-      image_reliability: 2
-      depth_reliability: 2
+      rgb:
+        topic: /cam0/color/image_raw
+        reliability: 2
+      depth:
+        topic: /cam0/depth/image_raw # optional pair, set together
+        info_topic: /cam0/depth/camera_info
+        reliability: 2
     cam1:
-      rgb_topic: /cam1/color/image_raw
+      rgb:
+        topic: /cam1/color/image_raw
     detection:
       plugin: yolo_ros/DetectionPlugin
       cameras: ["cam0", "cam1"] # omit to select all cameras
-      model_repo: unileon-robotics/YOLO26-ONNX
-      model_filename: dynamic/yolo26m.onnx # dynamic-batch export
-      max_batch_size: 8
-      pad_to_batch: 2 # optional: pin the TensorRT profile to the camera count
+      model:
+        repo: unileon-robotics/YOLO26-ONNX
+        filename: dynamic/yolo26m.onnx # dynamic-batch export
+      batch:
+        max_size: 8
+        pad_to: 2 # optional: pin the TensorRT profile to the camera count
     tracking:
       plugin: yolo_ros/TrackingPlugin
       cameras: ["cam0", "cam1"]
       tracker_type: bytetrack
-      track_high_thresh: 0.25
-      track_low_thresh: 0.1
-      new_track_thresh: 0.25
-      track_buffer: 30
-      match_thresh: 0.8
-      fuse_score: true
+      track:
+        high_thresh: 0.25
+        low_thresh: 0.1
+        new_thresh: 0.25
+        buffer: 30
+        match_thresh: 0.8
+        fuse_score: true
     detection3d:
       plugin: yolo_ros/Detect3DPlugin
       cameras: ["cam0"] # every camera here must have depth
@@ -53,7 +59,7 @@ The whole pipeline lives in a single params file: the node-level `cameras` list 
 Rules:
 
 - `cameras` is a plain name list; each name must be non-empty and contain none of `.`, `:`, `/`; names are unique.
-- `rgb_topic` is required per camera. `depth_topic` and `depth_info_topic` are optional but must be set together; `image_reliability` / `depth_reliability` are optional ints (`0`=system default, `1`=Reliable, `2`=Best Effort, default `2`).
+- `<cam>.rgb.topic` is required per camera. `<cam>.depth.topic` and `<cam>.depth.info.topic` are optional but must be set together; `<cam>.rgb.reliability` / `<cam>.depth.reliability` are optional ints (`0`=system default, `1`=Reliable, `2`=Best Effort, default `2`).
 - No topic may be used by two different cameras.
 - A plugin's `cameras` list selects a subset of the defined cameras. Omit the list (or list every camera) to select every defined camera; never write an empty list (`cameras: []`, `plugins: []`) — see the Jazzy note below. Entries must reference defined cameras, must not repeat a name inside one instance, and `detection3d` cameras must have depth.
 - A plugin can only select cameras the previous plugin in the chain also selects: the first plugin consumes the camera frames directly, so every camera listed by plugin _i_ must also be listed by plugin _i−1_. A camera selected only downstream is a configure error: <code>plugin '&lt;instance&gt;': camera '&lt;cam&gt;' is not produced by plugin '&lt;previous instance&gt;'</code>.
@@ -61,7 +67,7 @@ Rules:
 
 > **Jazzy quirk**: an empty sequence in the YAML params file (`cameras: []`, `plugins: []`) is not a valid way to say "all cameras" or "no plugins": rcl's YAML parser produces no value for `[]` and the node fails to start. Omit the key instead; for a plugin's `cameras`, omitting it means every defined camera (or list every camera explicitly).
 
-Every scalar parameter can still be overridden from the command line (arrays and per-camera blocks stay YAML-only); see the [README](../README.md#parameters).
+Every scalar parameter can still be overridden from the command line using its historical flat alias (for example `pad_to_batch:=2` maps to `detection.batch.pad_to`); arrays and per-camera blocks stay YAML-only. See the [README](../README.md#parameters).
 
 ## Chain semantics
 

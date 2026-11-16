@@ -5,33 +5,40 @@
     plugins: ["detection", "tracking", "detection3d", "debug"]
     cameras: ["cam0"]
     cam0:
-      rgb_topic: /camera/rgb/image_raw
-      depth_topic: /camera/depth/image_raw
-      depth_info_topic: /camera/depth/camera_info
-      image_reliability: 2
-      depth_reliability: 2
+      rgb:
+        topic: /camera/rgb/image_raw
+        reliability: 2
+      depth:
+        topic: /camera/depth/image_raw
+        info_topic: /camera/depth/camera_info
+        reliability: 2
     detection:
       plugin: yolo_ros/DetectionPlugin
-      model_type: obb
-      model_repo: unileon-robotics/YOLO26-ONNX
-      model_filename: yolo26s-obb.onnx
-      threshold: 0.7
-      iou: 0.45
-      n_threads: -1
-      img_width: 640
-      img_height: 480
+      model:
+        type: obb
+        repo: unileon-robotics/YOLO26-ONNX
+        filename: yolo26s-obb.onnx
+      inference:
+        threshold: 0.7
+        iou: 0.45
+      cpu:
+        n_threads: -1
+      input:
+        width: 640
+        height: 480
       provider: cuda
       cameras: ["cam0"]
     tracking:
       plugin: yolo_ros/TrackingPlugin
       cameras: ["cam0"]
       tracker_type: bytetrack
-      track_high_thresh: 0.25
-      track_low_thresh: 0.1
-      new_track_thresh: 0.25
-      track_buffer: 30
-      match_thresh: 0.8
-      fuse_score: true
+      track:
+        high_thresh: 0.25
+        low_thresh: 0.1
+        new_thresh: 0.25
+        buffer: 30
+        match_thresh: 0.8
+        fuse_score: true
     detection3d:
       plugin: yolo_ros/Detect3DPlugin
       cameras: ["cam0"]

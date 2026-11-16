@@ -31,10 +31,10 @@ protected:
   static rclcpp::NodeOptions
   camera_options(const std::vector<rclcpp::Parameter> &extra) {
     std::vector<rclcpp::Parameter> parameters{
-        rclcpp::Parameter("cam0.rgb_topic", "/camera0/image"),
-        rclcpp::Parameter("cam0.depth_topic", "/camera0/depth"),
-        rclcpp::Parameter("cam0.depth_info_topic", "/camera0/info"),
-        rclcpp::Parameter("cam1.rgb_topic", "/camera1/image"),
+        rclcpp::Parameter("cam0.rgb.topic", "/camera0/image"),
+        rclcpp::Parameter("cam0.depth.topic", "/camera0/depth"),
+        rclcpp::Parameter("cam0.depth.info.topic", "/camera0/info"),
+        rclcpp::Parameter("cam1.rgb.topic", "/camera1/image"),
     };
     parameters.insert(parameters.end(), extra.begin(), extra.end());
     rclcpp::NodeOptions options;
@@ -101,7 +101,7 @@ TEST_F(CameraStreamsTest, ConfigureValidatesAndResolves) {
 
 TEST_F(CameraStreamsTest, RejectsDepthWithoutInfo) {
   auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>(
-      "streams_test", camera_options({rclcpp::Parameter("cam1.depth_topic",
+      "streams_test", camera_options({rclcpp::Parameter("cam1.depth.topic",
                                                         "/camera1/depth")}));
   yolo_ros::Blackboard blackboard;
   yolo_ros::CameraStreams streams(blackboard, node->get_logger());
@@ -114,7 +114,7 @@ TEST_F(CameraStreamsTest, RejectsDepthWithoutInfo) {
 TEST_F(CameraStreamsTest, RejectsDuplicateTopics) {
   auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>(
       "streams_test",
-      camera_options({rclcpp::Parameter("cam1.rgb_topic", "/camera0/image")}));
+      camera_options({rclcpp::Parameter("cam1.rgb.topic", "/camera0/image")}));
   yolo_ros::Blackboard blackboard;
   yolo_ros::CameraStreams streams(blackboard, node->get_logger());
 
@@ -132,13 +132,13 @@ TEST_F(CameraStreamsTest, RejectsMissingRgbTopic) {
   std::string error;
   EXPECT_FALSE(streams.configure(*node, {"cam2"}, error));
   EXPECT_NE(error.find("cam2"), std::string::npos);
-  EXPECT_NE(error.find("rgb_topic"), std::string::npos);
+  EXPECT_NE(error.find("rgb.topic"), std::string::npos);
 }
 
 TEST_F(CameraStreamsTest, FailedConfigureLeavesNoPartialState) {
   auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>(
       "streams_test",
-      camera_options({rclcpp::Parameter("cam1.rgb_topic", "")}));
+      camera_options({rclcpp::Parameter("cam1.rgb.topic", "")}));
   yolo_ros::Blackboard blackboard;
   yolo_ros::CameraStreams streams(blackboard, node->get_logger());
 
@@ -284,9 +284,9 @@ TEST_F(CameraStreamsTest, DeactivateThenActivateAgain) {
 TEST_F(CameraStreamsTest, ActivateInvalidTopicRollsBack) {
   auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>(
       "streams_test",
-      camera_options({rclcpp::Parameter("cam0.depth_topic", ""),
-                      rclcpp::Parameter("cam0.depth_info_topic", ""),
-                      rclcpp::Parameter("cam1.rgb_topic", "bad topic!")}));
+      camera_options({rclcpp::Parameter("cam0.depth.topic", ""),
+                      rclcpp::Parameter("cam0.depth.info.topic", ""),
+                      rclcpp::Parameter("cam1.rgb.topic", "bad topic!")}));
   yolo_ros::Blackboard blackboard;
   yolo_ros::CameraStreams streams(blackboard, node->get_logger());
 

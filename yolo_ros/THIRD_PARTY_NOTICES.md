@@ -15,7 +15,7 @@ including its Python tracker and C++ deployment implementations:
 - License: MIT
 
 The ROS-facing detection metadata fields and parameter names (for example,
-`track_high_thresh`, `track_low_thresh`, class IDs, and input detection
+`track.high_thresh`, `track.low_thresh`, class IDs, and input detection
 indices) retain Ultralytics-compatible interface conventions. The tracking
 algorithm, lifecycle, Kalman model, and association helpers use the original
 MIT-licensed ByteTrack code as their licensing basis. LAPJV has the additional
@@ -56,7 +56,7 @@ BoT-SORT paper and reference implementation:
 The XYWH Kalman filter, the camera-motion compensator and the association
 pipeline are ported from the reference `tracker/kalman_filter.py`,
 `tracker/gmc.py` and `tracker/bot_sort.py`. The ReID/appearance branch IS
-included as the opt-in `with_reid` appearance association, using embeddings from
+included as the opt-in `reid.enable` appearance association, using embeddings from
 a pluggable ONNX encoder (see the torchreid/OSNet and FastReID sections below).
 The reference is itself based on the MIT-licensed
 ByteTrack reference (see above).

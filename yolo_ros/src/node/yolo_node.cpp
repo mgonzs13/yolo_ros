@@ -25,7 +25,8 @@ YoloNode::YoloNode(const rclcpp::NodeOptions &options,
       "plugins", std::vector<std::string>{}, descriptor);
   rcl_interfaces::msg::ParameterDescriptor cameras_descriptor;
   cameras_descriptor.description =
-      "Camera names; each <name> has rgb_topic/depth_topic/depth_info_topic";
+      "Camera names; each <name> has rgb.topic, depth.topic and "
+      "depth.info.topic";
   this->declare_parameter<std::vector<std::string>>(
       "cameras", std::vector<std::string>{}, cameras_descriptor);
 }

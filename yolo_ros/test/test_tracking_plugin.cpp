@@ -284,6 +284,6 @@ TEST_F(TrackingPluginTest, ReconfigureSwitchesTrackerType) {
   node->set_parameter(rclcpp::Parameter("track.tracker_type", "botsort"));
   plugin.declare_params(*node, "track."); // must not throw
   plugin.get_params(*node, "track.");     // must read botsort knobs
-  EXPECT_TRUE(node->has_parameter("track.gmc_method"));
-  EXPECT_TRUE(node->has_parameter("track.with_reid"));
+  EXPECT_TRUE(node->has_parameter("track.gmc.method"));
+  EXPECT_TRUE(node->has_parameter("track.reid.enable"));
 }

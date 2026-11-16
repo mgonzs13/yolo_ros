@@ -138,7 +138,7 @@ TensorRT engines are built at first inference; a build failure there is not
 retried by the provider loop. Use `provider: cuda` or a `--no-tensorrt` build
 if you hit it; verify on the robot. ONNX Runtime 1.6 configures the
 provider through process-wide `ORT_TENSORRT_*` environment variables set from
-the `trt_fp16_enable` / `trt_engine_cache_enable` / `trt_engine_cache_path`
+the `trt.fp16_enable` / `trt.engine_cache_enable` / `trt.engine_cache_path`
 parameters (`ORT_TENSORRT_FP16_ENABLE`, `ORT_TENSORRT_ENGINE_CACHE_ENABLE`,
 `ORT_TENSORRT_CACHE_PATH`). When the build has no provider — the x64 prebuilt
 tarball or an aarch64 `--no-tensorrt` prefix — `provider_chain()` silently
@@ -148,7 +148,7 @@ The TensorRT engine cache stores the engine plus a `.profile` file with the
 min/max ranges for dynamic shapes; a shape outside the cached profile
 rebuilds the engine.
 
-The legacy path has hard limits: CUDA Graph is disabled (`cuda_graph_enable` is
+The legacy path has hard limits: CUDA Graph is disabled (`cuda.graph_enable` is
 ignored with a warning), cuDNN 8 is required, and models must be exported with
 `opset <= 13` (the mirror's `opset=12` exports are the tested combination)
 without a baked `nms=True`. ROS 2 Galactic (Ubuntu 20.04) is the supported

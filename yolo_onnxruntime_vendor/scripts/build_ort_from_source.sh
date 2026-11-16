@@ -633,7 +633,7 @@ if [[ "${EP}" == "qnn" ]]; then
     cp -av "${qnn_libs[@]}" "${OUT_DIR}/lib/"
   else
     echo "warning: no libQnn*.so under ${QNN_HOME}/lib; ensure the QNN runtime" \
-         "is available at run time (system libraries or qnn_backend_path)" >&2
+         "is available at run time (system libraries or qnn.backend_path)" >&2
   fi
 
   # Hexagon DSP skeletons (unique basenames, safe to copy wholesale).

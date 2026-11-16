@@ -34,18 +34,18 @@ namespace yolo_ros {
 void Detect3DPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
                                     const std::string &prefix) {
   node.declare_parameter<std::string>(prefix + "target_frame", "base_link");
-  node.declare_parameter<int>(prefix + "depth_image_units_divisor", 1000);
-  node.declare_parameter<bool>(prefix + "enable_orientation", false);
-  node.declare_parameter<int>(prefix + "min_seg_points_for_orientation", 20);
+  node.declare_parameter<int>(prefix + "depth.units_divisor", 1000);
+  node.declare_parameter<bool>(prefix + "orientation.enable", false);
+  node.declare_parameter<int>(prefix + "orientation.min_seg_points", 20);
 }
 
 void Detect3DPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
                                 const std::string &prefix) {
   node.get_parameter(prefix + "target_frame", this->target_frame_);
-  node.get_parameter(prefix + "depth_image_units_divisor",
+  node.get_parameter(prefix + "depth.units_divisor",
                      this->depth_image_units_divisor_);
-  node.get_parameter(prefix + "enable_orientation", this->enable_orientation_);
-  node.get_parameter(prefix + "min_seg_points_for_orientation",
+  node.get_parameter(prefix + "orientation.enable", this->enable_orientation_);
+  node.get_parameter(prefix + "orientation.min_seg_points",
                      this->min_seg_points_for_orientation_);
 }
 
@@ -129,7 +129,7 @@ std::vector<yolo_msgs::msg::Detection> Detect3DPlugin::process_detections(
   }
 
   // Passthrough depth view preserving the source encoding: 16UC1 raw units
-  // (depth_utils divides them by depth_image_units_divisor below) or 32FC1
+  // (depth_utils divides them by depth.units_divisor below) or 32FC1
   // metres (already metric, so depth_utils ignores the divisor), like the
   // Python node's "passthrough" encoding.
   const cv::Mat depth_image = frame->depth_image();

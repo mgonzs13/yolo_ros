@@ -12,9 +12,9 @@ launch arguments, e.g.::
 
     ros2 launch yolo_bringup yolo.launch.py threshold:=0.5 tracker_type:=botsort
 
-A provided argument becomes the ``<instance>.<param>`` override that rclcpp
-layers on top of the YAML. Array parameters and structural fields
-(``plugins``, ``<camera>.rgb_topic``, ``<instance>.plugin``,
+A provided argument becomes the ``<instance>.<namespace>.<param>`` override that
+rclcpp layers on top of the YAML. Array parameters and structural fields
+(``plugins``, ``<camera>.rgb.topic``, ``<instance>.plugin``,
 ``<instance>.cameras``) are YAML-only: a CLI value is always a plain string,
 which rclcpp rejects for a ``std::vector<std::string>`` parameter.
 
@@ -22,10 +22,13 @@ An argument that is not passed keeps the value from the YAML params file, so
 the YAML remains the source of defaults. The empty string is the "not provided"
 sentinel; a non-empty YAML string therefore cannot be overridden *to* empty.
 
-Each plugin instance reads its parameters under ``<instance>.<name>``, so the
-override keys are instance-prefixed (``detection.threshold``,
-``tracking.tracker_type``). Tracker knobs are inline under ``tracking:`` in the
-pipeline YAML; the tracking instance declares only the knobs of its selected
+Each plugin instance reads its parameters under ``<instance>.<namespace>.<name>``,
+so the override keys are instance-prefixed and namespaced
+(``detection.inference.threshold``, ``tracking.track.high_thresh``). The
+launch-argument names keep the historical flat aliases (``threshold``,
+``track_high_thresh``, ...) and are translated to those namespaced parameters.
+Tracker knobs are grouped under ``track.*``/``gmc.*``/``reid.*`` in the pipeline
+YAML; the tracking instance declares only the knobs of its selected
 ``tracker_type``.
 """
 
@@ -37,7 +40,13 @@ from launch.actions import DeclareLaunchArgument
 
 @dataclass(frozen=True)
 class ParamSpec:
-    """A plugin parameter exposed as a launch argument."""
+    """A plugin parameter exposed as a launch argument.
+
+    ``name`` is the ROS parameter name relative to the plugin instance
+    (e.g. ``model.path``); ``alias`` is the historical flat launch-argument
+    name (e.g. ``model_path``). The override is always written with the
+    namespaced ``name``.
+    """
 
     name: str
     type: type
@@ -61,58 +70,69 @@ PLUGINS = {
 
 PLUGIN_PARAMS = {
     "yolo_ros/DetectionPlugin": (
-        ParamSpec("model_type", str),
-        ParamSpec("model_path", str),
-        ParamSpec("model_repo", str),
-        ParamSpec("model_filename", str),
-        ParamSpec("cache_dir", str),
-        ParamSpec("force_download", bool),
+        ParamSpec("model.type", str, alias="model_type"),
+        ParamSpec("model.path", str, alias="model_path"),
+        ParamSpec("model.repo", str, alias="model_repo"),
+        ParamSpec("model.filename", str, alias="model_filename"),
+        ParamSpec("model.cache_dir", str, alias="cache_dir"),
+        ParamSpec("model.force_download", bool, alias="force_download"),
         ParamSpec("device", str),
         ParamSpec("provider", str),
-        ParamSpec("cuda_graph_enable", bool),
-        ParamSpec("trt_fp16_enable", bool),
-        ParamSpec("trt_engine_cache_enable", bool),
-        ParamSpec("trt_engine_cache_path", str),
-        ParamSpec("qnn_htp_performance_mode", str),
-        ParamSpec("qnn_htp_arch", str),
-        ParamSpec("qnn_soc_model", str),
-        ParamSpec("qnn_backend_path", str),
-        ParamSpec("qnn_offload_graph_io_quantization", bool),
-        ParamSpec("qnn_enable_htp_fp16_precision", bool),
-        ParamSpec("qnn_context_cache_enable", bool),
-        ParamSpec("qnn_context_cache_path", str),
-        ParamSpec("threshold", float),
-        ParamSpec("iou", float),
-        ParamSpec("max_det", int),
-        ParamSpec("n_threads", int),
-        ParamSpec("max_fps", int),
-        ParamSpec("img_width", int),
-        ParamSpec("img_height", int),
-        ParamSpec("top_k", int),
-        ParamSpec("max_batch_size", int),
+        ParamSpec("cuda.graph_enable", bool, alias="cuda_graph_enable"),
+        ParamSpec("trt.fp16_enable", bool, alias="trt_fp16_enable"),
+        ParamSpec("trt.engine_cache_enable", bool, alias="trt_engine_cache_enable"),
+        ParamSpec("trt.engine_cache_path", str, alias="trt_engine_cache_path"),
+        ParamSpec("qnn.htp_performance_mode", str, alias="qnn_htp_performance_mode"),
+        ParamSpec("qnn.htp_arch", str, alias="qnn_htp_arch"),
+        ParamSpec("qnn.soc_model", str, alias="qnn_soc_model"),
+        ParamSpec("qnn.backend_path", str, alias="qnn_backend_path"),
+        ParamSpec(
+            "qnn.offload_graph_io_quantization",
+            bool,
+            alias="qnn_offload_graph_io_quantization",
+        ),
+        ParamSpec(
+            "qnn.enable_htp_fp16_precision",
+            bool,
+            alias="qnn_enable_htp_fp16_precision",
+        ),
+        ParamSpec("qnn.context_cache_enable", bool, alias="qnn_context_cache_enable"),
+        ParamSpec("qnn.context_cache_path", str, alias="qnn_context_cache_path"),
+        ParamSpec("inference.threshold", float, alias="threshold"),
+        ParamSpec("inference.iou", float, alias="iou"),
+        ParamSpec("inference.max_det", int, alias="max_det"),
+        ParamSpec("cpu.n_threads", int, alias="n_threads"),
+        ParamSpec("inference.max_fps", int, alias="max_fps"),
+        ParamSpec("input.width", int, alias="img_width"),
+        ParamSpec("input.height", int, alias="img_height"),
+        ParamSpec("inference.top_k", int, alias="top_k"),
+        ParamSpec("batch.max_size", int, alias="max_batch_size"),
+        ParamSpec("batch.pad_to", int, alias="pad_to_batch"),
     ),
     "yolo_ros/TrackingPlugin": (
         ParamSpec("tracker_type", str),
-        ParamSpec("track_high_thresh", float),
-        ParamSpec("track_low_thresh", float),
-        ParamSpec("new_track_thresh", float),
-        ParamSpec("track_buffer", int),
-        ParamSpec("match_thresh", float),
-        ParamSpec("fuse_score", bool),
-        ParamSpec("gmc_method", str),
-        ParamSpec("gmc_downscale", int),
-        ParamSpec("with_reid", bool),
-        ParamSpec("reid_model", str),
-        ParamSpec("proximity_thresh", float),
-        ParamSpec("appearance_thresh", float),
-        ParamSpec("provider", str),
-        ParamSpec("device", str),
+        ParamSpec("track.high_thresh", float, alias="track_high_thresh"),
+        ParamSpec("track.low_thresh", float, alias="track_low_thresh"),
+        ParamSpec("track.new_thresh", float, alias="new_track_thresh"),
+        ParamSpec("track.buffer", int, alias="track_buffer"),
+        ParamSpec("track.match_thresh", float, alias="match_thresh"),
+        ParamSpec("track.fuse_score", bool, alias="fuse_score"),
+        ParamSpec("gmc.method", str, alias="gmc_method"),
+        ParamSpec("gmc.downscale", int, alias="gmc_downscale"),
+        ParamSpec("reid.enable", bool, alias="with_reid"),
+        ParamSpec("reid.model", str, alias="reid_model"),
+        ParamSpec("reid.proximity_thresh", float, alias="proximity_thresh"),
+        ParamSpec("reid.appearance_thresh", float, alias="appearance_thresh"),
+        ParamSpec("reid.provider", str, alias="provider"),
+        ParamSpec("reid.device", str, alias="device"),
     ),
     "yolo_ros/Detect3DPlugin": (
         ParamSpec("target_frame", str),
-        ParamSpec("depth_image_units_divisor", int),
-        ParamSpec("enable_orientation", bool),
-        ParamSpec("min_seg_points_for_orientation", int),
+        ParamSpec("depth.units_divisor", int, alias="depth_image_units_divisor"),
+        ParamSpec("orientation.enable", bool, alias="enable_orientation"),
+        ParamSpec(
+            "orientation.min_seg_points", int, alias="min_seg_points_for_orientation"
+        ),
     ),
     "yolo_ros/DebugPlugin": (ParamSpec("marker_lifetime", float),),
 }

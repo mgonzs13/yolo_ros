@@ -298,18 +298,18 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
 
     if (resolved.params_ignored) {
       YOLO_LOG_WARN("Model has static input dimension(s); using %dx%d "
-                    "(img_width/img_height are ignored for those).",
+                    "(input.width/input.height are ignored for those).",
                     resolved.width, resolved.height);
     } else if (resolved.from_params) {
       YOLO_LOG_INFO("Dynamic input size in the ONNX graph; using %dx%d from "
-                    "img_width/img_height.",
+                    "input.width/input.height.",
                     resolved.width, resolved.height);
     }
   }
 
 #if YOLO_ORT_LEGACY
   if (params.cuda_graph_enable) {
-    YOLO_LOG_WARN("cuda_graph_enable is not supported by this legacy ONNX "
+    YOLO_LOG_WARN("cuda.graph_enable is not supported by this legacy ONNX "
                   "Runtime build; ignoring.");
   }
 #endif
@@ -440,7 +440,7 @@ Model::Model(yolo_ros::yolo::utils::YoloParams params, const std::string &task)
       trt_cache_path.empty() ? std::string() : " (" + trt_cache_path + ")";
   YOLO_LOG_INFO("Model loaded: %s (total %.2f s)", model_path.c_str(),
                 load_seconds);
-  YOLO_LOG_INFO("  task=%s  model_type='%s'  provider=%s  device='%s' (id=%d)  "
+  YOLO_LOG_INFO("  task=%s  model.type='%s'  provider=%s  device='%s' (id=%d)  "
                 "n_threads=%d",
                 task.c_str(), params.model_type.c_str(),
                 this->active_provider_.c_str(), params.device.c_str(),

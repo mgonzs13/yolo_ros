@@ -177,7 +177,7 @@ def test_yolo_launch_layers_instance_prefixed_overrides(bringup_share):
     node = _single_node(_load("yolo"), configs, params_file)
     assert _param_files(node)[0] is params_file
     params = _node_params(node)
-    assert params == {"detection.threshold": pytest.approx(0.5)}
+    assert params == {"detection.inference.threshold": pytest.approx(0.5)}
     assert "detection.plugin" not in params
 
 

@@ -160,7 +160,7 @@ Models are exported for one task — **detection** (`detect`), **instance segmen
 
 Run from the workspace root (so the workspace is sourced as an overlay). `yolo.launch.py` starts one `yolo_node` executable that loads every pipeline stage as a **pluginlib** plugin; a single YAML file defines the whole pipeline — the node-level `cameras`, the ordered `plugins` chain and every plugin's parameters. The task is selected by the **model**, not by a separate executable or launch.
 
-The `plugins` parameter is an ordered list of plugin instance names; each instance selects its pluginlib class with a `<instance>.plugin` parameter, and the instance name is the prefix of every parameter the plugin reads (`detection.*` for `yolo_ros/DetectionPlugin`, `tracking.*` for `yolo_ros/TrackingPlugin`, `detection3d.*` for `yolo_ros/Detect3DPlugin`, `debug.*` for `yolo_ros/DebugPlugin`). The list order **is** the data-flow chain: the first plugin must be `yolo_ros/DetectionPlugin`, no plugin type may appear twice and `yolo_ros/DebugPlugin` must be last. Each plugin also takes a `cameras` list selecting which cameras it processes and consumes the previous plugin's output for each camera; every camera a plugin selects must also be selected by the previous plugin in the chain (the first plugin consumes the camera frames directly), otherwise configure fails with <code>plugin '&lt;instance&gt;': camera '&lt;cam&gt;' is not produced by plugin '&lt;previous instance&gt;'</code>. Omit a plugin's `cameras` key to process every defined camera, and never write `cameras: []` (see the YAML note below). The plugins exchange data in memory over typed **blackboard channels** and each runs on its own worker thread. `yolo.launch.py` is a thin loader: it passes its YAML params file plus scalar command-line overrides and makes no topic remaps. The default `config/yolo.yaml` looks like:
+The `plugins` parameter is an ordered list of plugin instance names; each instance selects its pluginlib class with a `<instance>.plugin` parameter, and the instance name is the prefix of every parameter the plugin reads (`detection.*` for `yolo_ros/DetectionPlugin`, `tracking.*` for `yolo_ros/TrackingPlugin`, `detection3d.*` for `yolo_ros/Detect3DPlugin`, `debug.*` for `yolo_ros/DebugPlugin`). Parameters are grouped by concern below that prefix — for example `detection.model.path`, `detection.inference.threshold`, `tracking.track.high_thresh` and `detection3d.orientation.enable`. The list order **is** the data-flow chain: the first plugin must be `yolo_ros/DetectionPlugin`, no plugin type may appear twice and `yolo_ros/DebugPlugin` must be last. Each plugin also takes a `cameras` list selecting which cameras it processes and consumes the previous plugin's output for each camera; every camera a plugin selects must also be selected by the previous plugin in the chain (the first plugin consumes the camera frames directly), otherwise configure fails with <code>plugin '&lt;instance&gt;': camera '&lt;cam&gt;' is not produced by plugin '&lt;previous instance&gt;'</code>. Omit a plugin's `cameras` key to process every defined camera, and never write `cameras: []` (see the YAML note below). The plugins exchange data in memory over typed **blackboard channels** and each runs on its own worker thread. `yolo.launch.py` is a thin loader: it passes its YAML params file plus scalar command-line overrides and makes no topic remaps. The default `config/yolo.yaml` looks like:
 
 ```yaml
 /yolo/yolo_node:
@@ -168,19 +168,24 @@ The `plugins` parameter is an ordered list of plugin instance names; each instan
     plugins: ["detection", "tracking", "detection3d", "debug"]
     cameras: ["cam0"]
     cam0:
-      rgb_topic: /camera/rgb/image_raw
-      depth_topic: /camera/depth/image_raw # optional pair, set together
-      depth_info_topic: /camera/depth/camera_info
-      image_reliability: 1
-      depth_reliability: 1
+      rgb:
+        topic: /camera/rgb/image_raw
+        reliability: 1
+      depth:
+        topic: /camera/depth/image_raw # optional pair, set together
+        info_topic: /camera/depth/camera_info
+        reliability: 1
     detection:
       plugin: yolo_ros/DetectionPlugin
       cameras: ["cam0"]
-      model_repo: unileon-robotics/YOLO26-ONNX
-      model_filename: yolo26s.onnx
-      threshold: 0.7
-      iou: 0.45
-      n_threads: -1
+      model:
+        repo: unileon-robotics/YOLO26-ONNX
+        filename: yolo26s.onnx
+      inference:
+        threshold: 0.7
+        iou: 0.45
+      cpu:
+        n_threads: -1
       provider: cuda
     tracking:
       plugin: yolo_ros/TrackingPlugin
@@ -196,13 +201,13 @@ The `plugins` parameter is an ordered list of plugin instance names; each instan
       marker_lifetime: 0.5
 ```
 
-Each camera declares its `rgb_topic` and optionally the `depth_topic` + `depth_info_topic` pair (set together); cameras are synchronized by the node and stay internal. For an RGB-only setup remove the depth fields and the `detection3d` instance — a camera without depth cannot be selected by `detection3d`. Several cameras are declared in the same `cameras` list, each with its own block (see [Multi-camera pipelines](#multi-camera-pipelines)).
+Each camera declares its `<cam>.rgb.topic` and optionally the `<cam>.depth.topic` + `<cam>.depth.info.topic` pair (set together); cameras are synchronized by the node and stay internal. For an RGB-only setup remove the depth fields and the `detection3d` instance — a camera without depth cannot be selected by `detection3d`. Several cameras are declared in the same `cameras` list, each with its own block (see [Multi-camera pipelines](#multi-camera-pipelines)).
 
 > **YAML note (Jazzy)**: never write an empty sequence in the params file — `cameras: []`, `plugins: []`. rcl's YAML parser produces no value for `[]` on Jazzy, so the node fails to start. Omit the key instead: an omitted plugin `cameras` key means "all defined cameras" (or list every camera explicitly).
 
-Pick the model with `model_filename:=` (a file in the Hugging Face mirror set by `model_repo`) or `model_path:=` (a local path). The task is inferred from the file name (`model_type: auto`): `-seg`/`segment` → segmentation, `-pose`/`pose` → pose, `-obb`/`obb` → OBB, `-cls`/`classify` → classification, anything else detection.
+Pick the model with `model_filename:=` (a file in the Hugging Face mirror set by `detection.model.repo`) or `model_path:=` (a local path). These launch arguments keep their historical flat names and map to `detection.model.filename` and `detection.model.path`. The task is inferred from the file name (`detection.model.type: auto`): `-seg`/`segment` → segmentation, `-pose`/`pose` → pose, `-obb`/`obb` → OBB, `-cls`/`classify` → classification, anything else detection.
 
-Each task ships a preset params file that pins `model_type` and task-specific tuning — `config/yolo_segment.yaml`, `yolo_pose.yaml`, `yolo_obb.yaml`, `yolo_classify.yaml` — plus the VENTUNO Q Hexagon NPU preset (`config/yolo_qnn.yaml`, see [QNN](#qnn-hexagon-npu-ventuno-q)). Pass one with `params_file:=`:
+Each task ships a preset params file that pins `detection.model.type` and task-specific tuning — `config/yolo_segment.yaml`, `yolo_pose.yaml`, `yolo_obb.yaml`, `yolo_classify.yaml` — plus the VENTUNO Q Hexagon NPU preset (`config/yolo_qnn.yaml`, see [QNN](#qnn-hexagon-npu-ventuno-q)). Pass one with `params_file:=`:
 
 ```shell
 ros2 launch yolo_bringup yolo.launch.py params_file:=$(ros2 pkg prefix yolo_bringup)/share/yolo_bringup/config/yolo_segment.yaml
@@ -239,9 +244,9 @@ Runnable launch commands for each task (detection, segmentation, pose, OBB and c
 
 ### 3D Detection
 
-A camera gets a depth stream by setting both `depth_topic` and `depth_info_topic` in its block; adding `detection3d` (class `yolo_ros/Detect3DPlugin`) to the `plugins` chain then synchronizes that camera's depth image + `CameraInfo` with the upstream 2D stream and publishes `<cam>/detections_3d`. Cameras selected by `detection3d` must have depth and must also be selected by the plugin whose detections it lifts (tracking, or detection when tracking is omitted), and `detection3d` must come after that plugin. The shipped `config/yolo.yaml` already includes `detection3d` over a depth camera; for RGB-only setups remove the depth fields and the `detection3d` entry.
+A camera gets a depth stream by setting both `depth.topic` and `depth.info.topic` in its block; adding `detection3d` (class `yolo_ros/Detect3DPlugin`) to the `plugins` chain then synchronizes that camera's depth image + `CameraInfo` with the upstream 2D stream and publishes `<cam>/detections_3d`. Cameras selected by `detection3d` must have depth and must also be selected by the plugin whose detections it lifts (tracking, or detection when tracking is omitted), and `detection3d` must come after that plugin. The shipped `config/yolo.yaml` already includes `detection3d` over a depth camera; for RGB-only setups remove the depth fields and the `detection3d` entry.
 
-For segmentation the depth ROI is driven by the mask polygon; for pose the 2D keypoints are back-projected to 3D (`<cam>/debug_kp_markers`). The 3D plugin can also estimate the orientation of each box (an oriented bounding box fit by PCA to a strided depth sample) when `enable_orientation` is set. When enabled, `detections_3d` carries a non-identity quaternion in each box's `center.orientation` and the box `size` is expressed along the object's own axes.
+For segmentation the depth ROI is driven by the mask polygon; for pose the 2D keypoints are back-projected to 3D (`<cam>/debug_kp_markers`). The 3D plugin can also estimate the orientation of each box (an oriented bounding box fit by PCA to a strided depth sample) when `orientation.enable` is set. When enabled, `detections_3d` carries a non-identity quaternion in each box's `center.orientation` and the box `size` is expressed along the object's own axes.
 
 ### Multi-camera pipelines
 
@@ -250,11 +255,14 @@ To run **one shared detector batched across several cameras**, declare every cam
 ```yaml
 cameras: ["cam0", "cam1"]
 cam0:
-  rgb_topic: /cam0/color/image_raw
-  depth_topic: /cam0/depth/image_raw
-  depth_info_topic: /cam0/depth/camera_info
+  rgb:
+    topic: /cam0/color/image_raw
+  depth:
+    topic: /cam0/depth/image_raw
+    info_topic: /cam0/depth/camera_info
 cam1:
-  rgb_topic: /cam1/color/image_raw
+  rgb:
+    topic: /cam1/color/image_raw
 detection:
   plugin: yolo_ros/DetectionPlugin
   cameras: ["cam0", "cam1"]
@@ -269,9 +277,9 @@ debug:
   cameras: ["cam0"] # subset of detection3d's cameras
 ```
 
-`DetectionPlugin` runs directly on the single-camera case and batches (up to `max_batch_size`) when it selects several cameras; the shared model must be a dynamic-batch ONNX export (the mirror's `dynamic/` files are). Outputs stay camera-prefixed (`cam0/detections`, `cam1/detections`, ...). See the [multi-camera pipelines guide](docs/pipelines.md) for the full example and the batching-scaling numbers.
+`DetectionPlugin` runs directly on the single-camera case and batches (up to `batch.max_size`) when it selects several cameras; the shared model must be a dynamic-batch ONNX export (the mirror's `dynamic/` files are). Outputs stay camera-prefixed (`cam0/detections`, `cam1/detections`, ...). See the [multi-camera pipelines guide](docs/pipelines.md) for the full example and the batching-scaling numbers.
 
-With TensorRT, ONNX Runtime 1.6 only reuses a cached engine when the input batch size is inside the optimization profile saved with it. The scheduler produces variable batch sizes (the first frame often arrives alone), so the engine can be rebuilt for several minutes on the first inference. Set `pad_to_batch` to a stable size (usually the camera count, e.g. `4`) to keep the profile valid and the cached engine reusable.
+With TensorRT, ONNX Runtime 1.6 only reuses a cached engine when the input batch size is inside the optimization profile saved with it. The scheduler produces variable batch sizes (the first frame often arrives alone), so the engine can be rebuilt for several minutes on the first inference. Set `batch.pad_to` (CLI `pad_to_batch:=`) to a stable size (usually the camera count, e.g. `4`) to keep the profile valid and the cached engine reusable.
 
 ### Topics
 
@@ -291,7 +299,7 @@ There are no runtime services. Runtime enable/disable and class filtering were r
 
 ### Parameters
 
-Configuration is file-driven: `yolo.launch.py` declares `params_file` (default `config/yolo.yaml`) and `namespace` (default `yolo`) and passes the YAML params file plus any command-line overrides as `parameters=[params_file, overrides]` (with no topic remaps). The default is `config/yolo.yaml`; the per-task presets (`config/yolo_segment.yaml`, `yolo_pose.yaml`, `yolo_obb.yaml`, `yolo_classify.yaml`) and the VENTUNO Q Hexagon NPU preset (`config/yolo_qnn.yaml`) are selected with `params_file:=`. The YAML holds the node-level `cameras` list with the per-camera fields (`<cam>.rgb_topic`, ...), the ordered `plugins` chain, each plugin's `cameras` list and the plugin parameters grouped by instance (`detection.*`, `tracking.*`, `detection3d.*`, `debug.*`); each instance also sets its `<instance>.plugin` class. In addition, **every scalar parameter can be overridden from the command line**; an argument left unset keeps the YAML value. Array parameters (the node `cameras` list and every plugin `cameras` list) and the per-camera blocks are **YAML-only** and cannot be passed as command-line overrides:
+Configuration is file-driven: `yolo.launch.py` declares `params_file` (default `config/yolo.yaml`) and `namespace` (default `yolo`) and passes the YAML params file plus any command-line overrides as `parameters=[params_file, overrides]` (with no topic remaps). The default is `config/yolo.yaml`; the per-task presets (`config/yolo_segment.yaml`, `yolo_pose.yaml`, `yolo_obb.yaml`, `yolo_classify.yaml`) and the VENTUNO Q Hexagon NPU preset (`config/yolo_qnn.yaml`) are selected with `params_file:=`. The YAML holds the node-level `cameras` list with the per-camera fields (`<cam>.rgb.topic`, ...), the ordered `plugins` chain, each plugin's `cameras` list and the plugin parameters grouped by instance and concern (`detection.model.*`, `detection.inference.*`, `tracking.track.*`, `detection3d.orientation.*`, ...); each instance also sets its `<instance>.plugin` class. In addition, **every scalar parameter can be overridden from the command line**; an argument left unset keeps the YAML value. Array parameters (the node `cameras` list and every plugin `cameras` list) and the per-camera blocks are **YAML-only** and cannot be passed as command-line overrides:
 
 ```bash
 ros2 launch yolo_bringup yolo.launch.py model_path:=/path/model.onnx threshold:=0.5
@@ -300,7 +308,7 @@ ros2 launch yolo_bringup yolo.launch.py model_filename:=yolo26l-seg.onnx thresho
 
 Never write an empty sequence in the YAML (`cameras: []`, `plugins: []`): rcl's YAML parser produces no value for `[]` on Jazzy and the node fails to start. Omit the key instead; for a plugin's `cameras`, omitting it selects every defined camera (or list every camera explicitly).
 
-Override arguments use their parameter name (`threshold` → `detection.threshold`, `tracker_type` → `tracking.tracker_type`, ...). Because an empty value means "not provided", a non-empty YAML string cannot be overridden to empty from the CLI. Run `ros2 launch yolo_bringup yolo.launch.py --show-args` for the full list.
+The launch-argument names keep their historical flat aliases (for example `threshold` → `detection.inference.threshold`, `model_path` → `detection.model.path`, `tracker_type` → `tracking.tracker_type`, `with_reid` → `tracking.reid.enable`), so existing launch commands still work. The ROS parameter names themselves are namespaced: the old flat parameters (`detection.model_path`, `detection.threshold`, `tracking.track_high_thresh`, ...) are no longer declared. Because an empty value means "not provided", a non-empty YAML string cannot be overridden to empty from the CLI. Run `ros2 launch yolo_bringup yolo.launch.py --show-args` for the full list.
 
 Sections are keyed by the node's fully qualified name, so the key must include the launch namespace (default `yolo`):
 
@@ -310,11 +318,13 @@ Sections are keyed by the node's fully qualified name, so the key must include t
     plugins: ["detection"]
     cameras: ["cam0"]
     cam0:
-      rgb_topic: /camera/rgb/image_raw
+      rgb:
+        topic: /camera/rgb/image_raw
     detection:
       plugin: yolo_ros/DetectionPlugin
       cameras: ["cam0"]
-      model_type: auto
+      model:
+        type: auto
 ```
 
 If you change `namespace:=`, update the matching config block names for any value you do not override on the command line. The key parameters are listed below; see `yolo_bringup/config/yolo*.yaml` for the complete set.
@@ -327,9 +337,9 @@ If you change `namespace:=`, update the matching config block names for any valu
 
 The node-level `cameras` parameter lists the camera names. Each name declares its own fields:
 
-- **&lt;cam&gt;.rgb_topic** (required): RGB `sensor_msgs/Image` topic.
-- **&lt;cam&gt;.depth_topic** / **&lt;cam&gt;.depth_info_topic**: optional depth image and its `sensor_msgs/CameraInfo`; they must be set together (setting only one is a configure error).
-- **&lt;cam&gt;.image_reliability** / **&lt;cam&gt;.depth_reliability**: QoS reliability as an integer: `0`=system default, `1`=Reliable, `2`=Best Effort (defaults: `2`).
+- **&lt;cam&gt;.rgb.topic** (required): RGB `sensor_msgs/Image` topic.
+- **&lt;cam&gt;.depth.topic** / **&lt;cam&gt;.depth.info.topic**: optional depth image and its `sensor_msgs/CameraInfo`; they must be set together (setting only one is a configure error).
+- **&lt;cam&gt;.rgb.reliability** / **&lt;cam&gt;.depth.reliability**: QoS reliability as an integer: `0`=system default, `1`=Reliable, `2`=Best Effort (defaults: `2`).
 
 Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic may be used by two cameras. Camera frames are synchronized and stay in-process, so these topics are the node's only ROS subscriptions.
 
@@ -339,33 +349,33 @@ Parameters are grouped into general settings and per-provider settings.
 
 ##### General parameters
 
-- **model_type**: Pipeline to run: `YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify` or `auto` (default: `auto`, which infers the task from the model file name: `-seg`/`segment`, `-pose`/`pose`, `-obb`/`obb`, `-cls`/`classify`).
-- **model_path**: Path to the ONNX model (default: empty; the shipped configs set `model_repo`/`model_filename` instead).
-- **model_repo** / **model_filename** / **force_download** / **cache_dir**: Hugging Face Hub download (used instead of `model_path` when set; defaults: empty / empty / `false` / `~/.cache/huggingface/hub`). The shipped configs default to the `unileon-robotics/YOLO26-ONNX` mirror; clear `model_repo` to fall back to the local `model_path`. (The VENTUNO Q preset, `yolo_qnn.yaml`, ships an empty `model_repo` and a local `model_path` for the Ultralytics QNN export; a set `model_repo` wins over `model_path` when the download succeeds.)
+- **model.type**: Pipeline to run: `YOLO`/`Detect`, `Segment`, `Pose`, `OBB`, `Classify` or `auto` (default: `auto`, which infers the task from the model file name: `-seg`/`segment`, `-pose`/`pose`, `-obb`/`obb`, `-cls`/`classify`).
+- **model.path**: Path to the ONNX model (default: empty; the shipped configs set `model.repo`/`model.filename` instead).
+- **model.repo** / **model.filename** / **model.force_download** / **model.cache_dir**: Hugging Face Hub download (used instead of `model.path` when set; defaults: empty / empty / `false` / `~/.cache/huggingface/hub`). The shipped configs default to the `unileon-robotics/YOLO26-ONNX` mirror; clear `model.repo` to fall back to the local `model.path`. (The VENTUNO Q preset, `yolo_qnn.yaml`, downloads the mirror's `qnn/yolo26s_qnn.onnx` by default; pass `model_path:=` to use a local Ultralytics QNN export instead, since a set `model.repo` wins over `model.path` when the download succeeds.)
 - **provider**: Execution provider: `auto` (CUDA → CPU fallback chain), or force `tensorrt`/`trt` (TensorRT → CUDA → CPU), `cuda` (CUDA → CPU), `qnn` (Qualcomm Hexagon NPU via the ONNX Runtime QNN EP → CPU), `cpu` (default: `auto`).
 - **device**: CUDA/TensorRT device ordinal, e.g. `cuda:0`, `trt:1`, `1` (default: `cuda:0`). The `cuda:`/`trt:` prefix is accepted but `provider` selects the execution provider. A `qnn:` prefix is also accepted (e.g. `qnn:0`), but the QNN EP ignores the ordinal and runs on the board's HTP.
 - **cameras**: Cameras to run inference on; omit the list to select every defined camera (never write `cameras: []`). Detection is first in the chain, so it can select any defined camera. One camera uses the direct path, several run the dynamic-batch path.
-- **threshold**: Detection confidence threshold (default: `0.7`).
-- **iou**: IoU threshold for the C++ NMS applied to raw-output exports (detection without a baked-NMS head, segmentation, pose and OBB); it has no effect on exports that bake NMS into the graph (default: `0.45`).
-- **max_det**: Maximum number of detections per image (default: `300`).
-- **max_batch_size**: Maximum batch size for the multi-camera path (default: `8`). The scheduler drains up to this many camera frames per inference; smaller batches are padded only when `pad_to_batch` is set.
-- **pad_to_batch**: Pad every dynamic-batch inference to this size (default: `0`, disabled; clamped to `max_batch_size`). The batch is padded by repeating its last image, and padded results are dropped. Use it when the camera batch size varies from cycle to cycle; it applies with any provider. Ignored for models with a fixed batch axis, which always use the batch size baked into the graph. See the TensorRT section for the engine-cache benefit.
-- **max_fps**: Cap the inference/publish rate in Hz; `0` = unlimited (default: `0`).
-- **img_width** / **img_height**: Network input size for models exported with a dynamic input (`dynamic=True`) (defaults: `640`/`480`). Models with a static input keep the size baked into the ONNX graph (a warning is logged when the parameters differ); non-positive values fail configure and values not divisible by 32 log a warning.
-- **top_k**: Classification only — number of top classes to publish (default: `5`).
+- **inference.threshold**: Detection confidence threshold (default: `0.7`).
+- **inference.iou**: IoU threshold for the C++ NMS applied to raw-output exports (detection without a baked-NMS head, segmentation, pose and OBB); it has no effect on exports that bake NMS into the graph (default: `0.45`).
+- **inference.max_det**: Maximum number of detections per image (default: `300`).
+- **batch.max_size**: Maximum batch size for the multi-camera path (default: `8`). The scheduler drains up to this many camera frames per inference; smaller batches are padded only when `batch.pad_to` is set.
+- **batch.pad_to**: Pad every dynamic-batch inference to this size (default: `0`, disabled; clamped to `batch.max_size`). The batch is padded by repeating its last image, and padded results are dropped. Use it when the camera batch size varies from cycle to cycle; it applies with any provider. Ignored for models with a fixed batch axis, which always use the batch size baked into the graph. See the TensorRT section for the engine-cache benefit.
+- **inference.max_fps**: Cap the inference/publish rate in Hz; `0` = unlimited (default: `0`).
+- **input.width** / **input.height**: Network input size for models exported with a dynamic input (`dynamic=True`) (defaults: `640`/`480`). Models with a static input keep the size baked into the ONNX graph (a warning is logged when the parameters differ); non-positive values fail configure and values not divisible by 32 log a warning.
+- **inference.top_k**: Classification only — number of top classes to publish (default: `5`).
 
 The provider-specific parameters below apply only when the matching provider is selected. `auto` tries CUDA and then CPU; TensorRT is used only when requested explicitly.
 
 ##### TensorRT provider parameters (`provider: tensorrt` or `trt`)
 
-- **trt_fp16_enable**: TensorRT FP16 precision (default: `true`). The flag is part of the engine cache name, so toggling it builds and caches a separate engine.
-- **trt_engine_cache_enable**: Persist built TensorRT engines (default: `true`). With a dynamic batch axis the engine is built on the first inference and can take several minutes.
-- **trt_engine_cache_path**: TensorRT engine cache base directory; empty → `~/.cache/yolo_ros/trt_engines/<model>` (default: empty).
-- **pad_to_batch**: Recommended with a dynamic-batch export. ONNX Runtime 1.6's TensorRT provider learns the optimization profile from the batch sizes it observes and rebuilds the engine whenever a new size falls outside the saved `[min,max]` range. Padding every inference to a fixed size (e.g. `4` with four cameras) keeps that profile stable, so the cached engine is reused instead of rebuilt: no multi-minute stall when the first frame arrives alone or when the camera batch size changes. On a cold cache it also collapses the usual `[1,1]` then `[1,4]` sequence into a single `[4,4]` build. Same syntax and default as in General parameters.
+- **trt.fp16_enable**: TensorRT FP16 precision (default: `true`). The flag is part of the engine cache name, so toggling it builds and caches a separate engine.
+- **trt.engine_cache_enable**: Persist built TensorRT engines (default: `true`). With a dynamic batch axis the engine is built on the first inference and can take several minutes.
+- **trt.engine_cache_path**: TensorRT engine cache base directory; empty → `~/.cache/yolo_ros/trt_engines/<model>` (default: empty).
+- **batch.pad_to**: Recommended with a dynamic-batch export. ONNX Runtime 1.6's TensorRT provider learns the optimization profile from the batch sizes it observes and rebuilds the engine whenever a new size falls outside the saved `[min,max]` range. Padding every inference to a fixed size (e.g. `4` with four cameras) keeps that profile stable, so the cached engine is reused instead of rebuilt: no multi-minute stall when the first frame arrives alone or when the camera batch size changes. On a cold cache it also collapses the usual `[1,1]` then `[1,4]` sequence into a single `[4,4]` build. Same syntax and default as in General parameters.
 
 ##### CUDA provider parameters (`provider: cuda`)
 
-- **cuda_graph_enable**: Capture the fixed-shape model as a CUDA graph on the CUDA provider, cutting per-kernel launch overhead (default: `true`). Only applies to fixed-batch models; dynamic-batch exports keep the plain path.
+- **cuda.graph_enable**: Capture the fixed-shape model as a CUDA graph on the CUDA provider, cutting per-kernel launch overhead (default: `true`). Only applies to fixed-batch models; dynamic-batch exports keep the plain path.
 
 ##### QNN provider parameters (`provider: qnn`)
 
@@ -373,41 +383,41 @@ The defaults target the VENTUNO Q, QCS8275 / HTP v75:
 
 | Parameter                           | Default        | Description                                                                                                                                                                                                                                                                                                                                        |
 | ----------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qnn_htp_performance_mode`          | `burst`        | HTP performance mode: `burst`, `balanced`, `sustained_high_performance`, `power_saver`, ... (see the QNN HTP documentation).                                                                                                                                                                                                                       |
-| `qnn_htp_arch`                      | `75`           | Hexagon HTP architecture version; must match the board and the model's compile target (e.g. `73`, `79`, `81`).                                                                                                                                                                                                                                     |
-| `qnn_soc_model`                     | `82`           | QNN SoC model number (QCS8275); change it together with `qnn_htp_arch` when targeting another Qualcomm board.                                                                                                                                                                                                                                      |
-| `qnn_backend_path`                  | `libQnnHtp.so` | HTP backend library the EP loads, resolved from the loader path; empty lets ONNX Runtime resolve its own backend. Point it at `<sdk>/lib/<arch>/libQnnHtp.so` for a QAIRT SDK prefix.                                                                                                                                                              |
-| `qnn_offload_graph_io_quantization` | `true`         | Offload graph I/O quant/dequant to the CPU EP, keeping graph inputs/outputs float32.                                                                                                                                                                                                                                                               |
-| `qnn_enable_htp_fp16_precision`     | `false`        | Finalize float32 graphs at fp16 precision on the HTP, which is what lets non-quantized models run on the NPU; quantized models keep it off.                                                                                                                                                                                                        |
-| `qnn_context_cache_enable`          | `true`         | Compile a plain quantized (QDQ) model once on first use and cache the serialized QNN context; disable it for models that already embed a context binary (e.g. Ultralytics `*_qnn.onnx` exports).                                                                                                                                                   |
-| `qnn_context_cache_path`            | empty          | Context cache base directory; empty → `~/.cache/yolo_ros/qnn_context/<model>-<fingerprint>.ctx.onnx` where `<model>` is the model file stem. The fingerprint covers the model's path/size/mtime, so updated or same-named models compile a fresh context; delete the directory after a QAIRT/OS upgrade or to reclaim space from old fingerprints. |
+| `qnn.htp_performance_mode`          | `burst`        | HTP performance mode: `burst`, `balanced`, `sustained_high_performance`, `power_saver`, ... (see the QNN HTP documentation).                                                                                                                                                                                                                       |
+| `qnn.htp_arch`                      | `75`           | Hexagon HTP architecture version; must match the board and the model's compile target (e.g. `73`, `79`, `81`).                                                                                                                                                                                                                                     |
+| `qnn.soc_model`                     | `82`           | QNN SoC model number (QCS8275); change it together with `qnn.htp_arch` when targeting another Qualcomm board.                                                                                                                                                                                                                                      |
+| `qnn.backend_path`                  | `libQnnHtp.so` | HTP backend library the EP loads, resolved from the loader path; empty lets ONNX Runtime resolve its own backend. Point it at `<sdk>/lib/<arch>/libQnnHtp.so` for a QAIRT SDK prefix.                                                                                                                                                              |
+| `qnn.offload_graph_io_quantization` | `true`         | Offload graph I/O quant/dequant to the CPU EP, keeping graph inputs/outputs float32.                                                                                                                                                                                                                                                               |
+| `qnn.enable_htp_fp16_precision`     | `false`        | Finalize float32 graphs at fp16 precision on the HTP, which is what lets non-quantized models run on the NPU; quantized models keep it off.                                                                                                                                                                                                        |
+| `qnn.context_cache_enable`          | `true`         | Compile a plain quantized (QDQ) model once on first use and cache the serialized QNN context; disable it for models that already embed a context binary (e.g. Ultralytics `*_qnn.onnx` exports).                                                                                                                                                   |
+| `qnn.context_cache_path`            | empty          | Context cache base directory; empty → `~/.cache/yolo_ros/qnn_context/<model>-<fingerprint>.ctx.onnx` where `<model>` is the model file stem. The fingerprint covers the model's path/size/mtime, so updated or same-named models compile a fresh context; delete the directory after a QAIRT/OS upgrade or to reclaim space from old fingerprints. |
 
 ##### CPU provider parameters (`provider: cpu`)
 
-- **n_threads**: CPU execution-provider threads; `-1` (or any value <= 0) = auto: performance cores on hybrid CPUs, otherwise physical cores (default: `-1`). Only used by the CPU provider; CUDA and TensorRT sessions run with a single ONNX Runtime intra-op thread.
+- **cpu.n_threads**: CPU execution-provider threads; `-1` (or any value <= 0) = auto: performance cores on hybrid CPUs, otherwise physical cores (default: `-1`). Only used by the CPU provider; CUDA and TensorRT sessions run with a single ONNX Runtime intra-op thread.
 
 #### Tracking plugin (`tracking.*`, `yolo_ros/TrackingPlugin`)
 
 - **cameras**: Cameras to track; omit the list to select every defined camera (never write `cameras: []`). Every selected camera must also be selected by the previous plugin in the chain.
 - **tracker_type**: C++ implementation: `bytetrack` (default) or `botsort` (XYWH Kalman filter + camera-motion compensation). The tracker knobs below live in this same instance block; an unknown `tracker_type` logs a warning and passes detections through.
-- **track_high_thresh**: First-stage association threshold (default: `0.25`).
-- **track_low_thresh**: Second-stage threshold for low-score matches (default: `0.1`).
-- **new_track_thresh**: Score above which a new track is started (default: `0.25`).
-- **track_buffer**: Frames a lost track is kept alive (default: `30`).
-- **match_thresh**: Association similarity threshold (IoU/cost) (default: `0.8`).
-- **fuse_score**: Fuse detection score with IoU cost for matching (default: `true`).
-- **gmc_method** (BoT-SORT only): Camera-motion method: `none` (default), `sparseOptFlow`, `orb` or `ecc`.
-- **gmc_downscale** (BoT-SORT only): Camera-motion downscale factor (default: `2`).
-- **with_reid** / **reid_model** / **proximity_thresh** / **appearance_thresh** (BoT-SORT only): ReID appearance model and its matching thresholds (defaults: `false` / empty / `0.5` / `0.25`). Set `with_reid: true` and point `reid_model` at an ONNX encoder (export recipes in the [model export guide](docs/models.md#reid-encoder-for-bot-sort-reid)).
-- **provider** / **device** (BoT-SORT + ReID only): ReID model execution provider and device (defaults: `auto` / `cuda:0`).
+- **track.high_thresh**: First-stage association threshold (default: `0.25`).
+- **track.low_thresh**: Second-stage threshold for low-score matches (default: `0.1`).
+- **track.new_thresh**: Score above which a new track is started (default: `0.25`).
+- **track.buffer**: Frames a lost track is kept alive (default: `30`).
+- **track.match_thresh**: Association similarity threshold (IoU/cost) (default: `0.8`).
+- **track.fuse_score**: Fuse detection score with IoU cost for matching (default: `true`).
+- **gmc.method** (BoT-SORT only): Camera-motion method: `none` (default), `sparseOptFlow`, `orb` or `ecc`.
+- **gmc.downscale** (BoT-SORT only): Camera-motion downscale factor (default: `2`).
+- **reid.enable** / **reid.model** / **reid.proximity_thresh** / **reid.appearance_thresh** (BoT-SORT only): ReID appearance model and its matching thresholds (defaults: `false` / empty / `0.5` / `0.25`). Set `reid.enable: true` and point `reid.model` at an ONNX encoder (export recipes in the [model export guide](docs/models.md#reid-encoder-for-bot-sort-reid)).
+- **reid.provider** / **reid.device** (BoT-SORT + ReID only): ReID model execution provider and device (defaults: `auto` / `cuda:0`).
 
 #### 3D detection plugin (`detection3d.*`, `yolo_ros/Detect3DPlugin`)
 
-- **cameras**: Cameras to lift to 3D; omit the list to select every defined camera (never write `cameras: []`), every selected camera must have the `depth_topic` + `depth_info_topic` pair, and it must also be selected by the previous plugin in the chain.
+- **cameras**: Cameras to lift to 3D; omit the list to select every defined camera (never write `cameras: []`), every selected camera must have the `depth.topic` + `depth.info.topic` pair, and it must also be selected by the previous plugin in the chain.
 - **target_frame**: Frame to transform the 3D boxes into (default: `base_link`).
-- **depth_image_units_divisor**: Divisor to convert the depth image to meters (default: `1000`).
-- **enable_orientation**: Estimate and publish the 3D box orientation (default: `false`).
-- **min_seg_points_for_orientation**: Minimum valid depth points required per detection for orientation estimation (default: `20`).
+- **depth.units_divisor**: Divisor to convert the depth image to meters (default: `1000`).
+- **orientation.enable**: Estimate and publish the 3D box orientation (default: `false`).
+- **orientation.min_seg_points**: Minimum valid depth points required per detection for orientation estimation (default: `20`).
 
 #### Debug plugin (`debug.*`, `yolo_ros/DebugPlugin`)
 
@@ -425,12 +435,12 @@ Pipeline stages are **pluginlib** plugins. To add your own:
    ```cpp
    void declare_params(rclcpp_lifecycle::LifecycleNode &node,
                        const std::string &prefix) override {
-     node.declare_parameter<double>(prefix + "threshold", 0.7);
+     node.declare_parameter<double>(prefix + "inference.threshold", 0.7);
    }
 
    void get_params(const rclcpp_lifecycle::LifecycleNode &node,
                    const std::string &prefix) override {
-     node.get_parameter(prefix + "threshold", this->threshold_);
+     node.get_parameter(prefix + "inference.threshold", this->threshold_);
    }
    ```
 

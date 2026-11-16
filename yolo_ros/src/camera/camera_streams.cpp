@@ -52,40 +52,40 @@ bool CameraStreams::configure(rclcpp_lifecycle::LifecycleNode &node,
     CameraConfig camera;
     camera.name = name;
 
-    if (!node.has_parameter(name + ".rgb_topic")) {
-      node.declare_parameter<std::string>(name + ".rgb_topic", "");
+    if (!node.has_parameter(name + ".rgb.topic")) {
+      node.declare_parameter<std::string>(name + ".rgb.topic", "");
     }
 
-    if (!node.has_parameter(name + ".depth_topic")) {
-      node.declare_parameter<std::string>(name + ".depth_topic", "");
+    if (!node.has_parameter(name + ".depth.topic")) {
+      node.declare_parameter<std::string>(name + ".depth.topic", "");
     }
 
-    if (!node.has_parameter(name + ".depth_info_topic")) {
-      node.declare_parameter<std::string>(name + ".depth_info_topic", "");
+    if (!node.has_parameter(name + ".depth.info.topic")) {
+      node.declare_parameter<std::string>(name + ".depth.info.topic", "");
     }
 
-    if (!node.has_parameter(name + ".image_reliability")) {
-      node.declare_parameter<int>(name + ".image_reliability", 2);
+    if (!node.has_parameter(name + ".rgb.reliability")) {
+      node.declare_parameter<int>(name + ".rgb.reliability", 2);
     }
 
-    if (!node.has_parameter(name + ".depth_reliability")) {
-      node.declare_parameter<int>(name + ".depth_reliability", 2);
+    if (!node.has_parameter(name + ".depth.reliability")) {
+      node.declare_parameter<int>(name + ".depth.reliability", 2);
     }
 
-    node.get_parameter(name + ".rgb_topic", camera.rgb_topic);
-    node.get_parameter(name + ".depth_topic", camera.depth_topic);
-    node.get_parameter(name + ".depth_info_topic", camera.depth_info_topic);
-    node.get_parameter(name + ".image_reliability", camera.image_reliability);
-    node.get_parameter(name + ".depth_reliability", camera.depth_reliability);
+    node.get_parameter(name + ".rgb.topic", camera.rgb_topic);
+    node.get_parameter(name + ".depth.topic", camera.depth_topic);
+    node.get_parameter(name + ".depth.info.topic", camera.depth_info_topic);
+    node.get_parameter(name + ".rgb.reliability", camera.image_reliability);
+    node.get_parameter(name + ".depth.reliability", camera.depth_reliability);
 
     if (camera.rgb_topic.empty()) {
-      error = "camera '" + name + "': missing '" + name + ".rgb_topic'";
+      error = "camera '" + name + "': missing '" + name + ".rgb.topic'";
       return false;
     }
 
     if (camera.depth_topic.empty() != camera.depth_info_topic.empty()) {
-      error = "camera '" + name +
-              "': depth_topic and depth_info_topic must be set together";
+      error = "camera '" + name + "': '" + name + ".depth.topic' and '" + name +
+              ".depth.info.topic' must be set together";
       return false;
     }
 

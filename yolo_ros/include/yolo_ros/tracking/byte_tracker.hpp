@@ -70,28 +70,28 @@ struct ByteTrackParams : public TrackerParams {
 /// the trailing dot (e.g. "track."). Empty declares the bare parameter names.
 template <typename NodeT>
 void declare_byte_track_params(NodeT &node, const std::string &prefix = "") {
-  if (!node.has_parameter(prefix + "track_high_thresh")) {
-    node.template declare_parameter<double>(prefix + "track_high_thresh", 0.25);
+  if (!node.has_parameter(prefix + "track.high_thresh")) {
+    node.template declare_parameter<double>(prefix + "track.high_thresh", 0.25);
   }
 
-  if (!node.has_parameter(prefix + "track_low_thresh")) {
-    node.template declare_parameter<double>(prefix + "track_low_thresh", 0.1);
+  if (!node.has_parameter(prefix + "track.low_thresh")) {
+    node.template declare_parameter<double>(prefix + "track.low_thresh", 0.1);
   }
 
-  if (!node.has_parameter(prefix + "new_track_thresh")) {
-    node.template declare_parameter<double>(prefix + "new_track_thresh", 0.25);
+  if (!node.has_parameter(prefix + "track.new_thresh")) {
+    node.template declare_parameter<double>(prefix + "track.new_thresh", 0.25);
   }
 
-  if (!node.has_parameter(prefix + "track_buffer")) {
-    node.template declare_parameter<int>(prefix + "track_buffer", 30);
+  if (!node.has_parameter(prefix + "track.buffer")) {
+    node.template declare_parameter<int>(prefix + "track.buffer", 30);
   }
 
-  if (!node.has_parameter(prefix + "match_thresh")) {
-    node.template declare_parameter<double>(prefix + "match_thresh", 0.8);
+  if (!node.has_parameter(prefix + "track.match_thresh")) {
+    node.template declare_parameter<double>(prefix + "track.match_thresh", 0.8);
   }
 
-  if (!node.has_parameter(prefix + "fuse_score")) {
-    node.template declare_parameter<bool>(prefix + "fuse_score", true);
+  if (!node.has_parameter(prefix + "track.fuse_score")) {
+    node.template declare_parameter<bool>(prefix + "track.fuse_score", true);
   }
 }
 
@@ -105,12 +105,12 @@ template <typename NodeT>
 ByteTrackParams load_byte_track_params(const NodeT &node,
                                        const std::string &prefix = "") {
   ByteTrackParams params;
-  node.get_parameter(prefix + "track_high_thresh", params.track_high_thresh);
-  node.get_parameter(prefix + "track_low_thresh", params.track_low_thresh);
-  node.get_parameter(prefix + "new_track_thresh", params.new_track_thresh);
-  node.get_parameter(prefix + "track_buffer", params.track_buffer);
-  node.get_parameter(prefix + "match_thresh", params.match_thresh);
-  node.get_parameter(prefix + "fuse_score", params.fuse_score);
+  node.get_parameter(prefix + "track.high_thresh", params.track_high_thresh);
+  node.get_parameter(prefix + "track.low_thresh", params.track_low_thresh);
+  node.get_parameter(prefix + "track.new_thresh", params.new_track_thresh);
+  node.get_parameter(prefix + "track.buffer", params.track_buffer);
+  node.get_parameter(prefix + "track.match_thresh", params.match_thresh);
+  node.get_parameter(prefix + "track.fuse_score", params.fuse_score);
   return params;
 }
 

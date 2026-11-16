@@ -34,11 +34,11 @@ class ReIDEncoder;
 namespace yolo_ros::tracking {
 
 /// @brief BoT-SORT configuration (optional ReID appearance branch selected by
-/// `with_reid`).
+/// `reid.enable`).
 ///
 /// `type` is set to "botsort", the key used by the tracking node's
 /// `tracker_type` parameter and by create_tracker(). The association knobs
-/// share ByteTrack's names/defaults; `gmc_method`/`gmc_downscale` drive the
+/// share ByteTrack's names/defaults; `gmc.method`/`gmc.downscale` drive the
 /// camera-motion compensator.
 struct BotSortParams : public TrackerParams {
   /// @brief Construct with `type = "botsort"`.
@@ -66,7 +66,7 @@ struct BotSortParams : public TrackerParams {
   /// @brief Cap on the embedding distance accepted as a match.
   double appearance_thresh = 0.25;
   /// @brief ONNX ReID encoder path (empty disables appearance even when
-  /// with_reid is set).
+  /// `reid.enable` is set).
   std::string reid_model = "";
   /// @brief Execution provider for the ReID encoder.
   std::string provider = "auto";
@@ -89,60 +89,64 @@ struct BotSortParams : public TrackerParams {
 /// the trailing dot (e.g. "track."). Empty declares the bare parameter names.
 template <typename NodeT>
 void declare_bot_sort_params(NodeT &node, const std::string &prefix = "") {
-  if (!node.has_parameter(prefix + "track_high_thresh")) {
-    node.template declare_parameter<double>(prefix + "track_high_thresh", 0.25);
+  if (!node.has_parameter(prefix + "track.high_thresh")) {
+    node.template declare_parameter<double>(prefix + "track.high_thresh", 0.25);
   }
 
-  if (!node.has_parameter(prefix + "track_low_thresh")) {
-    node.template declare_parameter<double>(prefix + "track_low_thresh", 0.1);
+  if (!node.has_parameter(prefix + "track.low_thresh")) {
+    node.template declare_parameter<double>(prefix + "track.low_thresh", 0.1);
   }
 
-  if (!node.has_parameter(prefix + "new_track_thresh")) {
-    node.template declare_parameter<double>(prefix + "new_track_thresh", 0.25);
+  if (!node.has_parameter(prefix + "track.new_thresh")) {
+    node.template declare_parameter<double>(prefix + "track.new_thresh", 0.25);
   }
 
-  if (!node.has_parameter(prefix + "track_buffer")) {
-    node.template declare_parameter<int>(prefix + "track_buffer", 30);
+  if (!node.has_parameter(prefix + "track.buffer")) {
+    node.template declare_parameter<int>(prefix + "track.buffer", 30);
   }
 
-  if (!node.has_parameter(prefix + "match_thresh")) {
-    node.template declare_parameter<double>(prefix + "match_thresh", 0.8);
+  if (!node.has_parameter(prefix + "track.match_thresh")) {
+    node.template declare_parameter<double>(prefix + "track.match_thresh", 0.8);
   }
 
-  if (!node.has_parameter(prefix + "fuse_score")) {
-    node.template declare_parameter<bool>(prefix + "fuse_score", true);
+  if (!node.has_parameter(prefix + "track.fuse_score")) {
+    node.template declare_parameter<bool>(prefix + "track.fuse_score", true);
   }
 
-  if (!node.has_parameter(prefix + "gmc_method")) {
-    node.template declare_parameter<std::string>(prefix + "gmc_method", "none");
+  if (!node.has_parameter(prefix + "gmc.method")) {
+    node.template declare_parameter<std::string>(prefix + "gmc.method", "none");
   }
 
-  if (!node.has_parameter(prefix + "gmc_downscale")) {
-    node.template declare_parameter<int>(prefix + "gmc_downscale", 2);
+  if (!node.has_parameter(prefix + "gmc.downscale")) {
+    node.template declare_parameter<int>(prefix + "gmc.downscale", 2);
   }
 
-  if (!node.has_parameter(prefix + "with_reid")) {
-    node.template declare_parameter<bool>(prefix + "with_reid", false);
+  if (!node.has_parameter(prefix + "reid.enable")) {
+    node.template declare_parameter<bool>(prefix + "reid.enable", false);
   }
 
-  if (!node.has_parameter(prefix + "reid_model")) {
-    node.template declare_parameter<std::string>(prefix + "reid_model", "");
+  if (!node.has_parameter(prefix + "reid.model")) {
+    node.template declare_parameter<std::string>(prefix + "reid.model", "");
   }
 
-  if (!node.has_parameter(prefix + "proximity_thresh")) {
-    node.template declare_parameter<double>(prefix + "proximity_thresh", 0.5);
+  if (!node.has_parameter(prefix + "reid.proximity_thresh")) {
+    node.template declare_parameter<double>(prefix + "reid.proximity_thresh",
+                                            0.5);
   }
 
-  if (!node.has_parameter(prefix + "appearance_thresh")) {
-    node.template declare_parameter<double>(prefix + "appearance_thresh", 0.25);
+  if (!node.has_parameter(prefix + "reid.appearance_thresh")) {
+    node.template declare_parameter<double>(prefix + "reid.appearance_thresh",
+                                            0.25);
   }
 
-  if (!node.has_parameter(prefix + "provider")) {
-    node.template declare_parameter<std::string>(prefix + "provider", "auto");
+  if (!node.has_parameter(prefix + "reid.provider")) {
+    node.template declare_parameter<std::string>(prefix + "reid.provider",
+                                                 "auto");
   }
 
-  if (!node.has_parameter(prefix + "device")) {
-    node.template declare_parameter<std::string>(prefix + "device", "cuda:0");
+  if (!node.has_parameter(prefix + "reid.device")) {
+    node.template declare_parameter<std::string>(prefix + "reid.device",
+                                                 "cuda:0");
   }
 }
 
@@ -156,26 +160,27 @@ template <typename NodeT>
 BotSortParams load_bot_sort_params(const NodeT &node,
                                    const std::string &prefix = "") {
   BotSortParams params;
-  node.get_parameter(prefix + "track_high_thresh", params.track_high_thresh);
-  node.get_parameter(prefix + "track_low_thresh", params.track_low_thresh);
-  node.get_parameter(prefix + "new_track_thresh", params.new_track_thresh);
-  node.get_parameter(prefix + "track_buffer", params.track_buffer);
-  node.get_parameter(prefix + "match_thresh", params.match_thresh);
-  node.get_parameter(prefix + "fuse_score", params.fuse_score);
-  node.get_parameter(prefix + "gmc_method", params.gmc_method);
-  node.get_parameter(prefix + "gmc_downscale", params.gmc_downscale);
-  node.get_parameter(prefix + "with_reid", params.with_reid);
-  node.get_parameter(prefix + "reid_model", params.reid_model);
-  node.get_parameter(prefix + "proximity_thresh", params.proximity_thresh);
-  node.get_parameter(prefix + "appearance_thresh", params.appearance_thresh);
-  node.get_parameter(prefix + "provider", params.provider);
-  node.get_parameter(prefix + "device", params.device);
+  node.get_parameter(prefix + "track.high_thresh", params.track_high_thresh);
+  node.get_parameter(prefix + "track.low_thresh", params.track_low_thresh);
+  node.get_parameter(prefix + "track.new_thresh", params.new_track_thresh);
+  node.get_parameter(prefix + "track.buffer", params.track_buffer);
+  node.get_parameter(prefix + "track.match_thresh", params.match_thresh);
+  node.get_parameter(prefix + "track.fuse_score", params.fuse_score);
+  node.get_parameter(prefix + "gmc.method", params.gmc_method);
+  node.get_parameter(prefix + "gmc.downscale", params.gmc_downscale);
+  node.get_parameter(prefix + "reid.enable", params.with_reid);
+  node.get_parameter(prefix + "reid.model", params.reid_model);
+  node.get_parameter(prefix + "reid.proximity_thresh", params.proximity_thresh);
+  node.get_parameter(prefix + "reid.appearance_thresh",
+                     params.appearance_thresh);
+  node.get_parameter(prefix + "reid.provider", params.provider);
+  node.get_parameter(prefix + "reid.device", params.device);
   return params;
 }
 
 /// @brief BoT-SORT implementation based on the reference BoT-SORT tracker
 /// (MIT). See THIRD_PARTY_NOTICES.md. Optional ReID appearance branch
-/// selected by `with_reid`; otherwise motion association only.
+/// selected by `reid.enable`; otherwise motion association only.
 class BotSort : public Tracker {
 public:
   /// @brief Bring the one-argument Tracker::update overload into scope.

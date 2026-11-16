@@ -22,94 +22,95 @@ namespace yolo_ros {
 
 void DetectionPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
                                      const std::string &prefix) {
-  node.declare_parameter<std::string>(prefix + "model_type", "auto");
-  node.declare_parameter<std::string>(prefix + "model_path", "");
-  node.declare_parameter<std::string>(prefix + "model_repo", "");
-  node.declare_parameter<std::string>(prefix + "model_filename", "");
-  node.declare_parameter<std::string>(prefix + "cache_dir",
+  node.declare_parameter<std::string>(prefix + "model.type", "auto");
+  node.declare_parameter<std::string>(prefix + "model.path", "");
+  node.declare_parameter<std::string>(prefix + "model.repo", "");
+  node.declare_parameter<std::string>(prefix + "model.filename", "");
+  node.declare_parameter<std::string>(prefix + "model.cache_dir",
                                       "~/.cache/huggingface/hub");
-  node.declare_parameter<bool>(prefix + "force_download", false);
+  node.declare_parameter<bool>(prefix + "model.force_download", false);
   node.declare_parameter<std::string>(prefix + "device", "cuda:0");
   node.declare_parameter<std::string>(prefix + "provider", "auto");
-  node.declare_parameter<bool>(prefix + "cuda_graph_enable", true);
-  node.declare_parameter<bool>(prefix + "trt_fp16_enable", true);
-  node.declare_parameter<bool>(prefix + "trt_engine_cache_enable", true);
-  node.declare_parameter<std::string>(prefix + "trt_engine_cache_path", "");
-  node.declare_parameter<std::string>(prefix + "qnn_htp_performance_mode",
+  node.declare_parameter<bool>(prefix + "cuda.graph_enable", true);
+  node.declare_parameter<bool>(prefix + "trt.fp16_enable", true);
+  node.declare_parameter<bool>(prefix + "trt.engine_cache_enable", true);
+  node.declare_parameter<std::string>(prefix + "trt.engine_cache_path", "");
+  node.declare_parameter<std::string>(prefix + "qnn.htp_performance_mode",
                                       "burst");
-  node.declare_parameter<std::string>(prefix + "qnn_htp_arch", "75");
-  node.declare_parameter<std::string>(prefix + "qnn_soc_model", "82");
-  node.declare_parameter<std::string>(prefix + "qnn_backend_path",
+  node.declare_parameter<std::string>(prefix + "qnn.htp_arch", "75");
+  node.declare_parameter<std::string>(prefix + "qnn.soc_model", "82");
+  node.declare_parameter<std::string>(prefix + "qnn.backend_path",
                                       "libQnnHtp.so");
-  node.declare_parameter<bool>(prefix + "qnn_offload_graph_io_quantization",
+  node.declare_parameter<bool>(prefix + "qnn.offload_graph_io_quantization",
                                true);
-  node.declare_parameter<bool>(prefix + "qnn_enable_htp_fp16_precision", false);
-  node.declare_parameter<bool>(prefix + "qnn_context_cache_enable", true);
-  node.declare_parameter<std::string>(prefix + "qnn_context_cache_path", "");
-  node.declare_parameter<float>(prefix + "threshold", 0.7f);
-  node.declare_parameter<float>(prefix + "iou", 0.45f);
-  node.declare_parameter<int>(prefix + "max_det", 300);
-  node.declare_parameter<int>(prefix + "n_threads", -1);
-  node.declare_parameter<int>(prefix + "max_fps", 0);
-  node.declare_parameter<int>(prefix + "img_width", 640);
-  node.declare_parameter<int>(prefix + "img_height", 480);
-  node.declare_parameter<int>(prefix + "top_k", 5);
-  node.declare_parameter<int>(prefix + "max_batch_size", 8);
-  node.declare_parameter<int>(prefix + "pad_to_batch", 0);
+  node.declare_parameter<bool>(prefix + "qnn.enable_htp_fp16_precision", false);
+  node.declare_parameter<bool>(prefix + "qnn.context_cache_enable", true);
+  node.declare_parameter<std::string>(prefix + "qnn.context_cache_path", "");
+  node.declare_parameter<float>(prefix + "inference.threshold", 0.7f);
+  node.declare_parameter<float>(prefix + "inference.iou", 0.45f);
+  node.declare_parameter<int>(prefix + "inference.max_det", 300);
+  node.declare_parameter<int>(prefix + "cpu.n_threads", -1);
+  node.declare_parameter<int>(prefix + "inference.max_fps", 0);
+  node.declare_parameter<int>(prefix + "input.width", 640);
+  node.declare_parameter<int>(prefix + "input.height", 480);
+  node.declare_parameter<int>(prefix + "inference.top_k", 5);
+  node.declare_parameter<int>(prefix + "batch.max_size", 8);
+  node.declare_parameter<int>(prefix + "batch.pad_to", 0);
 }
 
 void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
                                  const std::string &prefix) {
-  node.get_parameter(prefix + "model_type", this->yolo_params_.model_type);
-  node.get_parameter(prefix + "model_path", this->yolo_params_.model_path);
-  node.get_parameter(prefix + "model_repo", this->yolo_params_.model_repo);
-  node.get_parameter(prefix + "model_filename",
+  node.get_parameter(prefix + "model.type", this->yolo_params_.model_type);
+  node.get_parameter(prefix + "model.path", this->yolo_params_.model_path);
+  node.get_parameter(prefix + "model.repo", this->yolo_params_.model_repo);
+  node.get_parameter(prefix + "model.filename",
                      this->yolo_params_.model_filename);
-  node.get_parameter(prefix + "cache_dir", this->yolo_params_.cache_dir);
-  node.get_parameter(prefix + "force_download",
+  node.get_parameter(prefix + "model.cache_dir", this->yolo_params_.cache_dir);
+  node.get_parameter(prefix + "model.force_download",
                      this->yolo_params_.force_download);
   node.get_parameter(prefix + "device", this->yolo_params_.device);
   node.get_parameter(prefix + "provider", this->yolo_params_.provider);
-  node.get_parameter(prefix + "cuda_graph_enable",
+  node.get_parameter(prefix + "cuda.graph_enable",
                      this->yolo_params_.cuda_graph_enable);
-  node.get_parameter(prefix + "trt_fp16_enable",
+  node.get_parameter(prefix + "trt.fp16_enable",
                      this->yolo_params_.trt_fp16_enable);
-  node.get_parameter(prefix + "trt_engine_cache_enable",
+  node.get_parameter(prefix + "trt.engine_cache_enable",
                      this->yolo_params_.trt_engine_cache_enable);
-  node.get_parameter(prefix + "trt_engine_cache_path",
+  node.get_parameter(prefix + "trt.engine_cache_path",
                      this->yolo_params_.trt_engine_cache_path);
-  node.get_parameter(prefix + "qnn_htp_performance_mode",
+  node.get_parameter(prefix + "qnn.htp_performance_mode",
                      this->yolo_params_.qnn_htp_performance_mode);
-  node.get_parameter(prefix + "qnn_htp_arch", this->yolo_params_.qnn_htp_arch);
-  node.get_parameter(prefix + "qnn_soc_model",
+  node.get_parameter(prefix + "qnn.htp_arch", this->yolo_params_.qnn_htp_arch);
+  node.get_parameter(prefix + "qnn.soc_model",
                      this->yolo_params_.qnn_soc_model);
-  node.get_parameter(prefix + "qnn_backend_path",
+  node.get_parameter(prefix + "qnn.backend_path",
                      this->yolo_params_.qnn_backend_path);
-  node.get_parameter(prefix + "qnn_offload_graph_io_quantization",
+  node.get_parameter(prefix + "qnn.offload_graph_io_quantization",
                      this->yolo_params_.qnn_offload_graph_io_quantization);
-  node.get_parameter(prefix + "qnn_enable_htp_fp16_precision",
+  node.get_parameter(prefix + "qnn.enable_htp_fp16_precision",
                      this->yolo_params_.qnn_enable_htp_fp16_precision);
-  node.get_parameter(prefix + "qnn_context_cache_enable",
+  node.get_parameter(prefix + "qnn.context_cache_enable",
                      this->yolo_params_.qnn_context_cache_enable);
-  node.get_parameter(prefix + "qnn_context_cache_path",
+  node.get_parameter(prefix + "qnn.context_cache_path",
                      this->yolo_params_.qnn_context_cache_path);
-  node.get_parameter(prefix + "threshold", this->yolo_params_.threshold);
-  node.get_parameter(prefix + "iou", this->yolo_params_.iou);
+  node.get_parameter(prefix + "inference.threshold",
+                     this->yolo_params_.threshold);
+  node.get_parameter(prefix + "inference.iou", this->yolo_params_.iou);
 
   int max_det = 300;
-  node.get_parameter(prefix + "max_det", max_det);
+  node.get_parameter(prefix + "inference.max_det", max_det);
   // Clamp before the detection resize: a negative value would cast to a huge
   // std::size_t and make resize() throw std::length_error.
   this->yolo_params_.max_det = std::max(0, max_det);
 
-  node.get_parameter(prefix + "n_threads", this->yolo_params_.n_threads);
-  node.get_parameter(prefix + "max_fps", this->yolo_params_.max_fps);
-  node.get_parameter(prefix + "img_width", this->yolo_params_.img_width);
-  node.get_parameter(prefix + "img_height", this->yolo_params_.img_height);
+  node.get_parameter(prefix + "cpu.n_threads", this->yolo_params_.n_threads);
+  node.get_parameter(prefix + "inference.max_fps", this->yolo_params_.max_fps);
+  node.get_parameter(prefix + "input.width", this->yolo_params_.img_width);
+  node.get_parameter(prefix + "input.height", this->yolo_params_.img_height);
 
   if (this->yolo_params_.img_width <= 0 || this->yolo_params_.img_height <= 0) {
     throw std::runtime_error(
-        "img_width/img_height must be positive (got " +
+        "input.width/input.height must be positive (got " +
         std::to_string(this->yolo_params_.img_width) + "x" +
         std::to_string(this->yolo_params_.img_height) + ")");
   }
@@ -117,24 +118,24 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
   if (this->yolo_params_.img_width % 32 != 0 ||
       this->yolo_params_.img_height % 32 != 0) {
     RCLCPP_WARN(node.get_logger(),
-                "img_width/img_height %dx%d are not multiples of 32; a "
+                "input.width/input.height %dx%d are not multiples of 32; a "
                 "dynamic-input model may reject the input size",
                 this->yolo_params_.img_width, this->yolo_params_.img_height);
   }
 
-  node.get_parameter(prefix + "top_k", this->yolo_params_.top_k);
+  node.get_parameter(prefix + "inference.top_k", this->yolo_params_.top_k);
 
   int pad_to_batch = 0;
-  node.get_parameter(prefix + "pad_to_batch", pad_to_batch);
+  node.get_parameter(prefix + "batch.pad_to", pad_to_batch);
   this->yolo_params_.pad_to_batch = std::max(0, pad_to_batch);
 
   int max_batch_size = 8;
-  node.get_parameter(prefix + "max_batch_size", max_batch_size);
+  node.get_parameter(prefix + "batch.max_size", max_batch_size);
 
   if (yolo_ros::utils::to_lower(this->yolo_params_.provider) == "qnn" &&
       max_batch_size > 1) {
     RCLCPP_WARN(node.get_logger(),
-                "QNN runs static batch-1 models; clamping max_batch_size from "
+                "QNN runs static batch-1 models; clamping batch.max_size from "
                 "%d to 1",
                 max_batch_size);
     max_batch_size = 1;
@@ -145,7 +146,7 @@ void DetectionPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
   if (this->yolo_params_.pad_to_batch >
       static_cast<int>(this->max_batch_size_)) {
     RCLCPP_WARN(node.get_logger(),
-                "pad_to_batch (%d) exceeds max_batch_size (%zu); clamping",
+                "batch.pad_to (%d) exceeds batch.max_size (%zu); clamping",
                 this->yolo_params_.pad_to_batch, this->max_batch_size_);
     this->yolo_params_.pad_to_batch = static_cast<int>(this->max_batch_size_);
   }
