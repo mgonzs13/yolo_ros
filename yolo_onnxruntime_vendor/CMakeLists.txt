@@ -6,6 +6,20 @@ option(ONNX_GPU "Use GPU for inference" OFF)
 # ROS 2 package configuration
 find_package(ament_cmake REQUIRED)
 
+# Opt out of vendoring, for example in conda-forge/robostack where an
+# onnxruntime package (CPU or CUDA build) is available in the distribution.
+# Uses the AMENT_VENDOR_POLICY convention of ament_cmake_vendor_package.
+if(DEFINED AMENT_VENDOR_POLICY AND
+   (AMENT_VENDOR_POLICY STREQUAL "NEVER_VENDOR" OR
+    AMENT_VENDOR_POLICY STREQUAL "NEVER_VENDOR_IGNORE_SATISFIED_CHECK"))
+    find_package(onnxruntime CONFIG REQUIRED)
+    message(STATUS "Using installed ONNX Runtime ${onnxruntime_VERSION} from ${onnxruntime_DIR}")
+    install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION share/${PROJECT_NAME})
+    # When this package is found, make sure to find the installed onnxruntime
+    ament_package(CONFIG_EXTRAS "yolo_onnxruntime_vendor-extras.cmake")
+    return()
+endif()
+
 # Version and variant selection for the prebuilt download. All four are cache
 # variables so they can be overridden with `colcon build --cmake-args`.
 set(ONNXRUNTIME_VERSION "" CACHE STRING
