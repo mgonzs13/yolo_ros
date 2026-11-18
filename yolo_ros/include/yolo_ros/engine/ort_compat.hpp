@@ -240,6 +240,31 @@ inline void append_tensorrt_provider(Ort::SessionOptions &options,
 #endif
 }
 
+/// @brief Append the QNN execution provider. The generic provider-options
+/// overload and the QNN EP itself are absent from the ONNX Runtime 1.6 CUDA 10
+/// legacy build, so this refuses there and the provider chain falls through to
+/// CPU.
+inline void append_qnn_provider(Ort::SessionOptions &options,
+                                const ProviderConfig &config) {
+#if YOLO_ORT_LEGACY
+  (void)options;
+  (void)config;
+  throw std::runtime_error(
+      "QNN requires ONNX Runtime >= 1.15; this build uses " +
+      version_string());
+#else
+  if (config.qnn_context_cache_enable &&
+      !config.qnn_context_cache_path.empty()) {
+    options.AddConfigEntry("ep.context_enable", "1");
+    options.AddConfigEntry("ep.context_file_path",
+                           config.qnn_context_cache_path.c_str());
+    options.AddConfigEntry("ep.context_embed_mode", "1");
+  }
+
+  options.AppendExecutionProvider("QNN", qnn_provider_options(config));
+#endif
+}
+
 } // namespace yolo_ros::engine::compat
 
 #endif // YOLO_ROS__ENGINE__ORT_COMPAT_HPP_

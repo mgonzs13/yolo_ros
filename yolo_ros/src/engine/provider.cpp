@@ -15,7 +15,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <unordered_map>
@@ -210,21 +209,7 @@ Ort::SessionOptions build_session_options(Provider primary,
   options.SetIntraOpNumThreads(primary == Provider::Cpu ? config.n_threads : 1);
 
   if (primary == Provider::Qnn) {
-#if YOLO_ORT_LEGACY
-    throw std::runtime_error(
-        "QNN requires ONNX Runtime >= 1.15; this build uses " +
-        compat::version_string());
-#else
-    if (config.qnn_context_cache_enable &&
-        !config.qnn_context_cache_path.empty()) {
-      options.AddConfigEntry("ep.context_enable", "1");
-      options.AddConfigEntry("ep.context_file_path",
-                             config.qnn_context_cache_path.c_str());
-      options.AddConfigEntry("ep.context_embed_mode", "1");
-    }
-
-    options.AppendExecutionProvider("QNN", qnn_provider_options(config));
-#endif
+    compat::append_qnn_provider(options, config);
   }
 
   if (primary == Provider::TensorRt) {
