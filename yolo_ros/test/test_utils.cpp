@@ -84,6 +84,21 @@ TEST(Letterbox, PreservesAspectAndPads) {
   EXPECT_EQ(out.at<cv::Vec3b>(4, 4)[0], 255); // genuine content
 }
 
+TEST(Letterbox, SameSizeReturnsSourceView) {
+  cv::Mat img(3, 4, CV_8UC3, cv::Scalar(255, 0, 0));
+  const cv::Mat out = letterbox(img, cv::Size(4, 3), cv::Scalar(114, 114, 114));
+  EXPECT_EQ(out.data, img.data); // no resize/copy when geometry is unchanged
+}
+
+TEST(Letterbox, MatchingAspectSkipsBorderCopy) {
+  cv::Mat img(3, 4, CV_8UC3, cv::Scalar(255, 0, 0));
+  const cv::Mat out = letterbox(img, cv::Size(8, 6), cv::Scalar(114, 114, 114));
+  ASSERT_EQ(out.size(), cv::Size(8, 6));
+  // Every pixel is genuine content; a gray border would show up at a corner.
+  EXPECT_EQ(out.at<cv::Vec3b>(0, 0)[0], 255);
+  EXPECT_EQ(out.at<cv::Vec3b>(5, 7)[0], 255);
+}
+
 TEST(BgrToRgb, SwapsRedAndBlue) {
   cv::Mat bgr(1, 1, CV_8UC3, cv::Scalar(10, 20, 30)); // B=10, G=20, R=30
   const cv::Mat rgb = bgr_to_rgb(bgr);

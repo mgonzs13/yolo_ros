@@ -23,6 +23,8 @@ CameraFrame &CameraFrame::operator=(const CameraFrame &other) {
     this->rgb = other.rgb;
     this->depth = other.depth;
     this->depth_info = other.depth_info;
+    this->image_cache_ = cv::Mat();
+    this->image_ready_ = false;
     this->bgr8_cache_ = cv::Mat();
     this->bgr8_ready_ = false;
     this->depth_image_cache_ = cv::Mat();
@@ -30,6 +32,31 @@ CameraFrame &CameraFrame::operator=(const CameraFrame &other) {
   }
 
   return *this;
+}
+
+cv::Mat CameraFrame::image() const {
+  std::lock_guard<std::mutex> lock(this->cache_mutex_);
+
+  if (!this->image_ready_) {
+    if (this->rgb) {
+      try {
+        // No target encoding: cv_bridge aliases the message buffer whenever
+        // the source encoding is directly mappable to a cv::Mat (rgb8, bgr8,
+        // mono8, ...). The model preprocessing then handles the channel order.
+        this->image_cache_ = cv_bridge::toCvShare(this->rgb)->image;
+      } catch (const cv_bridge::Exception &) {
+        this->image_cache_ = cv::Mat();
+      }
+    }
+
+    this->image_ready_ = true;
+  }
+
+  return this->image_cache_;
+}
+
+bool CameraFrame::is_rgb8() const {
+  return this->rgb && this->rgb->encoding == sensor_msgs::image_encodings::RGB8;
 }
 
 cv::Mat CameraFrame::bgr8() const {

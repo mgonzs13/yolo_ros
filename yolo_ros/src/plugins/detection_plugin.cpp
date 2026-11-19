@@ -307,7 +307,15 @@ DetectionPlugin::detect_and_filter(const CameraFrame &frame) {
     return output;
   }
 
-  const cv::Mat image = frame.bgr8();
+  bool image_is_rgb = frame.is_rgb8();
+  cv::Mat image = image_is_rgb ? frame.image() : frame.bgr8();
+
+  if (image.empty()) {
+    // Fall back to the converted BGR view when the source encoding cannot be
+    // aliased by cv_bridge.
+    image = frame.bgr8();
+    image_is_rgb = false;
+  }
 
   if (image.empty()) {
     RCLCPP_ERROR(this->context_->logger, "cv_bridge exception: empty image");
@@ -317,7 +325,7 @@ DetectionPlugin::detect_and_filter(const CameraFrame &frame) {
   std::vector<yolo_msgs::msg::Detection> detections;
 
   try {
-    detections = this->model_->detect(image);
+    detections = this->model_->detect(image, image_is_rgb);
   } catch (const std::exception &e) {
     RCLCPP_ERROR(this->context_->logger, "inference failed: %s", e.what());
     return output;
@@ -339,11 +347,19 @@ void DetectionPlugin::process_batch(
 
   std::vector<std::pair<std::size_t, PendingFrame>> decoded;
   std::vector<cv::Mat> images;
+  std::vector<bool> image_is_rgb;
   decoded.reserve(batch.size());
   images.reserve(batch.size());
+  image_is_rgb.reserve(batch.size());
 
   for (const auto &item : batch) {
-    const cv::Mat image = item.second->bgr8();
+    bool rgb = item.second->is_rgb8();
+    cv::Mat image = rgb ? item.second->image() : item.second->bgr8();
+
+    if (image.empty()) {
+      image = item.second->bgr8();
+      rgb = false;
+    }
 
     if (image.empty()) {
       RCLCPP_ERROR(this->context_->logger, "cv_bridge exception: empty image");
@@ -351,6 +367,7 @@ void DetectionPlugin::process_batch(
     }
 
     images.push_back(image);
+    image_is_rgb.push_back(rgb);
     decoded.push_back(item);
   }
 
@@ -361,7 +378,7 @@ void DetectionPlugin::process_batch(
   std::vector<std::vector<yolo_msgs::msg::Detection>> results;
 
   try {
-    results = this->model_->detect_batch(images);
+    results = this->model_->detect_batch(images, image_is_rgb);
   } catch (const std::exception &e) {
     RCLCPP_ERROR(this->context_->logger, "batch inference failed: %s",
                  e.what());

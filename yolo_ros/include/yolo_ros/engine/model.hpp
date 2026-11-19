@@ -75,16 +75,24 @@ public:
 
   /// @brief Run the full pipeline (preprocess, inference, postprocess) on one
   /// image.
-  /// @param image BGR image in original (un-letterboxed) coordinates.
+  /// @param image Image in original (un-letterboxed) coordinates.
+  /// @param image_is_rgb Channel order of @p image: true for RGB, false for
+  /// BGR. Preprocessing skips the channel swap when it already matches the
+  /// model input order.
   /// @return One detection per kept object, in original-image coordinates.
-  std::vector<yolo_msgs::msg::Detection> detect(const cv::Mat &image);
+  std::vector<yolo_msgs::msg::Detection> detect(const cv::Mat &image,
+                                                bool image_is_rgb = false);
 
   /// @brief Run the full pipeline on a batch of images with one session run.
-  /// @param images BGR images in original (un-letterboxed) coordinates; they
-  /// may have different original sizes.
+  /// @param images Images in original (un-letterboxed) coordinates; they may
+  /// have different original sizes.
+  /// @param image_is_rgb Channel order per image (true = RGB, false = BGR).
+  /// When empty, every image is treated as BGR. A shorter list is padded with
+  /// BGR entries.
   /// @return One detection vector per input image, in input order.
   std::vector<std::vector<yolo_msgs::msg::Detection>>
-  detect_batch(const std::vector<cv::Mat> &images);
+  detect_batch(const std::vector<cv::Mat> &images,
+               const std::vector<bool> &image_is_rgb = {});
 
   /// @brief Name of the execution provider that initialized the session.
   /// @return "cpu", "cuda", "tensorrt" or "qnn".
@@ -118,18 +126,21 @@ private:
   /// @brief Requested padding for a dynamic batch axis; 0 = send exact count.
   int64_t pad_to_batch_ = 0;
   /// @brief Letterbox @p image into slice @p index of the reused batch buffer.
-  /// @param[in] image BGR image to preprocess.
+  /// @param[in] image Image to preprocess.
   /// @param[in] input_tensor_shape Batch shape to write into.
   /// @param[in] index Batch slot to write.
+  /// @param[in] image_is_rgb Channel order of @p image (true = RGB).
   void preprocess_into(const cv::Mat &image,
                        const std::vector<int64_t> &input_tensor_shape,
-                       std::size_t index);
+                       std::size_t index, bool image_is_rgb);
   /// @brief Run exactly `images.size()` images as one session call.
   /// @param[in] images Images forming the batch (all same size after
   /// letterboxing, possibly different original sizes).
+  /// @param[in] image_is_rgb Channel order per image (true = RGB).
   /// @return One detection vector per image, in order.
   std::vector<std::vector<yolo_msgs::msg::Detection>>
-  run_batch(const std::vector<cv::Mat> &images);
+  run_batch(const std::vector<cv::Mat> &images,
+            const std::vector<bool> &image_is_rgb);
   /// @brief Run the ONNX Runtime session on the preprocessed input buffer.
   /// @param[in] input_tensor_shape Shape of the input tensor.
   /// @return The raw output tensors produced by the model.

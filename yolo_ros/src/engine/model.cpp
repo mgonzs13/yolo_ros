@@ -584,8 +584,8 @@ void yolo_ros::engine::Model::load_class_names() {
 }
 
 std::vector<yolo_msgs::msg::Detection>
-yolo_ros::engine::Model::detect(const cv::Mat &image) {
-  auto batched = this->detect_batch({image});
+yolo_ros::engine::Model::detect(const cv::Mat &image, bool image_is_rgb) {
+  auto batched = this->detect_batch({image}, {image_is_rgb});
 
   if (batched.empty()) {
     return {};
@@ -595,12 +595,20 @@ yolo_ros::engine::Model::detect(const cv::Mat &image) {
 }
 
 std::vector<std::vector<yolo_msgs::msg::Detection>>
-yolo_ros::engine::Model::detect_batch(const std::vector<cv::Mat> &images) {
+yolo_ros::engine::Model::detect_batch(const std::vector<cv::Mat> &images,
+                                      const std::vector<bool> &image_is_rgb) {
   std::vector<std::vector<yolo_msgs::msg::Detection>> results;
   const std::size_t count = images.size();
 
   if (count == 0) {
     return results;
+  }
+
+  // Missing flags mean BGR, the historical detect_batch() contract.
+  std::vector<bool> rgb = image_is_rgb;
+
+  if (rgb.size() < count) {
+    rgb.resize(count, false);
   }
 
   // A dynamic batch axis accepts any count, but TensorRT profiles it from the
@@ -616,12 +624,15 @@ yolo_ros::engine::Model::detect_batch(const std::vector<cv::Mat> &images) {
     const std::size_t valid = std::min(chunk, count - start);
     std::vector<cv::Mat> group(images.begin() + start,
                                images.begin() + start + valid);
+    std::vector<bool> group_rgb(rgb.begin() + start,
+                                rgb.begin() + start + valid);
 
     while (group.size() < chunk) {
       group.push_back(group.back());
+      group_rgb.push_back(group_rgb.back());
     }
 
-    auto group_results = this->run_batch(group);
+    auto group_results = this->run_batch(group, group_rgb);
 
     for (std::size_t i = 0; i < valid; ++i) {
       results.push_back(std::move(group_results[i]));
@@ -632,7 +643,8 @@ yolo_ros::engine::Model::detect_batch(const std::vector<cv::Mat> &images) {
 }
 
 std::vector<std::vector<yolo_msgs::msg::Detection>>
-yolo_ros::engine::Model::run_batch(const std::vector<cv::Mat> &images) {
+yolo_ros::engine::Model::run_batch(const std::vector<cv::Mat> &images,
+                                   const std::vector<bool> &image_is_rgb) {
   const std::size_t count = images.size();
   std::vector<int64_t> input_tensor_shape =
       this->input_channel_last_
@@ -647,7 +659,8 @@ yolo_ros::engine::Model::run_batch(const std::vector<cv::Mat> &images) {
   this->input_buffer_.resize(per_image * count);
 
   for (std::size_t i = 0; i < count; ++i) {
-    this->preprocess_into(images[i], input_tensor_shape, i);
+    const bool rgb = i < image_is_rgb.size() ? image_is_rgb[i] : false;
+    this->preprocess_into(images[i], input_tensor_shape, i, rgb);
   }
 
   auto preds = this->inference(input_tensor_shape);
@@ -666,7 +679,7 @@ yolo_ros::engine::Model::run_batch(const std::vector<cv::Mat> &images) {
 
 void yolo_ros::engine::Model::preprocess_into(
     const cv::Mat &image, const std::vector<int64_t> &input_tensor_shape,
-    std::size_t index) {
+    std::size_t index, bool image_is_rgb) {
   const int H =
       static_cast<int>(this->input_channel_last_ ? input_tensor_shape[1]
                                                  : input_tensor_shape[2]);
@@ -676,8 +689,14 @@ void yolo_ros::engine::Model::preprocess_into(
   cv::Mat resized_image = yolo_ros::yolo::utils::letterbox(
       image, cv::Size(W, H), cv::Scalar(114, 114, 114));
 
-  if (this->input_is_rgb_) {
-    resized_image = yolo_ros::yolo::utils::bgr_to_rgb(resized_image);
+  // Swap channels only when the source order differs from the model input.
+  // A camera publishing rgb8 reaches this point without any RGB -> BGR -> RGB
+  // round trip. Convert into a distinct Mat so an aliased source buffer is
+  // never modified in place.
+  if (this->input_is_rgb_ != image_is_rgb) {
+    cv::Mat swapped;
+    cv::cvtColor(resized_image, swapped, cv::COLOR_RGB2BGR);
+    resized_image = std::move(swapped);
   }
 
   resized_image.convertTo(resized_image, CV_32FC3, 1.0 / 255.0);

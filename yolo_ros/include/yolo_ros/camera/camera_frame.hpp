@@ -51,6 +51,19 @@ struct CameraFrame {
   /// conversion caches; the mutex is per-instance and never copied.
   CameraFrame &operator=(const CameraFrame &other);
 
+  /// @brief View of rgb in its source encoding, computed once and cached.
+  ///
+  /// This is zero-copy for the encodings cv_bridge can alias (e.g. `rgb8` and
+  /// `bgr8`), so the inference path can read the camera buffer directly instead
+  /// of converting RGB to BGR only to convert it back to RGB in preprocessing.
+  /// @return A cv::Mat valid while this frame is alive (empty when rgb is null
+  /// or its encoding is unsupported).
+  cv::Mat image() const;
+
+  /// @brief Whether rgb is encoded as `rgb8` (zero-copy, no channel swap).
+  /// @return True when the source encoding is `rgb8`.
+  bool is_rgb8() const;
+
   /// @brief Converted view of rgb as BGR8, computed once and cached.
   /// @return A cv::Mat valid while this frame is alive (empty when rgb is
   /// null).
@@ -68,6 +81,10 @@ struct CameraFrame {
 private:
   /// @brief Guards the conversion caches.
   mutable std::mutex cache_mutex_;
+  /// @brief Cached view of rgb in its source encoding.
+  mutable cv::Mat image_cache_;
+  /// @brief Whether image_cache_ has been computed.
+  mutable bool image_ready_ = false;
   /// @brief Cached BGR8 view of rgb.
   mutable cv::Mat bgr8_cache_;
   /// @brief Whether bgr8_cache_ has been computed.

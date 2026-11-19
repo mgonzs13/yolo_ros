@@ -9,6 +9,12 @@
 namespace yolo_ros::yolo::utils {
 cv::Mat letterbox(const cv::Mat &img, const cv::Size &new_shape,
                   const cv::Scalar &color) {
+  if (img.empty() || img.size() == new_shape) {
+    // No geometry change: return the source view instead of resizing and
+    // copying an identical image (the common camera-at-model-resolution case).
+    return img;
+  }
+
   float ratio = std::min(static_cast<float>(new_shape.width) / img.cols,
                          static_cast<float>(new_shape.height) / img.rows);
   cv::Mat img_out;
@@ -24,8 +30,18 @@ cv::Mat letterbox(const cv::Mat &img, const cv::Size &new_shape,
   int pad_top = pad_h / 2;
   int pad_bottom = pad_h - pad_top;
 
-  cv::resize(img, img_out, cv::Size(new_width, new_height), 0, 0,
-             cv::INTER_LINEAR);
+  if (new_width == img.cols && new_height == img.rows) {
+    // Aspect ratio already matches; only padding remains.
+    img_out = img;
+  } else {
+    cv::resize(img, img_out, cv::Size(new_width, new_height), 0, 0,
+               cv::INTER_LINEAR);
+  }
+
+  if (pad_w == 0 && pad_h == 0) {
+    return img_out;
+  }
+
   cv::copyMakeBorder(img_out, img_out, pad_top, pad_bottom, pad_left, pad_right,
                      cv::BORDER_CONSTANT, color);
   return img_out;

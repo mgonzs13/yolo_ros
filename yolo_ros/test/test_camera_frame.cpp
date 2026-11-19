@@ -76,6 +76,35 @@ TEST(CameraFrame, Bgr8ConvertsAndCaches) {
   EXPECT_EQ(first.data, second.data); // cached, not recomputed
 }
 
+TEST(CameraFrame, ImageIsZeroCopyInSourceEncoding) {
+  yolo_ros::CameraFrame frame;
+  frame.rgb = make_rgb8(1, 0);
+
+  ASSERT_TRUE(frame.is_rgb8());
+  const cv::Mat first = frame.image();
+  ASSERT_FALSE(first.empty());
+  EXPECT_EQ(first.type(), CV_8UC3);
+  EXPECT_EQ(first.size(), cv::Size(2, 2));
+  EXPECT_EQ(first.data, frame.rgb->data.data()); // aliases the message
+  // No channel swap: source pixel order is preserved.
+  EXPECT_EQ(first.at<cv::Vec3b>(0, 0), cv::Vec3b(1, 2, 3));
+
+  const cv::Mat second = frame.image();
+  EXPECT_EQ(first.data, second.data); // cached, not recomputed
+}
+
+TEST(CameraFrame, ImageKeepsNonRgb8SourceEncoding) {
+  yolo_ros::CameraFrame frame;
+  auto image = make_rgb8(1, 0);
+  image->encoding = "bgr8";
+  frame.rgb = image;
+
+  EXPECT_FALSE(frame.is_rgb8());
+  const cv::Mat view = frame.image();
+  ASSERT_FALSE(view.empty());
+  EXPECT_EQ(view.data, frame.rgb->data.data()); // still a zero-copy view
+}
+
 TEST(CameraFrame, Depth16uIsZeroCopyInSourceEncoding) {
   yolo_ros::CameraFrame frame;
   frame.depth = make_depth(1, 0);

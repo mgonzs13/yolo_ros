@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.10)
 project(yolo_ros)
 
+# colcon does not set CMAKE_BUILD_TYPE by default, and an empty value compiles
+# this package without optimization (-O0). On CPU-bound edge boards that makes
+# preprocessing, NMS and debug rendering several times slower. Default to an
+# optimized build unless the caller selected one explicitly (a Debug build can
+# still be requested with -DCMAKE_BUILD_TYPE=Debug).
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+    Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Ubuntu 18.04's GCC 8 needs the separate filesystem library for

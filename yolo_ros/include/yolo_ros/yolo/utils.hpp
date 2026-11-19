@@ -262,7 +262,9 @@ std::vector<int> nms(std::vector<BoxT> &boxes, float iou_threshold,
 /// @param[in] img Source BGR image.
 /// @param[in] new_shape Target network input size.
 /// @param[in] color Padding color.
-/// @return The letterboxed image.
+/// @return The letterboxed image. When @p img already has the target size (or
+/// its aspect ratio matches and no padding is needed), the returned Mat aliases
+/// @p img instead of copying it, so callers must not draw on it in place.
 cv::Mat letterbox(const cv::Mat &img, const cv::Size &new_shape,
                   const cv::Scalar &color);
 /// @brief Convert an OpenCV BGR image to RGB (channel order only).

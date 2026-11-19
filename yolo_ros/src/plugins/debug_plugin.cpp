@@ -189,13 +189,21 @@ void DebugPlugin::run(const std::atomic<bool> &stop) {
       }
 
       // bgr8() may return a cached view over the immutable camera message, so
-      // draw on a private copy.
-      cv::Mat image = view.clone();
+      // draw on a private copy. With no detections there is nothing to draw and
+      // cv_bridge copies the view into the outgoing message anyway, so skip the
+      // clone entirely.
+      cv::Mat image = detections->detections.empty() ? view : view.clone();
 
-      // Draw ALL detections onto one image, then publish ONCE (not per-
-      // detection). Masks are drawn onto a single overlay layer and blended
-      // once, avoiding a full image.clone() per detection.
-      cv::Mat overlay = image.clone();
+      // Masks are blended through a single overlay layer. Most detection
+      // pipelines carry no masks, so only pay for the extra full-image copy
+      // when at least one detection actually has one.
+      const bool has_masks = std::any_of(
+          detections->detections.begin(), detections->detections.end(),
+          [](const yolo_msgs::msg::Detection &detection) {
+            return !detection.mask.data.empty();
+          });
+      cv::Mat overlay = has_masks ? image.clone() : cv::Mat();
+
       // Image-level (classification) detections carry an empty bbox: draw them
       // as one vertical list, sorted by descending score (top-1 first) so the
       // best class sits at the top of the stack. Spatial detections (non-empty
@@ -230,11 +238,17 @@ void DebugPlugin::run(const std::atomic<bool> &stop) {
         auto color = this->color_for_class(detection.class_name);
 
         image = this->draw_box(image, detection, color);
-        this->draw_mask(overlay, image, detection, color);
+
+        if (has_masks) {
+          this->draw_mask(overlay, image, detection, color);
+        }
+
         image = this->draw_keypoints(image, detection);
       }
 
-      cv::addWeighted(overlay, 0.4, image, 0.6, 0, image);
+      if (has_masks) {
+        cv::addWeighted(overlay, 0.4, image, 0.6, 0, image);
+      }
 
       // The debug image is only gated by the frame<->2D-detections sync, so it
       // publishes at the full 2D detection rate regardless of the 3D stream.
