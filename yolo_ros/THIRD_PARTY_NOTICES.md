@@ -2,7 +2,7 @@
 
 `yolo_ros` is distributed under the MIT License. Portions are based on the
 following permissively licensed projects. These notices are retained in
-addition to `LICENSE`.
+addition to the repository root `LICENSE`.
 
 ## ByteTrack
 

@@ -262,7 +262,6 @@ ament_export_dependencies(
 )
 
 install(FILES
-  LICENSE
   THIRD_PARTY_NOTICES.md
   DESTINATION share/${PROJECT_NAME}
 )

@@ -24,9 +24,4 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES std_msgs geometry_msgs
 )
 
-install(FILES
-  LICENSE
-  DESTINATION share/${PROJECT_NAME}
-)
-
 ament_package()

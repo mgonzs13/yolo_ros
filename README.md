@@ -675,11 +675,14 @@ The guides in [`docs/`](./docs) — [build](docs/build.md), [Docker](docs/docker
 
 ## License
 
-The whole repository is licensed under the **MIT License**. See the root [`LICENSE`](./LICENSE) file; it applies across the repository where a package does not provide a more specific license file.
+The whole repository is licensed under the **MIT License**. See the root
+[`LICENSE`](./LICENSE) file; the same license applies to every ROS 2 package in
+this repository (`yolo_ros`, `yolo_msgs`, `yolo_bringup`,
+`yolo_onnxruntime_vendor` and `yolo_hfhub_vendor`).
 
-Specifically, the repository contains independently licensed ROS 2 packages:
-
-- `yolo_ros`, `yolo_msgs`, `yolo_bringup`, `yolo_onnxruntime_vendor` and `yolo_hfhub_vendor` are licensed under **MIT**. See each package's `LICENSE` file; third-party notices are installed with the applicable packages (`yolo_ros/THIRD_PARTY_NOTICES.md`).
+Third-party notices are installed with the applicable packages
+(`yolo_ros/THIRD_PARTY_NOTICES.md`, `yolo_onnxruntime_vendor/THIRD_PARTY_NOTICES.md`
+and `yolo_hfhub_vendor/THIRD_PARTY_NOTICES.md`).
 
 The C++ pipeline adapts behavior from the original `yolo_ros` Python nodes; those contributions were authorized by their copyright holder for release in the MIT-licensed C++ pipeline (see `THIRD_PARTY_NOTICES.md`).
 

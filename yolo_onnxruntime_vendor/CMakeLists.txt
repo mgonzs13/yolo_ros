@@ -14,7 +14,7 @@ if(DEFINED AMENT_VENDOR_POLICY AND
     AMENT_VENDOR_POLICY STREQUAL "NEVER_VENDOR_IGNORE_SATISFIED_CHECK"))
     find_package(onnxruntime CONFIG REQUIRED)
     message(STATUS "Using installed ONNX Runtime ${onnxruntime_VERSION} from ${onnxruntime_DIR}")
-    install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION share/${PROJECT_NAME})
+    install(FILES THIRD_PARTY_NOTICES.md DESTINATION share/${PROJECT_NAME})
     # When this package is found, make sure to find the installed onnxruntime
     ament_package(CONFIG_EXTRAS "yolo_onnxruntime_vendor-extras.cmake")
     return()
@@ -206,7 +206,6 @@ install(DIRECTORY ${ONNXRUNTIME_INSTALL_DIR}/lib DESTINATION .)
 install(DIRECTORY ${ONNXRUNTIME_INSTALL_DIR}/include DESTINATION .)
 
 install(FILES
-    LICENSE
     THIRD_PARTY_NOTICES.md
     DESTINATION share/${PROJECT_NAME}
 )
