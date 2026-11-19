@@ -201,7 +201,7 @@ The `plugins` parameter is an ordered list of plugin instance names; each instan
       marker_lifetime: 0.5
 ```
 
-Each camera declares its `<cam>.rgb.topic` and optionally the `<cam>.depth.topic` + `<cam>.depth.info.topic` pair (set together); cameras are synchronized by the node and stay internal. For an RGB-only setup remove the depth fields and the `detection3d` instance — a camera without depth cannot be selected by `detection3d`. Several cameras are declared in the same `cameras` list, each with its own block (see [Multi-camera pipelines](#multi-camera-pipelines)).
+Each camera declares its `<cam>.rgb.topic` and optionally the `<cam>.depth.topic` + `<cam>.depth.info_topic` pair (set together); cameras are synchronized by the node and stay internal. For an RGB-only setup remove the depth fields and the `detection3d` instance — a camera without depth cannot be selected by `detection3d`. Several cameras are declared in the same `cameras` list, each with its own block (see [Multi-camera pipelines](#multi-camera-pipelines)).
 
 > **YAML note (Jazzy)**: never write an empty sequence in the params file — `cameras: []`, `plugins: []`. rcl's YAML parser produces no value for `[]` on Jazzy, so the node fails to start. Omit the key instead: an omitted plugin `cameras` key means "all defined cameras" (or list every camera explicitly).
 
@@ -244,7 +244,7 @@ Runnable launch commands for each task (detection, segmentation, pose, OBB and c
 
 ### 3D Detection
 
-A camera gets a depth stream by setting both `depth.topic` and `depth.info.topic` in its block; adding `detection3d` (class `yolo_ros/Detect3DPlugin`) to the `plugins` chain then synchronizes that camera's depth image + `CameraInfo` with the upstream 2D stream and publishes `<cam>/detections_3d`. Cameras selected by `detection3d` must have depth and must also be selected by the plugin whose detections it lifts (tracking, or detection when tracking is omitted), and `detection3d` must come after that plugin. The shipped `config/yolo.yaml` already includes `detection3d` over a depth camera; for RGB-only setups remove the depth fields and the `detection3d` entry.
+A camera gets a depth stream by setting both `depth.topic` and `depth.info_topic` in its block; adding `detection3d` (class `yolo_ros/Detect3DPlugin`) to the `plugins` chain then synchronizes that camera's depth image + `CameraInfo` with the upstream 2D stream and publishes `<cam>/detections_3d`. Cameras selected by `detection3d` must have depth and must also be selected by the plugin whose detections it lifts (tracking, or detection when tracking is omitted), and `detection3d` must come after that plugin. The shipped `config/yolo.yaml` already includes `detection3d` over a depth camera; for RGB-only setups remove the depth fields and the `detection3d` entry.
 
 For segmentation the depth ROI is driven by the mask polygon; for pose the 2D keypoints are back-projected to 3D (`<cam>/debug_kp_markers`). The 3D plugin can also estimate the orientation of each box (an oriented bounding box fit by PCA to a strided depth sample) when `orientation.enable` is set. When enabled, `detections_3d` carries a non-identity quaternion in each box's `center.orientation` and the box `size` is expressed along the object's own axes.
 
@@ -338,7 +338,7 @@ If you change `namespace:=`, update the matching config block names for any valu
 The node-level `cameras` parameter lists the camera names. Each name declares its own fields:
 
 - **&lt;cam&gt;.rgb.topic** (required): RGB `sensor_msgs/Image` topic.
-- **&lt;cam&gt;.depth.topic** / **&lt;cam&gt;.depth.info.topic**: optional depth image and its `sensor_msgs/CameraInfo`; they must be set together (setting only one is a configure error).
+- **&lt;cam&gt;.depth.topic** / **&lt;cam&gt;.depth.info_topic**: optional depth image and its `sensor_msgs/CameraInfo`; they must be set together (setting only one is a configure error).
 - **&lt;cam&gt;.rgb.reliability** / **&lt;cam&gt;.depth.reliability**: QoS reliability as an integer: `0`=system default, `1`=Reliable, `2`=Best Effort (defaults: `2`).
 
 Camera names must be non-empty, unique and free of `.`, `:`, `/`, and no topic may be used by two cameras. Camera frames are synchronized and stay in-process, so these topics are the node's only ROS subscriptions.
@@ -413,7 +413,7 @@ The defaults target the VENTUNO Q, QCS8275 / HTP v75:
 
 #### 3D detection plugin (`detection3d.*`, `yolo_ros/Detect3DPlugin`)
 
-- **cameras**: Cameras to lift to 3D; omit the list to select every defined camera (never write `cameras: []`), every selected camera must have the `depth.topic` + `depth.info.topic` pair, and it must also be selected by the previous plugin in the chain.
+- **cameras**: Cameras to lift to 3D; omit the list to select every defined camera (never write `cameras: []`), every selected camera must have the `depth.topic` + `depth.info_topic` pair, and it must also be selected by the previous plugin in the chain.
 - **target_frame**: Frame to transform the 3D boxes into (default: `base_link`).
 - **depth.units_divisor**: Divisor to convert the depth image to meters (default: `1000`).
 - **orientation.enable**: Estimate and publish the 3D box orientation (default: `false`).

@@ -33,7 +33,7 @@ protected:
     std::vector<rclcpp::Parameter> parameters{
         rclcpp::Parameter("cam0.rgb.topic", "/camera0/image"),
         rclcpp::Parameter("cam0.depth.topic", "/camera0/depth"),
-        rclcpp::Parameter("cam0.depth.info.topic", "/camera0/info"),
+        rclcpp::Parameter("cam0.depth.info_topic", "/camera0/info"),
         rclcpp::Parameter("cam1.rgb.topic", "/camera1/image"),
     };
     parameters.insert(parameters.end(), extra.begin(), extra.end());
@@ -285,7 +285,7 @@ TEST_F(CameraStreamsTest, ActivateInvalidTopicRollsBack) {
   auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>(
       "streams_test",
       camera_options({rclcpp::Parameter("cam0.depth.topic", ""),
-                      rclcpp::Parameter("cam0.depth.info.topic", ""),
+                      rclcpp::Parameter("cam0.depth.info_topic", ""),
                       rclcpp::Parameter("cam1.rgb.topic", "bad topic!")}));
   yolo_ros::Blackboard blackboard;
   yolo_ros::CameraStreams streams(blackboard, node->get_logger());

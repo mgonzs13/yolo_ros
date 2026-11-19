@@ -60,8 +60,8 @@ bool CameraStreams::configure(rclcpp_lifecycle::LifecycleNode &node,
       node.declare_parameter<std::string>(name + ".depth.topic", "");
     }
 
-    if (!node.has_parameter(name + ".depth.info.topic")) {
-      node.declare_parameter<std::string>(name + ".depth.info.topic", "");
+    if (!node.has_parameter(name + ".depth.info_topic")) {
+      node.declare_parameter<std::string>(name + ".depth.info_topic", "");
     }
 
     if (!node.has_parameter(name + ".rgb.reliability")) {
@@ -74,7 +74,7 @@ bool CameraStreams::configure(rclcpp_lifecycle::LifecycleNode &node,
 
     node.get_parameter(name + ".rgb.topic", camera.rgb_topic);
     node.get_parameter(name + ".depth.topic", camera.depth_topic);
-    node.get_parameter(name + ".depth.info.topic", camera.depth_info_topic);
+    node.get_parameter(name + ".depth.info_topic", camera.depth_info_topic);
     node.get_parameter(name + ".rgb.reliability", camera.image_reliability);
     node.get_parameter(name + ".depth.reliability", camera.depth_reliability);
 
@@ -85,7 +85,7 @@ bool CameraStreams::configure(rclcpp_lifecycle::LifecycleNode &node,
 
     if (camera.depth_topic.empty() != camera.depth_info_topic.empty()) {
       error = "camera '" + name + "': '" + name + ".depth.topic' and '" + name +
-              ".depth.info.topic' must be set together";
+              ".depth.info_topic' must be set together";
       return false;
     }
 

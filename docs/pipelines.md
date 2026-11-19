@@ -59,7 +59,7 @@ The whole pipeline lives in a single params file: the node-level `cameras` list 
 Rules:
 
 - `cameras` is a plain name list; each name must be non-empty and contain none of `.`, `:`, `/`; names are unique.
-- `<cam>.rgb.topic` is required per camera. `<cam>.depth.topic` and `<cam>.depth.info.topic` are optional but must be set together; `<cam>.rgb.reliability` / `<cam>.depth.reliability` are optional ints (`0`=system default, `1`=Reliable, `2`=Best Effort, default `2`).
+- `<cam>.rgb.topic` is required per camera. `<cam>.depth.topic` and `<cam>.depth.info_topic` are optional but must be set together; `<cam>.rgb.reliability` / `<cam>.depth.reliability` are optional ints (`0`=system default, `1`=Reliable, `2`=Best Effort, default `2`).
 - No topic may be used by two different cameras.
 - A plugin's `cameras` list selects a subset of the defined cameras. Omit the list (or list every camera) to select every defined camera; never write an empty list (`cameras: []`, `plugins: []`) — see the Jazzy note below. Entries must reference defined cameras, must not repeat a name inside one instance, and `detection3d` cameras must have depth.
 - A plugin can only select cameras the previous plugin in the chain also selects: the first plugin consumes the camera frames directly, so every camera listed by plugin _i_ must also be listed by plugin _i−1_. A camera selected only downstream is a configure error: <code>plugin '&lt;instance&gt;': camera '&lt;cam&gt;' is not produced by plugin '&lt;previous instance&gt;'</code>.
