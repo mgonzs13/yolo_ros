@@ -209,15 +209,7 @@ Ort::SessionOptions build_session_options(Provider primary,
   options.SetIntraOpNumThreads(primary == Provider::Cpu ? config.n_threads : 1);
 
   if (primary == Provider::Qnn) {
-    if (config.qnn_context_cache_enable &&
-        !config.qnn_context_cache_path.empty()) {
-      options.AddConfigEntry("ep.context_enable", "1");
-      options.AddConfigEntry("ep.context_file_path",
-                             config.qnn_context_cache_path.c_str());
-      options.AddConfigEntry("ep.context_embed_mode", "1");
-    }
-
-    options.AppendExecutionProvider("QNN", qnn_provider_options(config));
+    compat::append_qnn_provider(options, config);
   }
 
   if (primary == Provider::TensorRt) {
