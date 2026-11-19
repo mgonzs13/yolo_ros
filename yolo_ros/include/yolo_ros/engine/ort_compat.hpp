@@ -250,8 +250,7 @@ inline void append_qnn_provider(Ort::SessionOptions &options,
   (void)options;
   (void)config;
   throw std::runtime_error(
-      "QNN requires ONNX Runtime >= 1.15; this build uses " +
-      version_string());
+      "QNN requires ONNX Runtime >= 1.15; this build uses " + version_string());
 #else
   if (config.qnn_context_cache_enable &&
       !config.qnn_context_cache_path.empty()) {
