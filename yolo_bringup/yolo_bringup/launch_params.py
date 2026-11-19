@@ -134,7 +134,11 @@ PLUGIN_PARAMS = {
             "orientation.min_seg_points", int, alias="min_seg_points_for_orientation"
         ),
     ),
-    "yolo_ros/DebugPlugin": (ParamSpec("marker_lifetime", float),),
+    "yolo_ros/DebugPlugin": (
+        ParamSpec("marker_lifetime", float),
+        ParamSpec("compressed.enable", bool, alias="debug_compressed_enable"),
+        ParamSpec("compressed.quality", int, alias="debug_compressed_quality"),
+    ),
 }
 
 _TRUE = {"1", "true", "yes", "on"}

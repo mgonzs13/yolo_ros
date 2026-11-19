@@ -25,6 +25,7 @@
 
 #include "pluginlib/class_list_macros.hpp"
 #include "rclcpp/qos.hpp"
+#include "sensor_msgs/msg/compressed_image.hpp"
 
 namespace yolo_ros {
 
@@ -83,11 +84,16 @@ builtin_interfaces::msg::Duration duration_from_seconds(double seconds) {
 void DebugPlugin::declare_params(rclcpp_lifecycle::LifecycleNode &node,
                                  const std::string &prefix) {
   node.declare_parameter<double>(prefix + "marker_lifetime", 0.5);
+  node.declare_parameter<bool>(prefix + "compressed.enable", true);
+  node.declare_parameter<int>(prefix + "compressed.quality", 80);
 }
 
 void DebugPlugin::get_params(const rclcpp_lifecycle::LifecycleNode &node,
                              const std::string &prefix) {
   node.get_parameter(prefix + "marker_lifetime", this->marker_lifetime_);
+  node.get_parameter(prefix + "compressed.enable", this->compressed_enable_);
+  node.get_parameter(prefix + "compressed.quality", this->compressed_quality_);
+  this->compressed_quality_ = std::clamp(this->compressed_quality_, 1, 100);
 }
 
 bool DebugPlugin::setup(PluginContext &ctx) {
@@ -98,6 +104,7 @@ bool DebugPlugin::setup(PluginContext &ctx) {
     CameraStream stream;
     stream.name = camera.name;
     stream.image_channel = this->output_channel(camera.name);
+    stream.compressed_channel = stream.image_channel + "/compressed";
     stream.bb_markers_channel = camera.name + "/debug_bb_markers";
     stream.kp_markers_channel = camera.name + "/debug_kp_markers";
 
@@ -128,6 +135,15 @@ bool DebugPlugin::setup(PluginContext &ctx) {
         stream.image_channel);
     ctx.topics.expose<sensor_msgs::msg::Image>(
         stream.image_channel, stream.image_channel, rclcpp::QoS(10), ctx.name);
+
+    if (this->compressed_enable_) {
+      ctx.blackboard.declare_channel<sensor_msgs::msg::CompressedImage>(
+          stream.compressed_channel);
+      ctx.topics.expose<sensor_msgs::msg::CompressedImage>(
+          stream.compressed_channel, stream.compressed_channel, rclcpp::QoS(10),
+          ctx.name);
+    }
+
     ctx.blackboard.declare_channel<visualization_msgs::msg::MarkerArray>(
         stream.bb_markers_channel);
     ctx.topics.expose<visualization_msgs::msg::MarkerArray>(
@@ -262,6 +278,24 @@ void DebugPlugin::run(const std::atomic<bool> &stop) {
               .toImageMsg();
       this->context_->blackboard.publish<sensor_msgs::msg::Image>(
           camera.image_channel, output);
+
+      if (this->should_publish_compressed(camera)) {
+        sensor_msgs::msg::CompressedImage compressed;
+        compressed.header = frame->header;
+        compressed.format = "jpeg";
+        const std::vector<int> params{cv::IMWRITE_JPEG_QUALITY,
+                                      this->compressed_quality_};
+
+        if (cv::imencode(".jpg", image, compressed.data, params)) {
+          this->context_->blackboard.publish<sensor_msgs::msg::CompressedImage>(
+              camera.compressed_channel,
+              std::make_shared<sensor_msgs::msg::CompressedImage>(
+                  std::move(compressed)));
+        } else {
+          RCLCPP_WARN_ONCE(this->context_->logger,
+                           "JPEG encoding of the debug image failed");
+        }
+      }
     }
 
     // One idle wait per full sweep keeps the latency independent of the
@@ -271,6 +305,21 @@ void DebugPlugin::run(const std::atomic<bool> &stop) {
           std::chrono::milliseconds(10));
     }
   }
+}
+
+bool DebugPlugin::should_publish_compressed(const CameraStream &camera) const {
+  if (!this->compressed_enable_) {
+    return false;
+  }
+
+  // With no created publisher yet (unit tests, direct blackboard consumers)
+  // still produce the JPEG. In production, skip the encode while the topic has
+  // no ROS subscribers so enabling it by default costs nothing.
+  if (!this->context_->topics.has_publisher(camera.compressed_channel)) {
+    return true;
+  }
+
+  return this->context_->topics.has_subscribers(camera.compressed_channel);
 }
 
 void DebugPlugin::publish_markers(

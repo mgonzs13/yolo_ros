@@ -40,3 +40,6 @@
     debug:
       plugin: yolo_ros/DebugPlugin
       cameras: ["cam0"]
+      compressed:
+        enable: true
+        quality: 80

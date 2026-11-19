@@ -30,7 +30,8 @@ namespace yolo_ros {
 /// detections) and rebuilds the 3D RViz markers from the chain input.
 ///
 /// Publishes the per-camera output channels/topics `<cam>/debug_image`,
-/// `<cam>/debug_bb_markers` and `<cam>/debug_kp_markers`.
+/// `<cam>/debug_image/compressed` (optional JPEG), `<cam>/debug_bb_markers` and
+/// `<cam>/debug_kp_markers`.
 ///
 /// `debug_image` is drawn from the camera frame synchronized with the freshest
 /// non-3D upstream (the stream before the 3D plugin when it is in the chain),
@@ -76,6 +77,8 @@ private:
     std::string name;
     /// @brief Annotated image channel/topic (`<cam>/debug_image`).
     std::string image_channel;
+    /// @brief Compressed JPEG channel/topic (`<cam>/debug_image/compressed`).
+    std::string compressed_channel;
     /// @brief Detection stream synchronized with the frame for drawing
     /// (freshest non-3D upstream).
     std::string image_input_channel;
@@ -92,6 +95,16 @@ private:
     /// @brief Independent reader of the chain input for the 3D markers.
     ChannelReader<yolo_msgs::msg::DetectionArray> markers_reader;
   };
+
+  /// @brief Whether the compressed debug image should be encoded this frame.
+  ///
+  /// Encoding is skipped when the topic has a ROS publisher but no subscribers,
+  /// so enabling it by default costs nothing while nobody listens. When no
+  /// publisher exists yet (unit tests, direct blackboard consumers), the frame
+  /// is encoded so the channel still carries data.
+  /// @param[in] camera Camera whose compressed channel is checked.
+  /// @return True when the JPEG should be produced.
+  bool should_publish_compressed(const CameraStream &camera) const;
 
   /// @brief Publish the RViz markers of one camera for a 3D detection array.
   /// @param[in] camera Camera whose marker channels receive the arrays.
@@ -176,6 +189,10 @@ private:
   std::vector<CameraStream> cameras_;
   /// @brief RViz marker lifetime in seconds (0 keeps markers persistent).
   double marker_lifetime_ = 0.5;
+  /// @brief Publish the JPEG debug image alongside the raw one.
+  bool compressed_enable_ = true;
+  /// @brief JPEG quality used for the compressed debug image (1-100).
+  int compressed_quality_ = 80;
   /// @brief Cache of class name to BGR color.
   std::map<std::string, cv::Scalar> class_to_color_;
 };

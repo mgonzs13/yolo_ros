@@ -88,6 +88,19 @@ public:
     return this->publisher_entities_.size();
   }
 
+  /// @brief Whether @p channel currently has a created ROS publisher.
+  /// @param channel Blackboard channel name.
+  /// @return True once create_entities() created the publisher.
+  bool has_publisher(const std::string &channel) const;
+
+  /// @brief Whether the ROS publisher of @p channel has subscribers.
+  ///
+  /// Used to skip expensive output generation (e.g. JPEG encoding) while
+  /// nobody listens. Returns false when the channel has no publisher.
+  /// @param channel Blackboard channel name.
+  /// @return True when at least one ROS subscription is matched.
+  bool has_subscribers(const std::string &channel) const;
+
 private:
   /// @brief Deleted copy constructor.
   TopicRegistry(const TopicRegistry &) = delete;

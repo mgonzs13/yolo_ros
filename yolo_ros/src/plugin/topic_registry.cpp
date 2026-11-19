@@ -62,6 +62,18 @@ void TopicRegistry::validate() {
   }
 }
 
+bool TopicRegistry::has_publisher(const std::string &channel) const {
+  const auto it = this->exposed_channels_.find(channel);
+  return it != this->exposed_channels_.end() && it->second.publisher != nullptr;
+}
+
+bool TopicRegistry::has_subscribers(const std::string &channel) const {
+  const auto it = this->exposed_channels_.find(channel);
+  return it != this->exposed_channels_.end() &&
+         it->second.publisher != nullptr &&
+         it->second.publisher->get_subscription_count() > 0;
+}
+
 void TopicRegistry::create_entities(rclcpp_lifecycle::LifecycleNode &node,
                                     Blackboard &blackboard) {
   this->destroy_entities();

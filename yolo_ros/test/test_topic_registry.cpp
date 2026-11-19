@@ -40,6 +40,9 @@ TEST_F(TopicRegistryTest, PublishesExposedChannels) {
   registry.validate();
   registry.create_entities(*node, blackboard);
   EXPECT_EQ(registry.publisher_entity_count(), 1u);
+  EXPECT_TRUE(registry.has_publisher("detections"));
+  EXPECT_FALSE(registry.has_publisher("missing"));
+  EXPECT_FALSE(registry.has_subscribers("detections"));
   blackboard.publish<yolo_msgs::msg::DetectionArray>(
       "detections", std::make_shared<yolo_msgs::msg::DetectionArray>());
   registry.destroy_entities();
@@ -103,6 +106,7 @@ TEST_F(TopicRegistryTest, DeliversExposedChannelToRosSubscriber) {
     std::this_thread::sleep_for(5ms);
   }
   EXPECT_TRUE(received != nullptr);
+  EXPECT_TRUE(registry.has_subscribers("chan"));
 
   executor.remove_node(node->get_node_base_interface());
   registry.destroy_entities();

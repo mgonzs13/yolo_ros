@@ -289,6 +289,7 @@ All output topics are published under the launch namespace (default `yolo`) and 
 - **&lt;cam&gt;/tracking**: Objects detected and tracked by ByteTrack (or BoT-SORT with `tracking.tracker_type: botsort`). Each object is assigned a stable tracking ID.
 - **&lt;cam&gt;/detections_3d**: 3D objects detected by `detection3d`. YOLO results are used to crop the depth image and create 3D bounding boxes and keypoints.
 - **&lt;cam&gt;/debug_image**: Debug image showing the detected and tracked objects. It can be visualized with `rqt_image_view` or `rviz2`.
+- **&lt;cam&gt;/debug_image/compressed**: JPEG `sensor_msgs/CompressedImage` version of the debug image (enabled by default). It is much lighter over WiFi and lets `ros2 topic hz` measure the real frame rate, which the raw image topic is too large for on CPU-constrained boards.
 - **&lt;cam&gt;/debug_bb_markers** / **&lt;cam&gt;/debug_kp_markers**: RViz `MarkerArray`s built from the debug plugin's input detection stream; they carry content when `detection3d` precedes debug in the chain (`bbox3d`/`keypoints3d` data).
 
 Synchronized camera frames and the inter-plugin blackboard channels are in-process only — the topics above are the only ROS outputs.
@@ -423,6 +424,8 @@ The defaults target the VENTUNO Q, QCS8275 / HTP v75:
 
 - **cameras**: Cameras to render; omit the list to select every defined camera (never write `cameras: []`) and every selected camera must also be selected by the previous plugin. Debug is terminal, so the plugin must be last in the chain.
 - **marker_lifetime**: RViz marker lifetime in seconds (default: `0.5`).
+- **compressed.enable**: Also publish `<cam>/debug_image/compressed` as a JPEG `sensor_msgs/CompressedImage` (default: `true`; CLI alias `debug_compressed_enable`). Encoding is skipped while the topic has no subscribers, so it costs no CPU when nobody listens.
+- **compressed.quality**: JPEG quality for the compressed debug image, `1`-`100` (default: `80`; CLI alias `debug_compressed_quality`).
 
 The plugin syncs each camera frame with its chain input (the previous plugin's detections) and publishes `<cam>/debug_image`; the RViz markers `<cam>/debug_bb_markers` and `<cam>/debug_kp_markers` are built whenever those detections carry `bbox3d`/`keypoints3d` data (i.e. when `detection3d` precedes debug in the chain).
 

@@ -14,6 +14,7 @@
 #include <memory>
 #include <thread>
 
+#include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "yolo_msgs/msg/detection.hpp"
@@ -70,11 +71,15 @@ TEST_F(DebugPluginTest, DrawsCameraFrameAndMarkers) {
                                   {{"cam0", "cam0", "cam0/detections", false}}};
   ASSERT_TRUE(plugin.setup(context));
   EXPECT_TRUE(blackboard.has_producer("cam0/debug_image"));
+  EXPECT_TRUE(blackboard.has_producer("cam0/debug_image/compressed"));
   EXPECT_TRUE(blackboard.has_producer("cam0/debug_bb_markers"));
   EXPECT_TRUE(blackboard.has_producer("cam0/debug_kp_markers"));
 
   auto debug_reader =
       blackboard.subscribe<sensor_msgs::msg::Image>("cam0/debug_image", 1);
+  auto compressed_reader =
+      blackboard.subscribe<sensor_msgs::msg::CompressedImage>(
+          "cam0/debug_image/compressed", 1);
   auto bb_marker_reader =
       blackboard.subscribe<visualization_msgs::msg::MarkerArray>(
           "cam0/debug_bb_markers", 1);
@@ -107,6 +112,8 @@ TEST_F(DebugPluginTest, DrawsCameraFrameAndMarkers) {
 
   std::shared_ptr<const sensor_msgs::msg::Image> out;
   const bool image_received = debug_reader.wait(out, 1000ms);
+  std::shared_ptr<const sensor_msgs::msg::CompressedImage> compressed;
+  const bool compressed_received = compressed_reader.wait(compressed, 1000ms);
 
   // Phase 2: a 3D detection with a box and a keypoint pair matching skeleton
   // limb {1, 2}, published on the same detections channel. The input carries
@@ -161,6 +168,14 @@ TEST_F(DebugPluginTest, DrawsCameraFrameAndMarkers) {
   EXPECT_EQ(out->encoding, "bgr8");
   EXPECT_EQ(out->header.stamp.sec, frame->header.stamp.sec);
   EXPECT_EQ(out->header.stamp.nanosec, frame->header.stamp.nanosec);
+
+  ASSERT_TRUE(compressed_received);
+  EXPECT_EQ(compressed->format, "jpeg");
+  EXPECT_EQ(compressed->header.stamp.sec, frame->header.stamp.sec);
+  EXPECT_EQ(compressed->header.stamp.nanosec, frame->header.stamp.nanosec);
+  ASSERT_GE(compressed->data.size(), 2u);
+  EXPECT_EQ(compressed->data[0], 0xFF); // JPEG SOI marker
+  EXPECT_EQ(compressed->data[1], 0xD8);
 
   int changed_pixels = 0;
   for (int y = 2; y <= 5; ++y) {
@@ -278,4 +293,26 @@ TEST_F(DebugPluginTest, DrawsFreshestUpstreamWhileMarkersUseChainInput) {
   ASSERT_EQ(out->height, 8u);
   ASSERT_TRUE(bb_received);
   ASSERT_FALSE(bb_markers->markers.empty());
+}
+
+TEST_F(DebugPluginTest, CompressedTopicCanBeDisabled) {
+  auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("debug_test");
+  yolo_ros::Blackboard blackboard;
+  yolo_ros::TopicRegistry topics;
+
+  yolo_ros::DebugPlugin plugin;
+  plugin.declare_params(*node, "dbg.");
+  node->set_parameter(rclcpp::Parameter("dbg.compressed.enable", false));
+  plugin.get_params(*node, "dbg.");
+
+  yolo_ros::PluginContext context{blackboard,
+                                  topics,
+                                  node->get_logger(),
+                                  node->get_clock(),
+                                  nullptr,
+                                  "dbg",
+                                  {{"cam0", "cam0", "cam0/detections", false}}};
+  ASSERT_TRUE(plugin.setup(context));
+  EXPECT_TRUE(blackboard.has_producer("cam0/debug_image"));
+  EXPECT_FALSE(blackboard.has_producer("cam0/debug_image/compressed"));
 }

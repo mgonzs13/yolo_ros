@@ -238,6 +238,18 @@ def test_build_all_overrides_merges_plugins():
     assert "debug.plugin" not in overrides
 
 
+def test_debug_compressed_overrides():
+    context = FakeContext(
+        {
+            "debug_compressed_enable": "false",
+            "debug_compressed_quality": "60",
+        }
+    )
+    overrides = build_overrides(context, DBG)
+    assert overrides["debug.compressed.enable"] is False
+    assert overrides["debug.compressed.quality"] == 60
+
+
 def test_arg_names_are_unique():
     names = param_arg_names([DET, TRACK, DBG])
     assert names == sorted(set(names))

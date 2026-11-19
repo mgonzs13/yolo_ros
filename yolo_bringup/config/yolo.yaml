@@ -52,3 +52,6 @@
       plugin: yolo_ros/DebugPlugin
       cameras: ["cam0"]
       marker_lifetime: 0.5
+      compressed:
+        enable: true
+        quality: 80
