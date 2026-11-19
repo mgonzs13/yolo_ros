@@ -54,12 +54,15 @@ The whole pipeline lives in a single params file: the node-level `cameras` list 
       plugin: yolo_ros/DebugPlugin
       cameras: ["cam0"]
       marker_lifetime: 0.5
+      compressed:
+        enable: true
+        quality: 80
 ```
 
 Rules:
 
 - `cameras` is a plain name list; each name must be non-empty and contain none of `.`, `:`, `/`; names are unique.
-- `<cam>.rgb.topic` is required per camera. `<cam>.depth.topic` and `<cam>.depth.info_topic` are optional but must be set together; `<cam>.rgb.reliability` / `<cam>.depth.reliability` are optional ints (`0`=system default, `1`=Reliable, `2`=Best Effort, default `2`).
+- `<cam>.rgb.topic` is required per camera. `<cam>.depth.topic` and `<cam>.depth.info_topic` are optional but must be set together; `<cam>.rgb.reliability` / `<cam>.depth.reliability` are optional ints (`0`=system default, `1`=Reliable, any other value=Best Effort, default `2`).
 - No topic may be used by two different cameras.
 - A plugin's `cameras` list selects a subset of the defined cameras. Omit the list (or list every camera) to select every defined camera; never write an empty list (`cameras: []`, `plugins: []`) — see the Jazzy note below. Entries must reference defined cameras, must not repeat a name inside one instance, and `detection3d` cameras must have depth.
 - A plugin can only select cameras the previous plugin in the chain also selects: the first plugin consumes the camera frames directly, so every camera listed by plugin _i_ must also be listed by plugin _i−1_. A camera selected only downstream is a configure error: <code>plugin '&lt;instance&gt;': camera '&lt;cam&gt;' is not produced by plugin '&lt;previous instance&gt;'</code>.
@@ -67,20 +70,20 @@ Rules:
 
 > **Jazzy quirk**: an empty sequence in the YAML params file (`cameras: []`, `plugins: []`) is not a valid way to say "all cameras" or "no plugins": rcl's YAML parser produces no value for `[]` and the node fails to start. Omit the key instead; for a plugin's `cameras`, omitting it means every defined camera (or list every camera explicitly).
 
-Every scalar parameter can still be overridden from the command line using its historical flat alias (for example `pad_to_batch:=2` maps to `detection.batch.pad_to`); arrays and per-camera blocks stay YAML-only. See the [README](../README.md#parameters).
+Every scalar parameter can still be overridden from the command line using its historical flat alias (for example `pad_to_batch:=2` maps to `detection.batch.pad_to`); arrays and per-camera blocks stay YAML-only. See the [parameter and alias reference](../README.md#parameter-and-alias-reference) for every key, default and CLI name.
 
 ## Chain semantics
 
 For plugin _i_, the input of camera `cam` is the channel `output_channel(cam)` produced by plugin _i−1_; for the first plugin it is the camera's internal `CameraFrame` channel. A plugin can therefore only select cameras that plugin _i−1_ also selects — there is no upstream channel for the others, and configure fails with <code>... camera '&lt;cam&gt;' is not produced by plugin '&lt;previous instance&gt;'</code> if one is listed. `CameraStreams` synchronizes each camera's RGB (and depth + `CameraInfo` when configured) and publishes the frames in-process, so camera images never travel over DDS. Each plugin runs on its own worker thread and every output channel is exposed as a ROS topic by the reduced `TopicRegistry`.
 
-| Plugin                     | Consumes (per camera)                            | Produces (per camera)                       |
-| -------------------------- | ------------------------------------------------ | ------------------------------------------- |
-| `yolo_ros/DetectionPlugin` | `CameraFrame`                                    | `<cam>/detections`                          |
-| `yolo_ros/TrackingPlugin`  | `CameraFrame` + previous detections              | `<cam>/tracking`                            |
-| `yolo_ros/Detect3DPlugin`  | `CameraFrame` (with depth) + previous detections | `<cam>/detections_3d`                       |
-| `yolo_ros/DebugPlugin`     | `CameraFrame` + previous detections              | `<cam>/debug_image` + the two marker arrays |
+| Plugin                     | Consumes (per camera)                            | Produces (per camera)                                           |
+| -------------------------- | ------------------------------------------------ | --------------------------------------------------------------- |
+| `yolo_ros/DetectionPlugin` | `CameraFrame`                                    | `<cam>/detections`                                              |
+| `yolo_ros/TrackingPlugin`  | `CameraFrame` + previous detections              | `<cam>/tracking`                                                |
+| `yolo_ros/Detect3DPlugin`  | `CameraFrame` (with depth) + previous detections | `<cam>/detections_3d`                                           |
+| `yolo_ros/DebugPlugin`     | `CameraFrame` + previous detections              | `<cam>/debug_image` (+ `/compressed`) and the two marker arrays |
 
-The 3D plugin must come after the detections it should lift (tracking, or detection when tracking is omitted); debug is terminal and draws `<cam>/debug_image` from its chain input, adding RViz markers when those detections carry `bbox3d`/`keypoints3d` (i.e. when `detection3d` precedes it).
+The 3D plugin must come after the detections it should lift (tracking, or detection when tracking is omitted); debug is terminal and draws `<cam>/debug_image` from the freshest non-3D upstream (so the image is not gated by the slower 3D stream), while the RViz markers use its chain input and appear when those detections carry `bbox3d`/`keypoints3d` (i.e. when `detection3d` precedes it).
 
 ## Per-camera outputs
 
@@ -89,7 +92,7 @@ Each camera's outputs live under `/<namespace>/<cam>/`:
 - **detections**: the raw detector stream (batched when several cameras are selected).
 - **tracking**: tracked objects with stable IDs (tracking plugin in the chain).
 - **detections_3d**: 3D boxes/keypoints (3D plugin in the chain and the camera has depth).
-- **debug_image**, **debug_bb_markers**, **debug_kp_markers**: annotated image and RViz marker arrays (debug plugin in the chain).
+- **debug_image**, **debug_image/compressed**, **debug_bb_markers**, **debug_kp_markers**: annotated raw image, its optional JPEG version, and the RViz marker arrays (debug plugin in the chain). The compressed topic follows `debug.compressed.enable` / `debug.compressed.quality`.
 
 Because the names derive from the camera, adding a camera needs no extra wiring: declare it in `cameras`, give it a block, and list it in the plugins that should process it — keeping each plugin's list a subset of the previous plugin's.
 
