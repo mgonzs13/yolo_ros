@@ -8,5 +8,5 @@ docs/*
 !docs/media/
 !docs/*.md
 
-# Local robot bring-up configs (absolute paths, not for the tree)
-yolo_bringup/config/yolo_4cam.yaml
+# Ignore custom ORT build directories
+ort-*
