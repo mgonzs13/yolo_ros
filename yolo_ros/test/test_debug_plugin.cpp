@@ -415,9 +415,9 @@ TEST_F(DebugPluginTest, CompressedImageDecodesToAnnotatedDebugImage) {
   // Lyrical's sensor_msgs uses rosidl::Buffer for the payload, which is not
   // directly convertible to cv::InputArray. Copy the bytes into a plain vector
   // so the test works across ROS 2 distros.
-  const std::vector<std::uint8_t> encoded(
-      compressed->data.data(),
-      compressed->data.data() + compressed->data.size());
+  const std::vector<std::uint8_t> encoded(compressed->data.data(),
+                                          compressed->data.data() +
+                                              compressed->data.size());
   const cv::Mat decoded = cv::imdecode(encoded, cv::IMREAD_COLOR);
   ASSERT_FALSE(decoded.empty());
   ASSERT_EQ(decoded.cols, static_cast<int>(out->width));
