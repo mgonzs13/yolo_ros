@@ -1,6 +1,8 @@
 # Model export
 
-See the [README](../README.md#models) for the model list and the licensing note. This guide covers exporting a checkpoint and downloading models from the Hugging Face Hub.
+See the [README](../README.md) for the project overview. This guide covers exporting a checkpoint and downloading models from the Hugging Face Hub.
+
+> **License note**: Ultralytics models and pretrained weights are **not** MIT licensed. They are released under the **AGPL-3.0** license (with commercial/enterprise licensing available from Ultralytics), so the MIT license of this repository does **not** cover them. Check the terms of the specific model you use at <https://ultralytics.com/license>, especially if you ship or deploy the model.
 
 The C++ pipeline runs any Ultralytics-exported **ONNX** model whose output matches one of the YOLO layouts below. The compatible model families are:
 
@@ -38,11 +40,7 @@ Notes:
 
 ## Dynamic-batch export (multi-camera pipelines)
 
-The [`unileon-robotics/YOLO26-ONNX`](https://huggingface.co/unileon-robotics/YOLO26-ONNX)
-mirror already ships this set under `dynamic/` —
-`dynamic/yolo26{size}{-task}.onnx` for every size (`n`/`s`/`m`/`l`/`x`) and
-task (`""`/`-seg`/`-pose`/`-obb`/`-cls`), exported batch-only dynamic. Point
-`detection.model.filename` at one and skip the export:
+The [`unileon-robotics/YOLO26-ONNX`](https://huggingface.co/unileon-robotics/YOLO26-ONNX) mirror already ships this set under `dynamic/` — `dynamic/yolo26{size}{-task}.onnx` for every size (`n`/`s`/`m`/`l`/`x`) and task (`""`/`-seg`/`-pose`/`-obb`/`-cls`), exported batch-only dynamic. Point `detection.model.filename` at one and skip the export:
 
 ```yaml
 /yolo/yolo_node:
@@ -59,9 +57,7 @@ task (`""`/`-seg`/`-pose`/`-obb`/`-cls`), exported batch-only dynamic. Point
         filename: dynamic/yolo26m.onnx
 ```
 
-To export your own instead, Ultralytics' ONNX exporter is batch-1 by default.
-For a multi-camera pipeline (a `DetectionPlugin` whose `cameras` list selects
-several cameras), re-export with `dynamic=True`:
+To export your own instead, Ultralytics' ONNX exporter is batch-1 by default. For a multi-camera pipeline (a `DetectionPlugin` whose `cameras` list selects several cameras), re-export with `dynamic=True`:
 
 ```bash
 cp yolo26n.pt /tmp/yolo26n-dyn.pt
@@ -70,13 +66,7 @@ uv run --with ultralytics --with onnx --with onnxruntime --with onnxslim \
 mv /tmp/yolo26n-dyn.onnx ~/models/
 ```
 
-`dynamic=True` makes the input `['batch', 3, 'height', 'width']` — the batch
-**and** H/W axes. Exports with `dynamic=True` leave the input H/W undefined;
-the node uses the `detection.input.width` / `detection.input.height` parameters
-(defaults 640/480) for them. Static exports carry their own size, which takes
-precedence. If you need a batch-only-dynamic graph, pin the H/W dims to 640 in
-the file so the graph's static size wins over the parameters — this is exactly
-the form the mirror's `dynamic/` files ship:
+`dynamic=True` makes the input `['batch', 3, 'height', 'width']` — the batch **and** H/W axes. Exports with `dynamic=True` leave the input H/W undefined; the node uses the `detection.input.width` / `detection.input.height` parameters (defaults 640/480) for them. Static exports carry their own size, which takes precedence. If you need a batch-only-dynamic graph, pin the H/W dims to 640 in the file so the graph's static size wins over the parameters — this is exactly the form the mirror's `dynamic/` files ship:
 
 ```python
 import onnx
@@ -108,16 +98,13 @@ Instead of a local path, the node can fetch the model from the Hub at startup vi
         force_download: false
 ```
 
-Or on the command line: `ros2 launch yolo_bringup yolo.launch.py model_repo:=unileon-robotics/YOLO26-ONNX model_filename:=yolo26s.onnx`. The Hub client and its libcurl dependency are pulled in by `yolo_hfhub_vendor` (installed with the `rosdep install` step in the [README](../README.md#installation)); this path is only used when `detection.model.repo`/`detection.model.filename` are set. The node logs the model source as `[huggingface]` (with repo/filename) or `[local]` (with the path) so the two are easy to tell apart.
+Or on the command line: `ros2 launch yolo_bringup yolo.launch.py model_repo:=unileon-robotics/YOLO26-ONNX model_filename:=yolo26s.onnx`. The Hub client and its libcurl dependency are pulled in by `yolo_hfhub_vendor` (installed with the `rosdep install` step in the [installation guide](installation.md)); this path is only used when `detection.model.repo`/`detection.model.filename` are set. The node logs the model source as `[huggingface]` (with repo/filename) or `[local]` (with the path) so the two are easy to tell apart.
 
 The shipped `config/yolo*.yaml` files already default to the [`unileon-robotics/YOLO26-ONNX`](https://huggingface.co/unileon-robotics/YOLO26-ONNX) mirror — ONNX exports of the [`Ultralytics/YOLO26`](https://huggingface.co/Ultralytics/YOLO26) checkpoints (25 files: `yolo26{n,s,m,l,x}` for detect / `-seg` / `-pose` / `-obb` / `-cls`, exported with `imgsz=640 opset=12`). The same 25 models are also available batch-only dynamic under `dynamic/`, used by multi-camera pipelines whose detector `cameras` list selects several cameras. The first launch per model downloads it (so it needs network access) and caches it; clear `detection.model.repo` to fall back to the local `detection.model.path`, or pass `model_path:=<path>` for a local file.
 
 ## ReID encoder for BoT-SORT-ReID
 
-The BoT-SORT-ReID tracker (`tracking.tracker_type: botsort` with
-`tracking.reid.enable: true`) needs a second ONNX model
-that turns a person crop into an appearance embedding. The C++ encoder
-(`engine::ReIDEncoder`) is model-agnostic; it only requires this contract:
+The BoT-SORT-ReID tracker (`tracking.tracker_type: botsort` with `tracking.reid.enable: true`) needs a second ONNX model that turns a person crop into an appearance embedding. The C++ encoder (`engine::ReIDEncoder`) is model-agnostic; it only requires this contract:
 
 - **Input:** `[N, 3, H, W]`, RGB, float32 in **[0, 255]** (no `/255`, no
   mean/std in C++).
@@ -125,9 +112,7 @@ that turns a person crop into an appearance embedding. The C++ encoder
 - Normalization and L2 normalization should be **baked into the graph**; the
   C++ side only resizes crops to `HxW`, converts BGR→RGB, and re-normalizes.
 
-Input `HxW` is read from the graph, so any size works. The embedding dimension
-is read from the **runtime** output tensor, so a symbolic output dim is
-tolerated; the input `HxW` must still be static.
+Input `HxW` is read from the graph, so any size works. The embedding dimension is read from the **runtime** output tensor, so a symbolic output dim is tolerated; the input `HxW` must still be static.
 
 ### OSNet (default suggestion, MIT)
 
@@ -157,17 +142,11 @@ torch.onnx.export(
     dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}}, opset_version=12)
 ```
 
-Weights: `kaiyangzhou/osnet` on the Hugging Face Hub (MIT). Then set
-`tracking.reid.model` in the pipeline YAML.
+Weights: `kaiyangzhou/osnet` on the Hugging Face Hub (MIT). Then set `tracking.reid.model` in the pipeline YAML.
 
 ### FastReID SBS-S50 (Apache-2.0 code, MIT weights via BoT-SORT)
 
-FastReID's `preprocess_image` already normalizes RGB `[0, 255]` input
-(`PIXEL_MEAN`/`PIXEL_STD` are scaled by 255), matching the C++ contract. Use the
-fork vendored by [BoT-SORT](https://github.com/NirAharon/BoT-SORT) (`fast_reid/`)
-— it ships the MOT17 config, which the upstream JDAI repo does not — with the
-`mot17_sbs_S50.pth` weights. Export at the model's own `INPUT.SIZE_TEST`:
-**384×128** for MOT17 sbs_S50 (not 256×128):
+FastReID's `preprocess_image` already normalizes RGB `[0, 255]` input (`PIXEL_MEAN`/`PIXEL_STD` are scaled by 255), matching the C++ contract. Use the fork vendored by [BoT-SORT](https://github.com/NirAharon/BoT-SORT) (`fast_reid/`) — it ships the MOT17 config, which the upstream JDAI repo does not — with the `mot17_sbs_S50.pth` weights. Export at the model's own `INPUT.SIZE_TEST`: **384×128** for MOT17 sbs_S50 (not 256×128):
 
 ```python
 import sys; sys.path.insert(0, "<BoT-SORT>")  # so `fast_reid.fastreid` imports
@@ -205,18 +184,11 @@ torch.onnx.export(
     opset_version=12)
 ```
 
-The `dynamic_axes` entry is **required**: a static batch-1 export makes
-`session.Run` throw as soon as 2+ boxes are batched, which the tracker catches
-and silently degrades to motion-only. Use the weights BoT-SORT releases
-(`mot17_sbs_S50.pth`, MIT), not FastReID's own model zoo (no explicit weight
-license).
+The `dynamic_axes` entry is **required**: a static batch-1 export makes `session.Run` throw as soon as 2+ boxes are batched, which the tracker catches and silently degrades to motion-only. Use the weights BoT-SORT releases (`mot17_sbs_S50.pth`, MIT), not FastReID's own model zoo (no explicit weight license).
 
 ## Qualcomm QNN (Hexagon NPU)
 
-The ONNX Runtime QNN execution provider runs QNN context-binary models on the
-Hexagon HTP. On the VENTUNO Q (QCS8275 / HTP v75) run the node with
-`provider: qnn` and a batch-1 model. The provider needs a source-built ONNX
-Runtime (see the [QNN build section](build.md#qnn-hexagon-npu-onnx-runtime-build)).
+The ONNX Runtime QNN execution provider runs QNN context-binary models on the Hexagon HTP. On the VENTUNO Q (QCS8275 / HTP v75) run the node with `provider: qnn` and a batch-1 model. The provider needs a source-built ONNX Runtime (see the [QNN build section](build.md#qnn-hexagon-npu-onnx-runtime-build)).
 
 1. Export the model with the Ultralytics
    [QNN export](https://docs.ultralytics.com/integrations/qnn/), which
@@ -250,8 +222,4 @@ Runtime (see the [QNN build section](build.md#qnn-hexagon-npu-onnx-runtime-build
    the board, `YOLO("yolo26s_qnn.onnx").val(data=...)` runs the context binary
    through the QNN execution provider.
 
-QNN context binaries are specific to the SoC, QAIRT version and board image;
-regenerate the export after an OS/firmware upgrade. A plain quantized QDQ
-model (no embedded context) can still be used instead by leaving
-`detection.qnn.context_cache_enable: true`: the node compiles it on first use
-under `~/.cache/yolo_ros/qnn_context/`.
+QNN context binaries are specific to the SoC, QAIRT version and board image; regenerate the export after an OS/firmware upgrade. A plain quantized QDQ model (no embedded context) can still be used instead by leaving `detection.qnn.context_cache_enable: true`: the node compiles it on first use under `~/.cache/yolo_ros/qnn_context/`.

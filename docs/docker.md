@@ -1,6 +1,6 @@
 # Docker (CPU and CUDA / TensorRT)
 
-See the [README](../README.md#docker) for the short Docker section. This guide covers the GPU image and the NVIDIA runtime in detail.
+See the [README](../README.md) for the short project overview. This guide covers the GPU image and the NVIDIA runtime in detail.
 
 Two Dockerfiles are provided:
 
@@ -24,8 +24,7 @@ docker build -f Dockerfile.gpu -t yolo_ros:gpu .
 
 The Dockerfile copies it to `/opt/onnxruntime` and configures `yolo_ros` with `-DONNXRUNTIME_ROOT=/opt/onnxruntime`; the TensorRT 10 runtime libraries are installed for the provider at run time.
 
-The GPU image targets CUDA 12 on x86_64 only; CUDA 10 / JetPack 4 is not
-containerized (see [build.md](build.md#cuda-10-legacy)).
+The GPU image targets CUDA 12 on x86_64 only; CUDA 10 / JetPack 4 is not containerized (see [build.md](build.md#cuda-10-legacy)).
 
 Build it with:
 

@@ -70,7 +70,7 @@ Rules:
 
 > **Jazzy quirk**: an empty sequence in the YAML params file (`cameras: []`, `plugins: []`) is not a valid way to say "all cameras" or "no plugins": rcl's YAML parser produces no value for `[]` and the node fails to start. Omit the key instead; for a plugin's `cameras`, omitting it means every defined camera (or list every camera explicitly).
 
-Every scalar parameter can still be overridden from the command line using its historical flat alias (for example `pad_to_batch:=2` maps to `detection.batch.pad_to`); arrays and per-camera blocks stay YAML-only. See the [parameter and alias reference](../README.md#parameter-and-alias-reference) for every key, default and CLI name.
+Every scalar parameter can still be overridden from the command line using its historical flat alias (for example `pad_to_batch:=2` maps to `detection.batch.pad_to`); arrays and per-camera blocks stay YAML-only. See the [parameter and alias reference](parameters.md#parameter-and-alias-reference) for every key, default and CLI name.
 
 ## Chain semantics
 
