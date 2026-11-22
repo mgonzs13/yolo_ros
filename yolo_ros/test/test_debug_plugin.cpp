@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <memory>
 #include <thread>
+#include <vector>
 
 #include <opencv2/imgcodecs.hpp>
 
@@ -411,7 +412,13 @@ TEST_F(DebugPluginTest, CompressedImageDecodesToAnnotatedDebugImage) {
   // The payload must decode to the annotated image the plugin published, not
   // to the untouched camera frame: compare against the raw debug image with a
   // small tolerance for JPEG loss and require the drawn box to be present.
-  const cv::Mat decoded = cv::imdecode(compressed->data, cv::IMREAD_COLOR);
+  // Lyrical's sensor_msgs uses rosidl::Buffer for the payload, which is not
+  // directly convertible to cv::InputArray. Copy the bytes into a plain vector
+  // so the test works across ROS 2 distros.
+  const std::vector<std::uint8_t> encoded(
+      compressed->data.data(),
+      compressed->data.data() + compressed->data.size());
+  const cv::Mat decoded = cv::imdecode(encoded, cv::IMREAD_COLOR);
   ASSERT_FALSE(decoded.empty());
   ASSERT_EQ(decoded.cols, static_cast<int>(out->width));
   ASSERT_EQ(decoded.rows, static_cast<int>(out->height));

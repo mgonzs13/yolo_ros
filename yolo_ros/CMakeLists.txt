@@ -50,7 +50,7 @@ find_package(OpenCV REQUIRED)
 set(ONNXRUNTIME_ROOT "" CACHE PATH
     "Custom ONNX Runtime prefix with include/ and lib/ (or lib64/)")
 if(ONNXRUNTIME_ROOT)
-  get_filename_component(ONNXRUNTIME_ROOT "${ONNXRUNTIME_ROOT}" ABSOLUTE)
+  get_filename_component(ONNXRUNTIME_ROOT "${ONNXRUNTIME_ROOT}" REALPATH)
   if(NOT EXISTS "${ONNXRUNTIME_ROOT}")
     message(FATAL_ERROR
       "ONNXRUNTIME_ROOT='${ONNXRUNTIME_ROOT}' does not exist.")
@@ -86,9 +86,49 @@ if(ONNXRUNTIME_ROOT)
     "Using custom ONNX Runtime from ONNXRUNTIME_ROOT=${ONNXRUNTIME_ROOT}")
 else()
   find_package(onnxruntime_vendor REQUIRED)
-  set(YOLO_ORT_LIBRARIES onnxruntime::onnxruntime)
-  set(YOLO_ORT_INCLUDE_DIRS ${onnxruntime_vendor_INCLUDE_DIRS})
-  set(YOLO_ORT_LIBRARY_DIRS ${onnxruntime_vendor_LIBRARY_DIRS})
+
+  # Some onnxruntime_vendor releases (notably 0.1.0, still used by Lyrical)
+  # export the shared library through a path containing "..". The dynamic
+  # loader does not collapse those components for RUNPATH lookups, which makes
+  # test executables fail to find libonnxruntime.so. Recreate the target with
+  # canonical paths and a canonical RPATH.
+  set(_yolo_ort_vendor_library "")
+  if(TARGET onnxruntime::onnxruntime)
+    get_target_property(_yolo_ort_vendor_library
+                        onnxruntime::onnxruntime IMPORTED_LOCATION)
+  endif()
+
+  if(_yolo_ort_vendor_library)
+    get_filename_component(YOLO_ORT_LIBRARY_DIRS
+                           "${_yolo_ort_vendor_library}" REALPATH)
+    get_filename_component(YOLO_ORT_LIBRARY_DIRS
+                           "${YOLO_ORT_LIBRARY_DIRS}" DIRECTORY)
+
+    get_target_property(_yolo_ort_vendor_include_dirs
+                        onnxruntime::onnxruntime INTERFACE_INCLUDE_DIRECTORIES)
+    if(_yolo_ort_vendor_include_dirs)
+      list(GET _yolo_ort_vendor_include_dirs 0 _yolo_ort_vendor_include_dir)
+      get_filename_component(YOLO_ORT_INCLUDE_DIRS
+                             "${_yolo_ort_vendor_include_dir}" REALPATH)
+    else()
+      get_filename_component(YOLO_ORT_INCLUDE_DIRS
+                             "${YOLO_ORT_LIBRARY_DIRS}/../include" REALPATH)
+    endif()
+
+    if(NOT TARGET yolo_onnxruntime::onnxruntime)
+      add_library(yolo_onnxruntime::onnxruntime SHARED IMPORTED)
+      set_target_properties(yolo_onnxruntime::onnxruntime PROPERTIES
+        IMPORTED_LOCATION "${YOLO_ORT_LIBRARY_DIRS}/libonnxruntime.so"
+        INTERFACE_INCLUDE_DIRECTORIES "${YOLO_ORT_INCLUDE_DIRS}"
+        INTERFACE_LINK_OPTIONS "LINKER:-rpath,${YOLO_ORT_LIBRARY_DIRS}")
+    endif()
+    set(YOLO_ORT_LIBRARIES yolo_onnxruntime::onnxruntime)
+  else()
+    set(YOLO_ORT_LIBRARIES ${onnxruntime_vendor_LIBRARIES})
+    set(YOLO_ORT_INCLUDE_DIRS ${onnxruntime_vendor_INCLUDE_DIRS})
+    set(YOLO_ORT_LIBRARY_DIRS ${onnxruntime_vendor_LIBRARY_DIRS})
+  endif()
+
   message(STATUS "Using ROS 2 onnxruntime_vendor")
 endif()
 
