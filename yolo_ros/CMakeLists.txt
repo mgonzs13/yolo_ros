@@ -78,7 +78,10 @@ if(ONNXRUNTIME_ROOT)
     set_target_properties(onnxruntime::onnxruntime PROPERTIES
       IMPORTED_LOCATION "${YOLO_ORT_LIBRARY_DIRS}/libonnxruntime.so"
       INTERFACE_INCLUDE_DIRECTORIES "${YOLO_ORT_INCLUDE_DIRS}"
-      INTERFACE_LINK_OPTIONS "LINKER:-rpath,${YOLO_ORT_LIBRARY_DIRS}")
+      # Use DT_RPATH (not DT_RUNPATH) for custom prefixes so the selected
+      # ONNX Runtime wins over other vendor paths in LD_LIBRARY_PATH.
+      INTERFACE_LINK_OPTIONS
+        "LINKER:--disable-new-dtags;LINKER:-rpath,${YOLO_ORT_LIBRARY_DIRS}")
   endif()
 
   set(YOLO_ORT_LIBRARIES onnxruntime::onnxruntime)
