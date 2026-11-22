@@ -23,10 +23,22 @@ source install/setup.bash
 
 `yolo_ros` links the ROS 2 `onnxruntime_vendor` CPU runtime and the node runs on the CPU execution provider — no CUDA or cuDNN required.
 
+## Foxy, Galactic and Iron
+
+These distros do not ship `onnxruntime_vendor`. Fetch the released CPU runtime from the Humble binary package and use it as a custom prefix:
+
+```shell
+scripts/fetch_onnxruntime.sh /tmp/onnxruntime
+
+colcon build --symlink-install \
+    --cmake-args -DONNXRUNTIME_ROOT=/tmp/onnxruntime
+```
+
+The `Dockerfile` does this automatically when built with `--build-arg ROS_DISTRO=foxy`, `galactic` or `iron`. For CUDA/TensorRT/QNN on these distros, use the same variable with your custom prefix instead.
+
 ## Custom ONNX Runtime (CUDA, TensorRT, QNN)
 
 By default `yolo_ros` uses the CPU ONNX Runtime from the released ROS 2 `onnxruntime_vendor` package. For CUDA/TensorRT/QNN, build or obtain an ONNX Runtime prefix and pass it to CMake with `-DONNXRUNTIME_ROOT`:
-
 ```shell
 # CUDA + TensorRT on x86_64/Jetson
 src/yolo_ros/scripts/build_ort_from_source.sh 1.28.0 --ep cuda --cuda-arch 87

@@ -18,8 +18,13 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get -y upgrade
+          apt-get -y install curl
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Provide custom ONNX Runtime
+        shell: bash
+        run: |
+          bash scripts/fetch_onnxruntime.sh /tmp/onnxruntime
       - name: Build and Test
         uses: ros-tooling/action-ros-ci@v0.4
         with:
@@ -29,6 +34,9 @@ jobs:
           coverage-result: false
           colcon-defaults: |
             {
+              "build": {
+                "cmake-args": ["-DONNXRUNTIME_ROOT=/tmp/onnxruntime"]
+              },
               "test": {
                 "parallel-workers" : 1
               }

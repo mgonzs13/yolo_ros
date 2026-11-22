@@ -15,7 +15,7 @@
   <test_depend>ament_lint_common</test_depend>
 
   <depend>yolo_msgs</depend>
-  <depend>onnxruntime_vendor</depend>
+  <depend condition="$ROS_DISTRO != 'foxy' and $ROS_DISTRO != 'galactic' and $ROS_DISTRO != 'iron'">onnxruntime_vendor</depend>
   <depend>cv_bridge</depend>
   <depend>ament_index_cpp</depend>
   <depend>rclcpp</depend>
