@@ -124,11 +124,10 @@ HFHUB_TAG="1.1.5"
 CMAKE_VERSION="${CMAKE_VERSION:-3.26.6}"
 
 # The colcon workspace root (the repo is <workspace>/src/<repo>/).
-WORKSPACE="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
-# Repository directory name (the parent of the yolo_onnxruntime_vendor
-# package), used to print paths that match the actual checkout rather than a
-# hard-coded one.
-REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+WORKSPACE="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# Repository directory name, used to print paths that match the actual
+# checkout rather than a hard-coded one.
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_NAME="$(basename "${REPO_DIR}")"
 
 for tool in curl git tar sha1sum sha256sum; do
@@ -358,19 +357,19 @@ This bundle ${REDUCED_OPS_NOTE}.
      # Use the CMake bundled in this archive; python3-numpy is also needed.
      export PATH=~/${BUNDLE_NAME}/tools/${CMAKE_DIRNAME}/bin:\$PATH
      # The build script ships inside the bundle; write the ONNX Runtime prefix
-     # into the workspace vendor package so the colcon arg below finds it.
+     # into the repository so the CMake arg below finds it.
      # --cuda-arch: 87 = Orin, 72 = Xavier. On low-RAM boards cap the compile
      # jobs (e.g. ORT_PARALLEL=4) to avoid the CUDA provider build being OOM-killed.
      ORT_SOURCE_DIR=~/${BUNDLE_NAME}/onnxruntime \\
          ~/${BUNDLE_NAME}/tools/scripts/build_ort_from_source.sh ${ORT_VERSION} \\
-         "\$HOME/yr_ws/src/${REPO_NAME}/yolo_onnxruntime_vendor/ort-${ORT_VERSION}" \\
+         "\$HOME/yr_ws/src/${REPO_NAME}/ort-${ORT_VERSION}" \\
          --ep cuda --cuda-arch 87
      # --base-paths src + the bundle's COLCON_IGNORE keep colcon away from the
      # ONNX Runtime source tree. The ORT source tree's mirror/ makes its CMake
      # dependency fetches local, so no FETCHCONTENT_FULLY_DISCONNECTED here (it
      # would skip extracting those local archives).
      colcon build --symlink-install --base-paths src --cmake-args \\
-         -DONNXRUNTIME_ROOT=\$(pwd)/src/${REPO_NAME}/yolo_onnxruntime_vendor/ort-${ORT_VERSION} \\
+         -DONNXRUNTIME_ROOT=\$(pwd)/src/${REPO_NAME}/ort-${ORT_VERSION} \\
          -DFETCHCONTENT_SOURCE_DIR_YOLO_HFHUB=\$HOME/${BUNDLE_NAME}/huggingface-hub-cpp
      source install/setup.bash
      ros2 launch yolo_bringup yolo.launch.py \\

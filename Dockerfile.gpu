@@ -7,6 +7,11 @@ FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04 AS deps
 # ROS_DISTRO as an environment variable).
 ARG ROS_DISTRO
 
+# Optional GPU ONNX Runtime prefix in the build context. Put a flat
+# include/ + lib/ prefix there before building, e.g.:
+#   cp -a ~/onnxruntime-1.20.0-gpu ./onnxruntime
+ARG ONNXRUNTIME_DIR=onnxruntime
+
 # The CUDA base is Ubuntu 22.04 (jammy), so only jammy-based ROS 2 distros
 # (humble, iron) are coherent here. Overriding CUDA_VERSION also requires
 # bumping TENSORRT_VERSION to a matching +cudaXX build below.
@@ -55,7 +60,9 @@ RUN apt update && apt install -y --no-install-recommends \
 
 # Create ros2_ws and copy files
 WORKDIR /root/ros2_ws
+COPY ${ONNXRUNTIME_DIR} /opt/onnxruntime
 COPY . /root/ros2_ws/src
+RUN rm -rf /root/ros2_ws/src/${ONNXRUNTIME_DIR}
 
 # Install ROS dependencies
 RUN rosdep init && rosdep update --include-eol-distros
@@ -72,11 +79,12 @@ ARG ROS_DISTRO
 
 SHELL ["/bin/bash", "-c"]
 
-# Build the workspace with the CUDA/TensorRT execution providers enabled. The
-# vendor package downloads the prebuilt onnxruntime-*-gpu tarball at configure
-# time, so this step needs network access.
+# The default yolo_ros build uses the ROS 2 onnxruntime_vendor CPU package.
+# This GPU image builds yolo_ros against the custom prefix copied above.
 WORKDIR /root/ros2_ws
-RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --symlink-install --cmake-args -DONNX_GPU=ON
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
+    && colcon build --symlink-install --packages-up-to yolo_ros \
+         --cmake-args -DONNXRUNTIME_ROOT=/opt/onnxruntime
 
 # Source the ROS 2 setup file
 RUN echo "source /root/ros2_ws/install/setup.bash" >> ~/.bashrc

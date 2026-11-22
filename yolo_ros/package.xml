@@ -15,6 +15,7 @@
   <test_depend>ament_lint_common</test_depend>
 
   <depend>yolo_msgs</depend>
+  <depend>onnxruntime_vendor</depend>
   <depend>cv_bridge</depend>
   <depend>ament_index_cpp</depend>
   <depend>rclcpp</depend>
@@ -26,7 +27,6 @@
   <depend>visualization_msgs</depend>
   <depend>tf2_ros</depend>
   <depend>geometry_msgs</depend>
-  <depend>yolo_onnxruntime_vendor</depend>
   <depend>yolo_hfhub_vendor</depend>
 
   <!-- Foxy's pluginlib/class_loader.hpp includes boost/shared_ptr.hpp. -->

@@ -4,8 +4,8 @@ See the [README](../README.md#docker) for the short Docker section. This guide c
 
 Two Dockerfiles are provided:
 
-- `Dockerfile` — CPU image (plain `colcon build`; only the ONNX Runtime CPU execution provider).
-- `Dockerfile.gpu` — GPU image built on `nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04` with `colcon build --cmake-args -DONNX_GPU=ON`, which enables the CUDA and TensorRT execution providers. Only jammy-based ROS 2 distros (`humble`, `iron`) are supported; overriding `CUDA_VERSION` also requires a matching `TENSORRT_VERSION` build argument.
+- `Dockerfile` — CPU image (plain `colcon build`; uses the ROS 2 `onnxruntime_vendor` CPU runtime).
+- `Dockerfile.gpu` — GPU image built on `nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04`. It expects a flat GPU ONNX Runtime prefix in `./onnxruntime` in the build context and builds `yolo_ros` with `-DONNXRUNTIME_ROOT=/opt/onnxruntime`. Only jammy-based ROS 2 distros (`humble`, `iron`) are supported; overriding `CUDA_VERSION` also requires a matching `TENSORRT_VERSION` build argument.
 
 ## CPU image
 
@@ -15,7 +15,14 @@ docker build -t yolo_ros .
 
 ## GPU image (CUDA / TensorRT)
 
-The GPU build compiles against the prebuilt `onnxruntime-*-gpu` tarball (downloaded by `yolo_onnxruntime_vendor` at configure time; the vendor auto-selects the release from the image's CUDA 12 base, i.e. ONNX Runtime 1.20.0 with cuDNN 9) and installs the TensorRT 10 runtime libraries the provider needs at run time.
+The GPU build compiles against a custom GPU ONNX Runtime prefix. Put the prefix in the build context before building:
+
+```shell
+cp -a ~/onnxruntime-1.20.0-gpu ./onnxruntime
+docker build -f Dockerfile.gpu -t yolo_ros:gpu .
+```
+
+The Dockerfile copies it to `/opt/onnxruntime` and configures `yolo_ros` with `-DONNXRUNTIME_ROOT=/opt/onnxruntime`; the TensorRT 10 runtime libraries are installed for the provider at run time.
 
 The GPU image targets CUDA 12 on x86_64 only; CUDA 10 / JetPack 4 is not
 containerized (see [build.md](build.md#cuda-10-legacy)).

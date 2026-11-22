@@ -43,7 +43,54 @@ find_package(yolo_msgs REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(yolo_onnxruntime_vendor REQUIRED)
+
+# ONNX Runtime: use the released ROS 2 onnxruntime_vendor package by default.
+# For a custom CUDA/TensorRT/QNN build, pass -DONNXRUNTIME_ROOT to a flat
+# prefix with include/ + lib/ (or lib64/) when configuring the workspace.
+set(ONNXRUNTIME_ROOT "" CACHE PATH
+    "Custom ONNX Runtime prefix with include/ and lib/ (or lib64/)")
+if(ONNXRUNTIME_ROOT)
+  get_filename_component(ONNXRUNTIME_ROOT "${ONNXRUNTIME_ROOT}" ABSOLUTE)
+  if(NOT EXISTS "${ONNXRUNTIME_ROOT}")
+    message(FATAL_ERROR
+      "ONNXRUNTIME_ROOT='${ONNXRUNTIME_ROOT}' does not exist.")
+  endif()
+
+  set(YOLO_ORT_INCLUDE_DIRS "${ONNXRUNTIME_ROOT}/include")
+  set(YOLO_ORT_LIBRARY_DIRS "")
+  foreach(_candidate lib lib64)
+    if(EXISTS "${ONNXRUNTIME_ROOT}/${_candidate}/libonnxruntime.so")
+      set(YOLO_ORT_LIBRARY_DIRS "${ONNXRUNTIME_ROOT}/${_candidate}")
+      break()
+    endif()
+  endforeach()
+
+  if(NOT EXISTS "${YOLO_ORT_INCLUDE_DIRS}/onnxruntime_cxx_api.h" OR
+     NOT YOLO_ORT_LIBRARY_DIRS)
+    message(FATAL_ERROR
+      "ONNXRUNTIME_ROOT='${ONNXRUNTIME_ROOT}' must contain "
+      "include/onnxruntime_cxx_api.h and lib/libonnxruntime.so "
+      "(or lib64/libonnxruntime.so).")
+  endif()
+
+  if(NOT TARGET onnxruntime::onnxruntime)
+    add_library(onnxruntime::onnxruntime UNKNOWN IMPORTED)
+    set_target_properties(onnxruntime::onnxruntime PROPERTIES
+      IMPORTED_LOCATION "${YOLO_ORT_LIBRARY_DIRS}/libonnxruntime.so"
+      INTERFACE_INCLUDE_DIRECTORIES "${YOLO_ORT_INCLUDE_DIRS}"
+      INTERFACE_LINK_OPTIONS "LINKER:-rpath,${YOLO_ORT_LIBRARY_DIRS}")
+  endif()
+
+  set(YOLO_ORT_LIBRARIES onnxruntime::onnxruntime)
+  message(STATUS
+    "Using custom ONNX Runtime from ONNXRUNTIME_ROOT=${ONNXRUNTIME_ROOT}")
+else()
+  find_package(onnxruntime_vendor REQUIRED)
+  set(YOLO_ORT_LIBRARIES onnxruntime::onnxruntime)
+  set(YOLO_ORT_INCLUDE_DIRS ${onnxruntime_vendor_INCLUDE_DIRS})
+  set(YOLO_ORT_LIBRARY_DIRS ${onnxruntime_vendor_LIBRARY_DIRS})
+  message(STATUS "Using ROS 2 onnxruntime_vendor")
+endif()
 
 # Detect a usable TensorRT provider in the selected ORT prefix. ORT 1.6
 # defines OrtSessionOptionsAppendExecutionProvider_Tensorrt in
@@ -56,12 +103,20 @@ find_package(yolo_onnxruntime_vendor REQUIRED)
 # test target overrides this to 1 for its compile check. The macro is only
 # meaningful together with YOLO_ORT_LEGACY (ORT_API_VERSION < 12).
 set(YOLO_ORT_LEGACY_HAS_TENSORRT 0)
-foreach(_ort_include IN LISTS yolo_onnxruntime_vendor_INCLUDE_DIRS)
-  get_filename_component(_ort_prefix "${_ort_include}/.." ABSOLUTE)
-  if(EXISTS "${_ort_include}/tensorrt_provider_factory.h" AND
-     EXISTS "${_ort_prefix}/lib/libonnxruntime_providers_tensorrt.so")
-    set(YOLO_ORT_LEGACY_HAS_TENSORRT 1)
-  endif()
+set(_yolo_ort_library_dirs ${YOLO_ORT_LIBRARY_DIRS})
+if(NOT _yolo_ort_library_dirs)
+  foreach(_ort_include IN LISTS YOLO_ORT_INCLUDE_DIRS)
+    get_filename_component(_ort_prefix "${_ort_include}/.." ABSOLUTE)
+    list(APPEND _yolo_ort_library_dirs "${_ort_prefix}/lib")
+  endforeach()
+endif()
+foreach(_ort_include IN LISTS YOLO_ORT_INCLUDE_DIRS)
+  foreach(_ort_libdir IN LISTS _yolo_ort_library_dirs)
+    if(EXISTS "${_ort_include}/tensorrt_provider_factory.h" AND
+       EXISTS "${_ort_libdir}/libonnxruntime_providers_tensorrt.so")
+      set(YOLO_ORT_LEGACY_HAS_TENSORRT 1)
+    endif()
+  endforeach()
 endforeach()
 if(YOLO_ORT_LEGACY_HAS_TENSORRT)
   # add_definitions for CMake 3.10 (Ubuntu 18.04); add_compile_definitions
@@ -131,7 +186,7 @@ endif()
 include_directories(
   include
   ${OpenCV_INCLUDE_DIRS}
-  ${yolo_onnxruntime_vendor_INCLUDE_DIRS}
+  ${YOLO_ORT_INCLUDE_DIRS}
 )
 
 # Shared library with the framework and the engine/task/tracking/3D sources.
@@ -186,7 +241,7 @@ target_link_libraries(yolo_ros_core
   ${yolo_msgs_TARGETS}
   ${CV_BRIDGE_TARGET}
   ament_index_cpp::ament_index_cpp
-  ${yolo_onnxruntime_vendor_LIBRARIES}
+  ${YOLO_ORT_LIBRARIES}
   ${yolo_hfhub_vendor_TARGETS}
   ${OpenCV_LIBS}
 )
@@ -222,7 +277,7 @@ target_link_libraries(yolo_ros_plugins
   message_filters::message_filters
   ${yolo_msgs_TARGETS}
   ${CV_BRIDGE_TARGET}
-  ${yolo_onnxruntime_vendor_LIBRARIES}
+  ${YOLO_ORT_LIBRARIES}
   ${yolo_hfhub_vendor_TARGETS}
   ament_index_cpp::ament_index_cpp
   ${OpenCV_LIBS}
@@ -405,7 +460,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_utils
     ${yolo_msgs_TARGETS}
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    ${YOLO_ORT_LIBRARIES}
     ${OpenCV_LIBS}
   )
 
@@ -420,7 +475,7 @@ if(BUILD_TESTING)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test>
   )
   target_link_libraries(test_provider
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    ${YOLO_ORT_LIBRARIES}
   )
 
   ament_add_gtest(test_tracking
@@ -444,7 +499,7 @@ if(BUILD_TESTING)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test>
   )
   target_link_libraries(test_tracking
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    ${YOLO_ORT_LIBRARIES}
     ${OpenCV_LIBS}
   )
 
@@ -476,7 +531,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_ort_compat
     ${yolo_msgs_TARGETS}
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    ${YOLO_ORT_LIBRARIES}
     ${yolo_hfhub_vendor_TARGETS}
     ${OpenCV_LIBS}
     CURL::libcurl
@@ -496,7 +551,7 @@ if(BUILD_TESTING)
     YOLO_ORT_LEGACY_HAS_TENSORRT=1
   )
   target_link_libraries(test_ort_compat_legacy_trt
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    ${YOLO_ORT_LIBRARIES}
   )
   set_tests_properties(test_ort_compat_legacy_trt PROPERTIES TIMEOUT 60)
 
@@ -525,7 +580,7 @@ if(BUILD_TESTING)
     ${CV_BRIDGE_TARGET}
     ament_index_cpp::ament_index_cpp
     ${yolo_msgs_TARGETS}
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    ${YOLO_ORT_LIBRARIES}
     ${yolo_hfhub_vendor_TARGETS}
     ${OpenCV_LIBS}
     CURL::libcurl
@@ -559,7 +614,7 @@ if(BUILD_TESTING)
     ${CV_BRIDGE_TARGET}
     ament_index_cpp::ament_index_cpp
     ${yolo_msgs_TARGETS}
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    ${YOLO_ORT_LIBRARIES}
     ${yolo_hfhub_vendor_TARGETS}
     ${OpenCV_LIBS}
     CURL::libcurl
@@ -588,7 +643,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_model_factory
     ${yolo_msgs_TARGETS}
-    ${yolo_onnxruntime_vendor_LIBRARIES}
+    ${YOLO_ORT_LIBRARIES}
     ${CV_BRIDGE_TARGET}
   )
 endif()

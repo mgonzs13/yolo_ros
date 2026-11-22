@@ -21,8 +21,8 @@
 
 # Build ONNX Runtime (any version) from source, for the CPU, CUDA (+TensorRT by
 # default for --ep cuda) or QNN (HTP) execution provider, and package it in the
-# flat layout consumed by yolo_onnxruntime_vendor (point that package at the
-# result with -DONNXRUNTIME_ROOT=<output_dir>).
+# flat layout consumed by yolo_ros (pass -DONNXRUNTIME_ROOT=<output_dir> when
+# building yolo_ros).
 #
 # Runs on x86_64 and aarch64. It can work fully offline when given a source tree
 # prepared by scripts/prepare_offline_bundle.sh (see that script for the
@@ -79,7 +79,8 @@ usage() {
 help() {
   cat <<EOF
 Build ONNX Runtime from source and package it in the flat lib/ + include/
-layout consumed by yolo_onnxruntime_vendor (-DONNXRUNTIME_ROOT=<output_dir>).
+layout consumed by yolo_ros (pass the output directory as
+-DONNXRUNTIME_ROOT=<output_dir>).
 
 usage: $(basename "$0") <ort_version> [output_dir] [options]
 
@@ -727,4 +728,4 @@ done
 } > "${STAMP}"
 
 echo "ONNX Runtime ${ORT_VERSION} installed to ${OUT_DIR}"
-echo "Consume it with: colcon build --cmake-args -DONNXRUNTIME_ROOT=${OUT_DIR}"
+echo "Consume it with: colcon build --packages-up-to yolo_ros --cmake-args -DONNXRUNTIME_ROOT=${OUT_DIR}"

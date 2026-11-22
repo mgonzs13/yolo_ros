@@ -1,41 +1,40 @@
 # Build
 
-[Installation](../README.md#installation) covers CPU everywhere, CUDA/TensorRT on x64 and a QNN quick start for the VENTUNO Q. Use this guide for the prebuilt GPU selection, custom ONNX Runtime builds (including the QNN / Hexagon NPU), CUDA/TensorRT on aarch64 and the fast rebuild loop.
+[Installation](../README.md#installation) covers the default CPU setup, custom CUDA/TensorRT runtimes and a QNN quick start for the VENTUNO Q. Use this guide for custom ONNX Runtime builds (including the QNN / Hexagon NPU), CUDA/TensorRT on aarch64 and the fast rebuild loop.
 
 ## Contents
 
-- [Prebuilt GPU selection](#prebuilt-gpu-selection)
+- [ONNX Runtime selection](#onnx-runtime-selection)
+- [cuDNN runtime](#cudnn-runtime)
 - [Custom ONNX Runtime](#custom-onnx-runtime)
 - [QNN (Hexagon NPU) ONNX Runtime build](#qnn-hexagon-npu-onnx-runtime-build)
 - [Source build knobs](#source-build-knobs)
 - [CUDA / TensorRT on aarch64 (Jetson, offline build)](#cuda--tensorrt-on-aarch64-jetson-offline-build)
 - [Fast C++-only rebuild loop](#fast-c-only-rebuild-loop)
 
-## Prebuilt GPU selection
+## ONNX Runtime selection
 
-With `-DONNX_GPU=ON` the vendor package detects the CUDA major version — `CUDA_VERSION` in the environment (NVIDIA container images export it), `$CUDA_HOME/version.json`, `/usr/local/cuda*/version.json`, then `nvcc` — and downloads the matching prebuilt:
+`yolo_ros` uses the released ROS 2 **`onnxruntime_vendor`** package by default.
+That package provides the CPU ONNX Runtime and is what the Bloom/apt build
+uses; `yolo_ros` itself does not download or vendor ONNX Runtime.
 
-| CUDA major | ONNX Runtime | Tarball suffix | cuDNN |
-| ---------- | ------------ | -------------- | ----- |
-| 10 (10.2)  | 1.6.0        | `-gpu`         | 8     |
-| 11         | 1.18.0       | `-gpu`         | 8     |
-| 12         | 1.20.0       | `-gpu`         | 9     |
-| 13         | 1.28.0       | `-gpu_cuda13`  | 9     |
+For CUDA, TensorRT or QNN, point `ONNXRUNTIME_ROOT` at a custom ONNX Runtime
+prefix containing `include/onnxruntime_cxx_api.h` and
+`lib/libonnxruntime.so` (or `lib64/libonnxruntime.so`):
 
-The suffix is not uniform across ONNX Runtime releases (`-gpu`, `-cuda12`, `-gpu-cuda12`, `-gpu_cuda12`, `-gpu_cuda13`), so the table above is curated per CUDA major. CUDA minor-version compatibility is forward-only within a major, and cuDNN 8 and 9 are not interchangeable: install the exact CUDA runtime series and cuDNN major shown.
+```shell
+colcon build --symlink-install --packages-up-to yolo_ros \
+    --cmake-args -DONNXRUNTIME_ROOT=/opt/ort-cuda
+```
 
-Overrides (all as `colcon build --cmake-args`):
-
-- **`ONNX_CUDA_MAJOR=10|11|12|13`** — skip detection and pick the row explicitly.
-- **`ONNXRUNTIME_VERSION=...`** — override the ONNX Runtime version (keep `ONNX_GPU_SUFFIX` consistent, or pass a full URL).
-- **`ONNX_GPU_SUFFIX=...`** — override the tarball suffix for versions outside the table.
-- **`ONNXRUNTIME_URL=...`** — full tarball URL; skips version/suffix selection entirely.
-- **`ONNXRUNTIME_ROOT=...`** — a locally built ONNX Runtime prefix (takes precedence over any download).
-- **`AMENT_VENDOR_POLICY=NEVER_VENDOR`** — do not download or install ONNX Runtime; use an installed one found with `find_package(onnxruntime)`, in line with most vendor packages.
+This chooses the custom headers and library at build time; `yolo_ros` is then
+linked against that prefix. Provider libraries (`libonnxruntime_providers_*.so`,
+`libQnn*.so`, CUDA/cuDNN, TensorRT) must be available in that prefix or on the
+loader path.
 
 ### cuDNN runtime
 
-The ONNX Runtime CUDA execution provider needs the cuDNN **major** matching the selected release at run time — see the table above — from a directory on the loader path: ORT 1.18/1.20 link the versioned `libcudnn.so.8`/`libcudnn.so.9` directly, while ORT 1.28 resolves cuDNN on first use (versioned `libcudnn.so.9` or unversioned `libcudnn.so`). The cuDNN **version** must also support the GPU architecture: cuDNN 9.11+ binaries no longer ship pre-Turing kernels (compute capability < 7.5; their precompiled engines start at sm_75), so a GTX 1060 fails on the first convolution with `CUDNN_STATUS_EXECUTION_FAILED` when a 9.11+ cuDNN is installed. 9.10.x is the newest usable release for those GPUs, and CUDA 13 does not target CC < 7.5 at all.
+The ONNX Runtime CUDA execution provider needs the cuDNN **major** matching the selected ONNX Runtime build at run time, from a directory on the loader path: ORT 1.18/1.20 link the versioned `libcudnn.so.8`/`libcudnn.so.9` directly, while ORT 1.28 resolves cuDNN on first use (versioned `libcudnn.so.9` or unversioned `libcudnn.so`). The cuDNN **version** must also support the GPU architecture: cuDNN 9.11+ binaries no longer ship pre-Turing kernels (compute capability < 7.5; their precompiled engines start at sm_75), so a GTX 1060 fails on the first convolution with `CUDNN_STATUS_EXECUTION_FAILED` when a 9.11+ cuDNN is installed. 9.10.x is the newest usable release for those GPUs, and CUDA 13 does not target CC < 7.5 at all.
 
 | CUDA major | GPU                   | apt package (Ubuntu)                                          |
 | ---------- | --------------------- | ------------------------------------------------------------- |
@@ -50,10 +49,10 @@ The `-dev` packages are the reliable choice: besides the headers they install th
 The helper script detects the CUDA major (or takes `--cuda-major`), the GPU compute capability (`--gpu-arch NN` with or without the dot, `$GPU_ARCH`, or `nvidia-smi`, taking the lowest capability across GPUs) and the Ubuntu release (override with `--ubuntu 2004|2204|2404`, e.g. inside containers), installs the matching packages, adds the NVIDIA repository when apt does not know them, pins and `apt-mark hold`s the cuDNN 9.10.x packages for pre-Turing GPUs on CUDA 12, runs `ldconfig` and verifies the result. `--tensorrt` also installs TensorRT (skipped on pre-Turing GPUs, see below) and `--dry-run` previews without touching the system. When no GPU is visible (build host, container) it installs the latest cuDNN and warns; pass `--gpu-arch` when provisioning for a known GPU.
 
 ```shell
-sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh
-sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --cuda-major 12
-sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --cuda-major 12 --gpu-arch 61
-sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --tensorrt
+sudo src/yolo_ros/scripts/install_gpu_deps.sh
+sudo src/yolo_ros/scripts/install_gpu_deps.sh --cuda-major 12
+sudo src/yolo_ros/scripts/install_gpu_deps.sh --cuda-major 12 --gpu-arch 61
+sudo src/yolo_ros/scripts/install_gpu_deps.sh --tensorrt
 ```
 
 Equivalent manual installs:
@@ -107,7 +106,7 @@ support. x86_64 uses the prebuilt `onnxruntime-linux-x64-gpu-1.6.0.tgz`; on
 aarch64 (JetPack 4) build it from source:
 
 ```shell
-yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.6.0 --ep cuda --cuda-arch 72
+src/yolo_ros/scripts/build_ort_from_source.sh 1.6.0 --ep cuda --cuda-arch 72
 # Nano: 53, TX2: 62, Xavier: 72
 ```
 
@@ -126,10 +125,8 @@ userland.
 
 The 1.6.0 GPU tarball hard-links the CUDA 10.2 / cuDNN 8 / cuBLAS 10 userland,
 so it can only be linked and run on a real CUDA 10.2 host. To compile-test the
-legacy code path on a modern host, configure a clean build directory with
-`-DONNXRUNTIME_VERSION=1.6.0 -DONNX_GPU=OFF`: with `ONNX_GPU=ON` cached or
-copy-pasted, the vendor still selects the CUDA 10.2-linked GPU tarball and the
-link fails.
+legacy code path on a modern host, use a CPU 1.6.0 prefix instead of the
+CUDA-linked GPU tarball.
 
 With TensorRT 7.1 the provider chain is TensorRT → CUDA → CPU: TensorRT is
 appended first and CUDA handles nodes TensorRT 7 cannot parse at session
@@ -188,20 +185,20 @@ ldconfig -p | grep libnvinfer.so.10
 
 TensorRT 10 requires compute capability 7.5+ (Turing or newer); the helper script skips it on older GPUs, where the CUDA provider is the GPU option.
 
-Or use the script: `sudo yolo_onnxruntime_vendor/scripts/install_gpu_deps.sh --tensorrt`. Do **not** install the `tensorrt` meta package: it may point at a newer major (TensorRT 11), which does not satisfy the `libnvinfer.so.10` soname. A missing runtime logs `Failed to load library .../libonnxruntime_providers_tensorrt.so ... libnvinfer.so.10: cannot open shared object file` and `provider: tensorrt` falls back to CUDA.
+Or use the script: `sudo src/yolo_ros/scripts/install_gpu_deps.sh --tensorrt`. Do **not** install the `tensorrt` meta package: it may point at a newer major (TensorRT 11), which does not satisfy the `libnvinfer.so.10` soname. A missing runtime logs `Failed to load library .../libonnxruntime_providers_tensorrt.so ... libnvinfer.so.10: cannot open shared object file` and `provider: tensorrt` falls back to CUDA.
 
 CUDA 10 is the legacy path: ONNX Runtime 1.6.0 with CUDA + TensorRT 7.1 on aarch64, while the x64 prebuilt tarball is CUDA-only; CUDA 11 has no C++ GPU tarball after ONNX Runtime 1.18, CUDA 13 starts at 1.28, and the prebuilt GPU tarballs are x64-only. For aarch64 (JetPack), a custom ONNX Runtime, or offline installs, use the source build below.
 
 ## Custom ONNX Runtime
 
-`yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh` builds ONNX Runtime from source on x86_64 or aarch64 and packages it in the flat `lib/` + `include/` layout the vendor expects. Select the execution provider with `--ep` (`cpu`; `cuda`, which also builds TensorRT against the host's TensorRT version — JetPack 4's 7.1 for ONNX Runtime 1.6 on aarch64, the TensorRT 10 prebuilts for 1.18+ — unless `--no-tensorrt` is passed; or `qnn`, the Hexagon NPU provider): CPU/CUDA/TensorRT are also available as prebuilt tarballs, while the QNN execution provider requires this source build. Then point the colcon build at the resulting prefix with `-DONNXRUNTIME_ROOT=<prefix>` — it takes precedence over the prebuilt download. The node still selects CPU/CUDA/TensorRT/QNN at run time via the `provider` parameter (see [Parameters](../README.md#parameters)).
+`src/yolo_ros/scripts/build_ort_from_source.sh` builds ONNX Runtime from source on x86_64 or aarch64 and packages it in the flat `lib/` + `include/` layout `ONNXRUNTIME_ROOT` expects. Select the execution provider with `--ep` (`cpu`; `cuda`, which also builds TensorRT against the host's TensorRT version — JetPack 4's 7.1 for ONNX Runtime 1.6 on aarch64, the TensorRT 10 prebuilts for 1.18+ — unless `--no-tensorrt` is passed; or `qnn`, the Hexagon NPU provider). The node selects CPU/CUDA/TensorRT/QNN at run time via the `provider` parameter (see [Parameters](../README.md#parameters)).
 
 ```shell
-# CPU build (x86_64 or aarch64); the prefix defaults to <package>/ort-<version>
-yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.20.0 --ep cpu
+# CPU build (x86_64 or aarch64); the prefix defaults to <repo>/ort-<version>
+src/yolo_ros/scripts/build_ort_from_source.sh 1.20.0 --ep cpu
 
-colcon build --symlink-install --cmake-args \
-    -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/yolo_onnxruntime_vendor/ort-1.20.0
+colcon build --symlink-install --packages-up-to yolo_ros \
+    --cmake-args -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/ort-1.20.0
 ```
 
 A source build is heavy (tens of minutes and several GB of RAM). It reuses a previous build of the same version/EP/architecture (the reuse stamp also covers the CUDA architecture, the QNN SDK prefix and extra CMake defines) unless you pass `--rebuild`, and it accepts an existing source tree or tarball for offline use.
@@ -221,15 +218,15 @@ sudo apt update
 sudo apt install qairt-libs qairt-dsp-binaries qairt-headers
 ```
 
-Then build ONNX Runtime with the QNN EP and point colcon at the prefix:
+Then build ONNX Runtime with the QNN EP and pass its prefix to CMake:
 
 ```bash
 # ONNX Runtime prefix (repository root)
-yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.28.0 --ep qnn --qnn-home /usr
+src/yolo_ros/scripts/build_ort_from_source.sh 1.28.0 --ep qnn --qnn-home /usr
 
 # colcon (workspace root)
-colcon build --symlink-install \
-  --cmake-args -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/yolo_onnxruntime_vendor/ort-1.28.0
+colcon build --symlink-install --packages-up-to yolo_ros \
+  --cmake-args -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/ort-1.28.0
 ```
 
 Version notes:
@@ -272,35 +269,37 @@ ORT_SOURCE_DIR=<onnxruntime-source> \
 CUDNN_HOME=<prefix-with-cudnn-headers> \
 TENSORRT_HOME=/usr/local/cuda-12.6/targets/x86_64-linux \
 ORT_CUDA_ARCH=86 \
-    yolo_onnxruntime_vendor/scripts/build_ort_from_source.sh 1.20.2 --ep cuda
+    src/yolo_ros/scripts/build_ort_from_source.sh 1.20.2 --ep cuda
 ```
 
 The fixed `build.sh` recipe is `--config Release --update --build --build_shared_lib --skip_tests --skip_submodule_sync --parallel`; the source tree and ORT build dir are reused across runs, so an interrupted build resumes incrementally.
 
 ## CUDA / TensorRT on aarch64 (Jetson, offline build)
 
-GPU inference on an aarch64 Jetson (Xavier, Orin) needs an ONNX Runtime built with CUDA + TensorRT — the prebuilt GPU tarball is x64-only. `yolo_onnxruntime_vendor/scripts/` ships two tools for that, each documented in its own file header:
+GPU inference on an aarch64 Jetson (Xavier, Orin) needs an ONNX Runtime built with CUDA + TensorRT — the prebuilt GPU tarball is x64-only. `scripts/` ships two tools for that, each documented in its own file header:
 
 - **`build_ort_from_source.sh`** — runs on the robot and builds ONNX Runtime from source into a flat `lib/` + `include/` prefix: `build_ort_from_source.sh <version> --ep cuda --cuda-arch <NN>` (Xavier `72`, Orin `87`). For CUDA 10 / JetPack 4 use `build_ort_from_source.sh 1.6.0 --ep cuda --cuda-arch 53|62|72` (Nano/TX2/Xavier): that legacy build yields CUDA + TensorRT 7.1 unless `--no-tensorrt` is passed. It reuses a previous build of the same version/EP/architecture (the reuse stamp also covers the CUDA architecture, the QNN SDK prefix and extra CMake defines) unless you pass `--rebuild`.
 - **`prepare_offline_bundle.sh`** — runs on an internet-connected host and produces a self-contained tarball for a robot with no network: the ONNX Runtime source tree with its submodules, the mirrored CMake dependency archives, the ONNX models, a bundled CMake (ONNX Runtime 1.16+ needs CMake ≥ 3.26, while JetPack 6 / Ubuntu 22.04 ship 3.22) and all the helper scripts (the CMake dependency mirror is only used by ONNX Runtime 1.16+; older releases skip it). It prints the exact copy-paste sequence for the robot when it finishes.
 
 Extract the bundle **outside** the colcon workspace — it carries `COLCON_IGNORE` markers so colcon does not treat the ONNX Runtime tree as a package. The robot build also passes `-DFETCHCONTENT_SOURCE_DIR_YOLO_HFHUB=<bundle>/huggingface-hub-cpp` so `yolo_hfhub_vendor` does not fetch `huggingface-hub-cpp` from the network.
 
-Link the built ONNX Runtime into the colcon build with `-DONNXRUNTIME_ROOT` (it overrides the prebuilt download):
+Link the built ONNX Runtime into the colcon build with `ONNXRUNTIME_ROOT`:
 
 ```shell
-colcon build --symlink-install --cmake-args \
-    -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/yolo_onnxruntime_vendor/ort-1.20.0 \
-    -DFETCHCONTENT_SOURCE_DIR_YOLO_HFHUB=$HOME/offline-bundle-1.20.0/huggingface-hub-cpp
+colcon build --symlink-install --packages-up-to yolo_ros \
+    --cmake-args \
+      -DONNXRUNTIME_ROOT=$PWD/src/yolo_ros/ort-1.20.0 \
+      -DFETCHCONTENT_SOURCE_DIR_YOLO_HFHUB=$HOME/offline-bundle-1.20.0/huggingface-hub-cpp
 ```
 
 `prepare_offline_bundle.sh` prints the exact paths for the bundle it produced.
 
 ## Fast C++-only rebuild loop
 
-Rebuild just the package (select `yolo_msgs` first if the messages changed — it must build before `yolo_ros`, and keep `-DONNX_GPU=ON` for a GPU build):
+Rebuild just the package (select `yolo_msgs` first if the messages changed — and pass `ONNXRUNTIME_ROOT` for a custom ONNX Runtime):
 
 ```shell
-colcon build --symlink-install --cmake-args -DONNX_GPU=ON --packages-select yolo_msgs
-colcon build --symlink-install --cmake-args -DONNX_GPU=ON --packages-select yolo_ros
+colcon build --symlink-install --packages-select yolo_msgs
+colcon build --symlink-install --packages-select yolo_ros \
+    --cmake-args -DONNXRUNTIME_ROOT=/opt/ort-cuda
 ```

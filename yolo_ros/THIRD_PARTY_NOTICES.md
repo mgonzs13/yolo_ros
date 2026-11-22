@@ -4,6 +4,11 @@
 following permissively licensed projects. These notices are retained in
 addition to the repository root `LICENSE`.
 
+ONNX Runtime is provided by the ROS 2 `onnxruntime_vendor` package at run time;
+its MIT license and third-party notices are installed by that package. For a
+custom ONNX Runtime prefix, keep the `LICENSE`/`ThirdPartyNotices.txt` from that
+distribution with the runtime files.
+
 ## ByteTrack
 
 The tracking implementation in `src/tracking/` and `include/yolo_ros/tracking/`

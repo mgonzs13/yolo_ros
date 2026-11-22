@@ -20,7 +20,7 @@
 # SOFTWARE.
 
 # Install the CUDA runtime libraries (cuDNN, optional TensorRT 10) required by
-# the ONNX Runtime GPU build that yolo_onnxruntime_vendor downloads.
+# a custom CUDA/TensorRT ONNX Runtime build.
 #
 # The CUDA major selects ONNX Runtime and the cuDNN major (see docs/build.md):
 #   CUDA 11 -> ONNX Runtime 1.18.0 + cuDNN 8
